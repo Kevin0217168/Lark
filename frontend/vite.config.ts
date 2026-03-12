@@ -15,4 +15,13 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
   },
+  server: {
+    proxy: {
+      '/fastapi': {
+        target: 'http://192.168.216.109:8080',
+        changeOrigin: true,
+        rewrite: path => path.replace(/^\/fastapi/, '')
+      }
+    }
+  }
 })

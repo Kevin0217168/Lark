@@ -36,7 +36,7 @@ async def register_viewer():
     viewer = Viewer()
     return viewer.id
 
-@router.get("/subscribe?id={id}&device_id={device_id}")
+@router.get("/subscribe")
 async def subscribe_to_device(id: Annotated[str, "Viewer ID", ],
                               device_id: Annotated[str, "Device ID"]):
     if id not in viewerIdDict:

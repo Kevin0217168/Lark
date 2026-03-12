@@ -5,7 +5,7 @@ from stream import device
 
 router = APIRouter(prefix="/stream", tags=["stream"])
 
-@router.websocket("/device/ws?id={id}")
+@router.websocket("/device/ws")
 async def websocket_endpoint(websocket: WebSocket, id: str):
   if id not in device.esp32IdDict:
       raise WebSocketException(code=1008, reason="Device ID not found")
@@ -27,7 +27,7 @@ async def websocket_endpoint(websocket: WebSocket, id: str):
        for subscriber in device.subsrcibers:
          await subscriber.websocket.send_bytes(data["bytes"])
 
-@router.websocket("/viewer/ws?id={id}")
+@router.websocket("/viewer/ws")
 async def websocket_endpoint(websocket: WebSocket, id: str):
   if id not in viewer.viewerIdDict:
       raise WebSocketException(code=1008, reason="Viewer ID not found")

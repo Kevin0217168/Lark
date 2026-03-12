@@ -3,6 +3,7 @@
 import { createRouter, createWebHistory } from "vue-router";
 import Login from "@/components/Login.vue";
 import Home from "@/components/Home.vue";
+import Stream from "@/components/Stream.vue";
 
 const router = createRouter({
   history: createWebHistory(),
@@ -15,6 +16,10 @@ const router = createRouter({
       path: "/Home",
       component: Home,
     },
+    {
+      path: "/Stream",
+      component: Stream,
+    }
   ],
 });
 
