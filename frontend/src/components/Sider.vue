@@ -46,10 +46,27 @@ watch(() => route.path, (newPath) => {
   if (newPath === '/Stream') {
     activeTab.value = 'realtime';
   } else if (newPath === '/Device') {
-    activeTab.value = 'overview';
+    // 检查是否有 tab 查询参数
+    const tabParam = route.query.tab as string;
+    if (tabParam && ['overview', 'management', 'logs'].includes(tabParam)) {
+      activeTab.value = tabParam;
+    } else {
+      activeTab.value = 'overview';
+    }
   }
   emit('tabChange', activeTab.value);
 }, { immediate: true });
+
+// 监听查询参数变化
+watch(() => route.query.tab, (newTab) => {
+  if (route.path === '/Device' && newTab) {
+    const tabParam = newTab as string;
+    if (['overview', 'management', 'logs'].includes(tabParam)) {
+      activeTab.value = tabParam;
+      emit('tabChange', activeTab.value);
+    }
+  }
+});
 </script>
 
 <style lang="scss" scoped>
@@ -60,6 +77,7 @@ aside {
   // margin-left: 4%;
   // margin-top: 10%;
   width: 200px;
+  z-index: 1;
 }
 .menu {
   // display: flex;

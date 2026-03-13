@@ -61,4 +61,10 @@ header {
   --el-header-padding: 0;
   height: 400px;
 }
+
+.content-container {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+}
 </style>
