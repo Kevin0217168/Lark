@@ -22,13 +22,13 @@
   </el-card>
 </template>
 
-<script setup>
+<script lang="ts" setup>
 import { ref } from "vue";
 import axios from "axios";
 
 const text = ref("");
-const device_options = ref()
-const value = ref()
+const device_options = ref();
+const value = ref();
 
 axios
   .get("/fastapi/?name=Vue.js")
