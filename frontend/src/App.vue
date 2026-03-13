@@ -1,7 +1,7 @@
 <template>
   <el-image
     class="banner"
-    src="/public/d139694517c41efc8d4c6e2db4288fd.jpg"
+    src="/public/banner.jpg"
     fit="cover"
   />
   <el-container class="app-container">
