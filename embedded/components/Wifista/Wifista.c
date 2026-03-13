@@ -2,9 +2,6 @@
 #include "esp_wifi.h"
 #include "esp_log.h"
 
-#define DEFAULT_SSID "关闭"
-#define DEFAULT_PWD "kaiwen0818"
-
 const char* TAG = "Wifista";
  
 void Wifista_event_handler(void* event_handler_arg, esp_event_base_t event_base, int32_t event_id, void* event_data){
@@ -30,11 +27,10 @@ void Wifista_event_handler(void* event_handler_arg, esp_event_base_t event_base,
     
 }
 
-void WifistaInit(){
+void WifistaInit(const uint8_t* ssid, const uint8_t* pwd){
     esp_netif_init();
     esp_event_loop_create_default();
 
-    // 
     esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, Wifista_event_handler, NULL);
     esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, Wifista_event_handler, NULL);
 
@@ -45,15 +41,15 @@ void WifistaInit(){
 
     esp_wifi_set_mode(WIFI_MODE_STA);
 
-    wifi_config_t wifista_config = {
-        .sta = {
-            .ssid = DEFAULT_SSID,
-            .password = DEFAULT_PWD
-        }
-    };
-    // wifi_config_t wifista_config = { 0 };
-    // strncpy((char *)wifista_config.sta.ssid, DEFAULT_SSID, sizeof(wifista_config.sta.ssid));
-    // strncpy((char *)wifista_config.sta.password, DEFAULT_PWD, sizeof(wifista_config.sta.password));
+    // wifi_config_t wifista_config = {
+    //     .sta = {
+    //         .ssid = (uint8_t *)ssid,
+    //         .password = (uint8_t *)pwd
+    //     }ae2823b8b2e14205b5e75d30c68d282d
+    // };
+    wifi_config_t wifista_config = { 0 };
+    strncpy((char *)wifista_config.sta.ssid, ssid, sizeof(wifista_config.sta.ssid));
+    strncpy((char *)wifista_config.sta.password, pwd, sizeof(wifista_config.sta.password));
 
     esp_wifi_set_config(WIFI_IF_STA, &wifista_config);
 
