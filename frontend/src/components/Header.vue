@@ -22,7 +22,9 @@
           </router-link>
         </el-col>
         <el-col :span="2">
-          <el-button style="color: #000" text> 设备 </el-button>
+          <router-link to="/Device" custom v-slot="{ navigate }">
+            <el-button @click="navigate" style="color: #000" text> 设备 </el-button>
+          </router-link>
         </el-col>
         <el-col :span="2" :offset="5">
           <router-link to="/Login" custom v-slot="{ navigate }">
