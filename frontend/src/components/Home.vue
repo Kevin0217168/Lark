@@ -107,8 +107,8 @@ const goToDeviceManagement = () => {
 <style lang="scss" scoped>
 .home-card {
   z-index: 1;
-  width: 95%;
-  margin: 2% auto;
+  width: 75%;
+  margin: 10% auto;
   border-radius: 15px;
   text-align: center;
   background-color: #fff;
