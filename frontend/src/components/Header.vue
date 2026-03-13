@@ -14,7 +14,9 @@
           </router-link>
         </el-col>
         <el-col :span="2" :offset="6">
-          <el-button style="color: #000" text> 总览 </el-button>
+          <router-link to="/Home" custom v-slot="{ navigate }">
+            <el-button @click="navigate" style="color: #000" text> 总览 </el-button>
+          </router-link>
         </el-col>
         <el-col :span="2">
           <router-link to="/Stream" custom v-slot="{ navigate }">
