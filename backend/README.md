@@ -5,7 +5,7 @@ FastAPI + SQLite
 ## 项目文件树结构
 ```
 .
-├── BACKEND_README.md                     后端文档(本文件)
+├── README.md                             后端文档(本文件)
 ├── generate_uuid.py                      (生成唯一id的临时文件)
 ├── main.py                               FastAPI入口文件
 └── stream                                直播组件
