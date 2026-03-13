@@ -3,4 +3,7 @@
 
 void WifistaInit();
 
+void wifi_init(void);
+void https_request_task(void *pvParameters);
+
 #endif
