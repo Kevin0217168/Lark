@@ -25,7 +25,7 @@
           <!-- 设备数据 -->
           <div class="device-data" v-if="selectedDevice">
             <h3>设备数据</h3>
-            <el-card class="data-card-content">
+            <div class="data-card-content">
               <div class="data-item">
                 <span class="data-label">设备名称:</span>
                 <span class="data-value">{{ selectedDevice.name }}</span>
@@ -49,14 +49,14 @@
               <div class="data-actions">
                 <el-button type="primary" @click="goToFullscreen">查看大图模式</el-button>
               </div>
-            </el-card>
+            </div>
           </div>
         </div>
         
         <!-- 右侧视频流区域 -->
         <div class="data-right">
           <h3>实时监控</h3>
-          <el-card class="video-card">
+          <div class="video-card">
             <div class="video-container" v-if="selectedDevice && currentFrameImage">
               <img 
                 :src="currentFrameImage" 
@@ -76,114 +76,106 @@
             <div class="video-placeholder" v-else>
               <el-empty description="请选择设备查看实时监控" />
             </div>
-          </el-card>
+          </div>
         </div>
       </div>
       
       <!-- 分析 -->
       <div v-else-if="props.activeTab === 'analysis'" class="tab-content">
-        <el-card class="data-card">
-          <template #header>
-            <div class="card-header">
-              <div class="card-title">
-                <span>数据分析</span>
-              </div>
-              <div class="card-actions">
-                <el-select v-model="selectedDeviceId" @change="handleDeviceChange" class="device-select">
-                    <el-option
-                    v-for="device in devices"
-                    :key="device.id"
-                    :label="device.name"
-                    :value="device.id"
-                  />
-                </el-select>
-              </div>
-            </div>
-          </template>
-          <div class="analysis-content">
-            <!-- 所有设备平均值图表 -->
-            <div class="chart-container average-chart">
-              <h3>所有设备平均值</h3>
-              <div ref="averageChartRef" class="chart"></div>
-            </div>
-            <div class="chart-container">
-              <h3>温度数据</h3>
-              <div ref="temperatureChartRef" class="chart"></div>
-            </div>
-            <div class="chart-container">
-              <h3>湿度数据</h3>
-              <div ref="humidityChartRef" class="chart"></div>
-            </div>
-            <div class="chart-container">
-              <h3>环境质量</h3>
-              <div ref="qualityChartRef" class="chart"></div>
-            </div>
+        <div class="card-header">
+          <div class="card-title">
+            <span>数据分析</span>
           </div>
-        </el-card>
+          <div class="card-actions">
+            <el-select v-model="selectedDeviceId" @change="handleDeviceChange" class="device-select">
+                <el-option
+                v-for="device in devices"
+                :key="device.id"
+                :label="device.name"
+                :value="device.id"
+              />
+            </el-select>
+          </div>
+        </div>
+        <div class="analysis-content">
+          <!-- 所有设备平均值图表 -->
+          <div class="chart-container average-chart">
+            <h3>所有设备平均值</h3>
+            <div ref="averageChartRef" class="chart"></div>
+          </div>
+          <div class="chart-container">
+            <h3>温度数据</h3>
+            <div ref="temperatureChartRef" class="chart"></div>
+          </div>
+          <div class="chart-container">
+            <h3>湿度数据</h3>
+            <div ref="humidityChartRef" class="chart"></div>
+          </div>
+          <div class="chart-container">
+            <h3>环境质量</h3>
+            <div ref="qualityChartRef" class="chart"></div>
+          </div>
+        </div>
       </div>
       
       <!-- 历史数据 -->
       <div v-else-if="props.activeTab === 'history'" class="tab-content">
-        <el-card class="history-card">
-          <template #header>
-            <div class="card-header">
-              <div class="card-title">
-                <span>历史数据</span>
+        <div class="card-header">
+          <div class="card-title">
+            <span>历史数据</span>
+          </div>
+          <div class="card-actions">
+            <el-select v-model="historyDeviceId" @change="handleHistoryDeviceChange" class="device-select">
+              <el-option
+                v-for="device in devices"
+                :key="device.id"
+                :label="device.name"
+                :value="device.id"
+              />
+            </el-select>
+          </div>
+        </div>
+        <div class="history-content" v-if="historyDeviceId">
+          <div class="device-info">
+            <h3>设备信息</h3>
+            <div class="info-card">
+              <div class="info-item">
+                <span class="info-label">设备名称:</span>
+                <span class="info-value">{{ selectedHistoryDevice?.name }}</span>
               </div>
-              <div class="card-actions">
-                <el-select v-model="historyDeviceId" @change="handleHistoryDeviceChange" class="device-select">
-                  <el-option
-                    v-for="device in devices"
-                    :key="device.id"
-                    :label="device.name"
-                    :value="device.id"
-                  />
-                </el-select>
+              <div class="info-item">
+                <span class="info-label">设备ID:</span>
+                <span class="info-value">{{ selectedHistoryDevice?.id }}</span>
               </div>
-            </div>
-          </template>
-          <div class="history-content" v-if="historyDeviceId">
-            <div class="device-info">
-              <h3>设备信息</h3>
-              <el-card class="info-card">
-                <div class="info-item">
-                  <span class="info-label">设备名称:</span>
-                  <span class="info-value">{{ selectedHistoryDevice?.name }}</span>
-                </div>
-                <div class="info-item">
-                  <span class="info-label">设备ID:</span>
-                  <span class="info-value">{{ selectedHistoryDevice?.id }}</span>
-                </div>
-                <div class="info-item">
-                  <span class="info-label">设备状态:</span>
-                  <span class="info-value" :class="selectedHistoryDevice?.status">
-                    {{ selectedHistoryDevice?.status === 'online' ? '在线' : '离线' }}
-                  </span>
-                </div>
-              </el-card>
-            </div>
-            
-            <div class="history-table">
-              <h3>历史数据记录</h3>
-              <el-table :data="historyDataList" stripe style="width: 100%" max-height="400">
-                <el-table-column prop="timestamp" label="时间" width="180" />
-                <el-table-column prop="temperature" label="温度 (℃)" width="120" />
-                <el-table-column prop="humidity" label="湿度 (%)" width="120" />
-                <el-table-column prop="quality" label="环境质量指数" width="150" />
-                <el-table-column label="状态" width="100">
-                  <template #default="{ row }">
-                    <el-tag :type="getQualityType(row.quality)">
-                      {{ getQualityText(row.quality) }}
-                    </el-tag>
-                  </template>
-                </el-table-column>
-              </el-table>
+              <div class="info-item">
+                <span class="info-label">设备状态:</span>
+                <span class="info-value" :class="selectedHistoryDevice?.status">
+                  {{ selectedHistoryDevice?.status === 'online' ? '在线' : '离线' }}
+                </span>
+              </div>
             </div>
           </div>
-          <div class="history-placeholder" v-else>
-            <el-empty description="请选择设备查看历史数据" />
+          
+          <div class="history-table">
+            <h3>历史数据记录</h3>
+            <el-table :data="historyDataList" stripe style="width: 100%" max-height="400">
+              <el-table-column prop="timestamp" label="时间" width="180" />
+              <el-table-column prop="temperature" label="温度 (℃)" width="120" />
+              <el-table-column prop="humidity" label="湿度 (%)" width="120" />
+              <el-table-column prop="quality" label="环境质量指数" width="150" />
+              <el-table-column label="状态" width="100">
+                <template #default="{ row }">
+                  <el-tag :type="getQualityType(row.quality)">
+                    {{ getQualityText(row.quality) }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+            </el-table>
           </div>
-        </el-card>
+        </div>
+        <div class="history-placeholder" v-else>
+          <el-empty description="请选择设备查看历史数据" />
+        </div>
       </div>
     </div>
   </div>
