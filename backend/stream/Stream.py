@@ -1,27 +1,29 @@
 from fastapi import APIRouter, WebSocket, WebSocketException
 import json
 
-from stream import device
+from stream import Device
 
 router = APIRouter(prefix="/stream", tags=["stream"])
 
 @router.websocket("/device/ws")
 async def websocket_endpoint(websocket: WebSocket, id: str):
-  if id not in device.esp32IdDict:
+  if id not in Device.esp32IdDict:
       raise WebSocketException(code=1008, reason="Device ID not found")
   await websocket.accept()
-  device = device.esp32IdDict[id]
+  device = Device.esp32IdDict[id]
   device.connected(websocket)
 
   while True:
     data = await websocket.receive()
     if "text" in data:
-      try:
-        json_data = json.loads(data["text"])
-      except json.JSONDecodeError:
-        await websocket.send_text("Invalid JSON received")
-        continue
-      print(json_data)
+      print(data["text"])
+      # try:
+      #   json_data = json.loads(data["text"])
+      # except json.JSONDecodeError:
+      #   await websocket.send_text("Invalid JSON received")
+      #   continue
+      # print(json_data)
+      await websocket.send_text("Hello ESP32! from Server.")
 
     if "bytes" in data:
        for subscriber in device.subsrcibers:

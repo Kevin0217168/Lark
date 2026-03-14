@@ -65,10 +65,14 @@ void app_main(void)
     WifiSecurityClientInit();
     // WifiSecurityRequest("https://file.mintlab.top", "/", 443, WS_CLINENT_METHOD_GET, NULL);
 
-    WifiSecurityRequest("http://192.168.216.109", "/?name=ESP-32", 8080, WS_CLINENT_METHOD_GET, NULL, NULL);
+    // WifiSecurityRequest("http://192.168.216.109", "/?name=ESP-32", 8080, WS_CLINENT_METHOD_GET, NULL, NULL);
 
-    char post_data[128];
+    char post_data[64];
     snprintf(post_data, sizeof(post_data), "{\"secret\":\"%s\"}", secret);
     WifiSecurityRequest("http://192.168.216.109", "/device/register", 8080,
          WS_CLINENT_METHOD_POST, post_data, register_handler);
+    
+    char path_data[128];
+    snprintf(path_data, sizeof(path_data), "/stream/device/ws?id=%s", deviceStatus.uuid);
+    WebsocketStart("ws://192.168.216.109", path_data, 8080);
 }
