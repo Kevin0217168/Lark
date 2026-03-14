@@ -1,6 +1,6 @@
 #include "Wifista.h"
-#include "esp_wifi.h"
-#include "esp_log.h"
+
+extern uint8_t Wifi_isConnected;
 
 const char* TAG = "Wifista";
  
@@ -10,9 +10,14 @@ void Wifista_event_handler(void* event_handler_arg, esp_event_base_t event_base,
             esp_wifi_connect();
         }else if (event_id == WIFI_EVENT_STA_CONNECTED){
             ESP_LOGI(TAG, "WIFI connected!");
+            Wifi_isConnected = true;
+
         }else if (event_id == WIFI_EVENT_STA_DISCONNECTED){
             ESP_LOGE(TAG, "WIFI disconnected!");
-            esp_wifi_stop();
+
+            // 试图重连
+            vTaskDelay(3000 / portTICK_PERIOD_MS);
+            esp_wifi_connect();
         }
 
     }else if (event_base == IP_EVENT)
