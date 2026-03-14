@@ -5,6 +5,9 @@ export interface Device {
   name: string;
   status: string;
   createTime: string;
+  temperature?: number; // 温度数据
+  humidity?: number; // 湿度数据
+  videoStreamUrl?: string; // 视频流数据
 }
 
 export interface DeviceLog {
@@ -17,8 +20,24 @@ export interface DeviceLog {
 }
 
 const devices = ref<Device[]>([
-  { id: 1, name: '设备1', status: 'online', createTime: '2026/03/14 01:28:24' },
-  { id: 2, name: '设备2', status: 'offline', createTime: '2026/03/14 01:28:24' },
+  { 
+    id: 1, 
+    name: '设备1', 
+    status: 'online', 
+    createTime: '2026/03/14 01:28:24',
+    temperature: 25.5,
+    humidity: 45.0,
+    videoStreamUrl: 'http://example.com/stream1'
+  },
+  { 
+    id: 2, 
+    name: '设备2', 
+    status: 'offline', 
+    createTime: '2026/03/14 01:28:24',
+    temperature: 22.0,
+    humidity: 50.0,
+    videoStreamUrl: 'http://example.com/stream2'
+  },
 ]);
 
 const deviceLogs = ref<DeviceLog[]>([

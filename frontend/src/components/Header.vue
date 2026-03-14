@@ -25,11 +25,11 @@
           </router-link>
         </el-col>
         <el-col :span="2">
-          <router-link to="/Stream" custom v-slot="{ navigate }">
+          <router-link to="/Data" custom v-slot="{ navigate }">
             <el-button 
               @click="navigate" 
-              :style="{ color: isActive('/Stream') ? '#8bad42' : '#000' }" 
-              :type="isActive('/Stream') ? 'primary' : 'default'"
+              :style="{ color: isActive('/Data') ? '#8bad42' : '#000' }" 
+              :type="isActive('/Data') ? 'primary' : 'default'"
               text
             > 
               数据 
