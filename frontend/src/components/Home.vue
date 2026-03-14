@@ -93,8 +93,16 @@
               :key="index"
               class="placed-device"
               :style="getPlacedDeviceStyle(placedDevice)"
+              @mousedown="handleMouseDown($event, index)"
             >
-              <el-tag type="primary" size="small" closable @close="removePlacedDevice(index)">{{ placedDevice.name }}</el-tag>
+              <div class="device-marker">
+                <div class="device-status" :class="placedDevice.status"></div>
+                <div class="device-info">
+                  <div class="device-name">{{ placedDevice.name }}</div>
+                  <div class="device-id">ID: {{ placedDevice.id }}</div>
+                </div>
+                <div class="device-close" @mousedown.stop @click="removePlacedDevice(index)">×</div>
+              </div>
             </div>
           </div>
         </div>
@@ -125,11 +133,17 @@ const isFullscreen = ref(false);
 interface PlacedDevice {
   id: number;
   name: string;
+  status: string;
   x: number; // 0-100 百分比
   y: number; // 0-100 百分比
 }
 const placedDevices = ref<PlacedDevice[]>([]);
-const draggedDevice = ref<{ id: number; name: string } | null>(null);
+const draggedDevice = ref<{ id: number; name: string; status: string } | null>(null);
+
+// 正在拖动的设备索引
+const draggingIndex = ref<number | null>(null);
+// 拖动起始位置
+const dragStart = ref({ x: 0, y: 0 });
 
 // 图片引用
 const imageRef = ref<HTMLImageElement | null>(null);
@@ -166,7 +180,7 @@ const exitFullscreen = () => {
 };
 
 // 拖拽开始
-const handleDragStart = (event: DragEvent, device: { id: number; name: string }) => {
+const handleDragStart = (event: DragEvent, device: { id: number; name: string; status: string }) => {
   draggedDevice.value = device;
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'copy';
@@ -208,6 +222,7 @@ const handleDrop = (event: DragEvent) => {
   placedDevices.value.push({
     id: draggedDevice.value.id,
     name: draggedDevice.value.name,
+    status: draggedDevice.value.status,
     x: x,
     y: y
   });
@@ -216,10 +231,62 @@ const handleDrop = (event: DragEvent) => {
   ElMessage.success('设备放置成功');
 };
 
-// 移除已放置的设备
+// 移除放置的设备
 const removePlacedDevice = (index: number) => {
   placedDevices.value.splice(index, 1);
   ElMessage.success('设备已移除');
+};
+
+// 鼠标按下开始拖动
+const handleMouseDown = (event: MouseEvent, index: number) => {
+  // 防止事件冒泡，避免触发其他元素的事件
+  event.stopPropagation();
+  
+  // 开始拖动
+  draggingIndex.value = index;
+  dragStart.value = {
+    x: event.clientX,
+    y: event.clientY
+  };
+  
+  // 添加鼠标移动和释放事件监听器
+  document.addEventListener('mousemove', handleMouseMove);
+  document.addEventListener('mouseup', handleMouseUp);
+};
+
+// 鼠标移动处理
+const handleMouseMove = (event: MouseEvent) => {
+  if (draggingIndex.value === null) return;
+  
+  const imgElement = imageRef.value;
+  if (!imgElement) return;
+  
+  const imgRect = imgElement.getBoundingClientRect();
+  
+  // 计算新位置
+  const newX = ((event.clientX - imgRect.left) / imgRect.width) * 100;
+  const newY = ((event.clientY - imgRect.top) / imgRect.height) * 100;
+  
+  // 边界检查
+  const clampedX = Math.max(0, Math.min(100, newX));
+  const clampedY = Math.max(0, Math.min(100, newY));
+  
+  // 更新设备位置
+  const device = placedDevices.value[draggingIndex.value];
+  if (device) {
+    device.x = clampedX;
+    device.y = clampedY;
+  }
+};
+
+// 鼠标释放结束拖动
+const handleMouseUp = () => {
+  // 移除事件监听器
+  document.removeEventListener('mousemove', handleMouseMove);
+  document.removeEventListener('mouseup', handleMouseUp);
+  
+  // 结束拖动
+  draggingIndex.value = null;
 };
 
 const goToDeviceLogs = () => {
@@ -486,5 +553,114 @@ const goToDeviceManagement = () => {
 
 .placed-device .el-tag {
   cursor: pointer;
+}
+
+.device-marker {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid #409eff;
+  border-radius: 6px;
+  padding: 4px 8px;
+  box-shadow: 0 1px 6px 0 rgba(0, 0, 0, 0.1);
+  min-width: 80px;
+  max-width: 120px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 100;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.device-status {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.device-status::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  opacity: 0.5;
+}
+
+.device-status.online {
+  background-color: #67c23a;
+}
+
+.device-status.online::after {
+  background-color: #67c23a;
+  box-shadow: 0 0 6px #67c23a;
+}
+
+.device-status.offline {
+  background-color: #f56c6c;
+}
+
+.device-status.offline::after {
+  background-color: #f56c6c;
+  box-shadow: 0 0 6px #f56c6c;
+}
+
+.device-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.device-name {
+  font-weight: 600;
+  font-size: 10px;
+  color: #303133;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.device-id {
+  font-size: 9px;
+  color: #909399;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.device-close {
+  font-size: 12px;
+  color: #909399;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0 3px;
+  border-radius: 3px;
+  transition: all 0.3s;
+  line-height: 1;
+}
+
+.device-close:hover {
+  background-color: #f5f7fa;
+  color: #606266;
+}
+
+/* 拖动时的样式 */
+.placed-device:active {
+  cursor: grabbing;
+}
+
+.placed-device {
+  cursor: grab;
+  user-select: none;
+}
+
+.placed-device:active .device-marker {
+  box-shadow: 0 2px 12px 0 rgba(64, 158, 255, 0.3);
+  border-color: #66b1ff;
+  background: rgba(255, 255, 255, 0.8);
 }
 </style>
