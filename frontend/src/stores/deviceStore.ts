@@ -10,6 +10,14 @@ export interface Device {
   videoStreamUrl?: string; // 视频流数据
 }
 
+export interface DeviceHistoryData {
+  deviceId: number;
+  timestamp: string;
+  temperature: number;
+  humidity: number;
+  quality: number; // 环境质量指数
+}
+
 export interface DeviceLog {
   id: number;
   deviceId: number;
@@ -56,8 +64,47 @@ const deviceLogs = ref<DeviceLog[]>([
 // 设备位置存储
 const devicePositions = ref<DevicePosition[]>([]);
 
+// 设备历史数据存储
+const deviceHistoryData = ref<DeviceHistoryData[]>([]);
+
 // 全屏状态
 const isFullscreen = ref(false);
+
+// 生成设备历史数据，后期改成从后端获取历史数据
+const generateDeviceHistoryData = () => {
+  const history: DeviceHistoryData[] = [];
+  
+  // 为每个设备生成最近72小时（3天）的历史数据
+  devices.value.forEach(device => {
+    for (let i = 71; i >= 0; i--) {
+      const date = new Date();
+      date.setHours(date.getHours() - i);
+      
+      // 根据设备ID生成不同的基础数据
+      const baseTemp = 25 + (device.id * 2);
+      const baseHumidity = 60 + (device.id * 5);
+      const baseQuality = 80 + (device.id * 3);
+      
+      // 添加随机波动
+      const temperature = Number((baseTemp + (Math.random() * 10 - 5)).toFixed(1));
+      const humidity = Number((baseHumidity + (Math.random() * 20 - 10)).toFixed(1));
+      const quality = Number((baseQuality + (Math.random() * 30 - 15)).toFixed(1));
+      
+      history.push({
+        deviceId: device.id,
+        timestamp: date.toLocaleString('zh-CN'),
+        temperature,
+        humidity,
+        quality
+      });
+    }
+  });
+  
+  deviceHistoryData.value = history;
+};
+
+// 初始化时生成历史数据
+generateDeviceHistoryData();
 
 export const useDeviceStore = () => {
   const getDevices = () => devices.value;
@@ -168,9 +215,18 @@ export const useDeviceStore = () => {
   // 初始化时清理过期日志
   cleanOldLogs();
   
+  // 获取设备历史数据
+  const getDeviceHistoryData = (deviceId?: number) => {
+    if (deviceId) {
+      return deviceHistoryData.value.filter(data => data.deviceId === deviceId);
+    }
+    return deviceHistoryData.value;
+  };
+  
   return {
     devices,
     deviceLogs,
+    deviceHistoryData,
     isFullscreen,
     getDevices,
     addDevice,
@@ -185,6 +241,7 @@ export const useDeviceStore = () => {
     updateDevicePosition,
     removeDevicePosition,
     clearDevicePositions,
+    getDeviceHistoryData,
     setFullscreen: (value: boolean) => {
       isFullscreen.value = value;
     },

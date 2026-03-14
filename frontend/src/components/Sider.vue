@@ -72,9 +72,9 @@ watch(() => route.query.tab, (newTab) => {
 <style lang="scss" scoped>
 aside {
   position: sticky;
-  left: 4%;
+  left: 1%;
   top: 30%;
-  // margin-left: 4%;
+  // margin-left: 8%;
   // margin-top: 10%;
   width: 200px;
   z-index: 1;
