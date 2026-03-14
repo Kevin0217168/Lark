@@ -47,4 +47,4 @@ jobs:
           source: "frontend/dist/*"          # 本地构建产物（相对于工作目录）
           target: "/home/mint/web/lark/frontend"   # 服务器目标目录（注意末尾不要加斜杠）
           strip_components: 1        # 去掉 dist 层级，直接将内部文件放入目标目录
-          rm: false                   # 可选：上传前先删除目标目录下的所有文件（慎用）
+          rm: true                   # 可选：上传前先删除目标目录下的所有文件（慎用）
