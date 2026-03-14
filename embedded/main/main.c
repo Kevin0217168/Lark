@@ -4,8 +4,10 @@
 #include "nvs_flash.h"
 #include "Wifista.h"
 #include "nvs_flash.h"
+#include "main.h"
 
-uint8_t Wifi_isConnected = false;
+static const char* secret = "ae2823b8b2e14205b5e75d30c68d282d";
+
 
 void app_main(void)
 {
@@ -17,7 +19,12 @@ void app_main(void)
 
 
     // 创建任务执行 HTTPS 请求
-    // xTaskCreate(&https_request_task, "https_task", 8192, NULL, 5, NULL);
+    WifiSecurityClientInit();
+    // WifiSecurityRequest("https://file.mintlab.top", "/", 443, WS_CLINENT_METHOD_GET, NULL);
 
-    WifiSecurityRequest("http://file.mintlab.top", "/", 80);
+    WifiSecurityRequest("http://192.168.216.109", "/?name=ESP-32", 8080, WS_CLINENT_METHOD_GET, NULL);
+
+    char post_data[128];
+    snprintf(post_data, sizeof(post_data), "{\"secret\":\"%s\"}", secret); 
+    WifiSecurityRequest("http://192.168.216.109", "/device/register", 8080, WS_CLINENT_METHOD_POST, post_data);
 }

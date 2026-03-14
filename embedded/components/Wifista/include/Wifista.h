@@ -13,10 +13,19 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+typedef enum{
+    WS_CLINENT_METHOD_GET,
+    WS_CLINENT_METHOD_POST,
+    WS_CLINENT_METHOD_PUT,
+    WS_CLINENT_METHOD_DELETE,
+} WifiSecurityMethod_t;
+
 void WifistaInit();
 
 void obtain_time(void);
-void https_request_task(void *pvParameters);
-esp_err_t WifiSecurityRequest(const char *host, const char *path, uint16_t port);
+
+void WifiSecurityClientInit();
+esp_err_t WifiSecurityRequest(const char *host, const char *path, uint16_t port, WifiSecurityMethod_t method, char *post_data);
+void WebsocketStart(const char *host, const char *path, uint16_t port);
 
 #endif

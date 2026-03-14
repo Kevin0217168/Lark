@@ -2,6 +2,9 @@
 
 const char *WS_TAG = "WifiSecurity";
 
+esp_http_client_handle_t WifiSecurityClient;
+esp_http_client_config_t config;
+
 void obtain_time(void)
 {
     // 初始化 SNTP
@@ -47,33 +50,68 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt)
     return ESP_OK;
 }
 
-esp_err_t WifiSecurityRequest(const char *host, const char *path, uint16_t port)
+void WifiSecurityClientInit()
+{
+
+    config.event_handler = http_event_handler;
+    config.url = "https://www.mintlab.top";           // 这里必须给初值, 否则初始化失败
+    config.buffer_size = 4096;
+    config.timeout_ms = 2000;
+    config.crt_bundle_attach = esp_crt_bundle_attach; // 使用证书包
+                                                      // 或者使用手动根证书: config.cert_pem = root_cert_pem
+    config.skip_cert_common_name_check = false;
+
+    WifiSecurityClient = esp_http_client_init(&config);
+}
+
+esp_err_t WifiSecurityRequest(const char *host, const char *path, uint16_t port, WifiSecurityMethod_t method, char *post_data)
 {
     char url[256];
 
     snprintf(url, sizeof(url), "%s:%d%s", host, port, path);
 
-    esp_http_client_config_t config = {
-        .url = url,
-        .event_handler = http_event_handler,
-        .buffer_size = 4096,
-        .timeout_ms = 2000,
-        .crt_bundle_attach = esp_crt_bundle_attach, // 使用证书包
-        // 或者使用手动根证书: .cert_pem = root_cert_pem
-        .skip_cert_common_name_check = false};
+    if (WifiSecurityClient == NULL)
+        ESP_LOGE(WS_TAG, "WifiSecurityClient == NULL");
 
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    esp_err_t err = esp_http_client_perform(client);
+    esp_http_client_set_url(WifiSecurityClient, url);
+
+    char *method_name = "";
+
+    switch (method)
+    {
+    case WS_CLINENT_METHOD_GET:
+        method_name = "GET";
+        esp_http_client_set_method(WifiSecurityClient, HTTP_METHOD_GET);
+        break;
+    case WS_CLINENT_METHOD_POST:
+        method_name = "POST";
+        esp_http_client_set_method(WifiSecurityClient, HTTP_METHOD_POST);
+        esp_http_client_set_header(WifiSecurityClient, "Content-Type", "application/json");
+        esp_http_client_set_post_field(WifiSecurityClient, post_data, strlen(post_data));
+        break;
+    case WS_CLINENT_METHOD_PUT:
+        method_name = "PUT";
+        break;
+    case WS_CLINENT_METHOD_DELETE:
+        method_name = "DELETE";
+        break;
+
+    default:
+        break;
+    }
+
+    ESP_LOGI(WS_TAG, "准备好请求: %s | %s ", method_name, url);
+    esp_err_t err = esp_http_client_perform(WifiSecurityClient);
 
     if (err == ESP_OK)
     {
-        ESP_LOGI(WS_TAG, "HTTPS 请求成功，状态码 = %d", esp_http_client_get_status_code(client));
+        ESP_LOGI(WS_TAG, "%s | %s 请求成功，状态码: %d\n", method_name, url, esp_http_client_get_status_code(WifiSecurityClient));
     }
     else
     {
-        ESP_LOGI(WS_TAG, "HTTPS 请求失败: %s", esp_err_to_name(err));
+        ESP_LOGI(WS_TAG, "%s | %s 请求失败: %s\n", method_name, url, esp_err_to_name(err));
     }
 
-    esp_http_client_cleanup(client);
+    // esp_http_client_cleanup(WifiSecurityClient);
     return err;
 }
