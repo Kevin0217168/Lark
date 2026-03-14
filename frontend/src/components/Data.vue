@@ -46,6 +46,9 @@
                 <span class="data-label">创建时间:</span>
                 <span class="data-value">{{ selectedDevice.createTime }}</span>
               </div>
+              <div class="data-actions">
+                <el-button type="primary" @click="goToFullscreen">查看大图模式</el-button>
+              </div>
             </el-card>
           </div>
         </div>
@@ -84,10 +87,13 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useDeviceStore } from '../stores/deviceStore';
 import { ElMessage } from 'element-plus';
 
+const route = useRoute();
+const router = useRouter();
 const { getDevices } = useDeviceStore();
 const devices = getDevices();
 
@@ -113,6 +119,35 @@ const handleDeviceChange = () => {
 watch(() => props.activeTab, () => {
   selectedDeviceId.value = null;
 });
+
+// 监听路由参数变化，自动选择设备
+watch(() => route.query.deviceId, (newDeviceId) => {
+  if (newDeviceId) {
+    const deviceId = parseInt(newDeviceId as string);
+    if (!isNaN(deviceId)) {
+      selectedDeviceId.value = deviceId;
+    }
+  }
+}, { immediate: true });
+
+// 组件挂载时检查URL参数
+onMounted(() => {
+  const deviceId = route.query.deviceId;
+  if (deviceId) {
+    const id = parseInt(deviceId as string);
+    if (!isNaN(id)) {
+      selectedDeviceId.value = id;
+    }
+  }
+});
+
+// 跳转到总览界面的大图模式全屏状态
+const goToFullscreen = () => {
+  router.push({
+    path: '/Home',
+    query: { fullscreen: 'true' }
+  });
+};
 </script>
 
 <style lang="scss" scoped>
@@ -203,6 +238,17 @@ watch(() => props.activeTab, () => {
 
 .data-value.offline {
   color: #f56c6c;
+}
+
+.data-actions {
+  margin-top: 20px;
+  text-align: center;
+  padding-top: 15px;
+  border-top: 1px solid #e4e7ed;
+}
+
+.data-actions .el-button {
+  width: 100%;
 }
 
 .video-card {
