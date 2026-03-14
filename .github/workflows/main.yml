@@ -6,7 +6,7 @@ on:
       - master
     paths:
       - 'frontend/**'          # 仅当 frontend 目录下文件变化时触发
-    workflow_dispatch:
+  workflow_dispatch:
 
 jobs:
   deploy:
