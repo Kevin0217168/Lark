@@ -5,6 +5,9 @@ export interface Device {
   name: string;
   status: string;
   createTime: string;
+  temperature?: number; // 温度数据
+  humidity?: number; // 湿度数据
+  videoStreamUrl?: string; // 视频流数据
 }
 
 export interface DeviceLog {
@@ -16,9 +19,31 @@ export interface DeviceLog {
   timestamp: string;
 }
 
+export interface DevicePosition {
+  deviceId: number;
+  x: number; // 0-100 百分比
+  y: number; // 0-100 百分比
+}
+
 const devices = ref<Device[]>([
-  { id: 1, name: '设备1', status: 'online', createTime: '2026/03/14 01:28:24' },
-  { id: 2, name: '设备2', status: 'offline', createTime: '2026/03/14 01:28:24' },
+  { 
+    id: 1, 
+    name: '设备1', 
+    status: 'online', 
+    createTime: '2026/03/14 01:28:24',
+    temperature: 25.5,
+    humidity: 45.0,
+    videoStreamUrl: 'http://example.com/stream1'
+  },
+  { 
+    id: 2, 
+    name: '设备2', 
+    status: 'offline', 
+    createTime: '2026/03/14 01:28:24',
+    temperature: 22.0,
+    humidity: 50.0,
+    videoStreamUrl: 'http://example.com/stream2'
+  },
 ]);
 
 const deviceLogs = ref<DeviceLog[]>([
@@ -27,6 +52,12 @@ const deviceLogs = ref<DeviceLog[]>([
   { id: 3, deviceId: 1, deviceName: '设备1', level: 'warning', message: '温度偏高', timestamp: '2026/03/14 08:30:00' },
   { id: 4, deviceId: 2, deviceName: '设备2', level: 'error', message: '设备离线', timestamp: '2026/03/14 09:00:00' },
 ]);
+
+// 设备位置存储
+const devicePositions = ref<DevicePosition[]>([]);
+
+// 全屏状态
+const isFullscreen = ref(false);
 
 export const useDeviceStore = () => {
   const getDevices = () => devices.value;
@@ -98,12 +129,49 @@ export const useDeviceStore = () => {
     cleanOldLogs(); // 添加新日志后清理过期日志
   };
   
+  // 设备位置相关方法
+  const getDevicePositions = () => devicePositions.value;
+  
+  const addDevicePosition = (position: DevicePosition) => {
+    const existingIndex = devicePositions.value.findIndex(p => p.deviceId === position.deviceId);
+    if (existingIndex !== -1) {
+      devicePositions.value[existingIndex] = position;
+    } else {
+      devicePositions.value.push(position);
+    }
+  };
+  
+  const updateDevicePosition = (deviceId: number, x: number, y: number) => {
+    const existingIndex = devicePositions.value.findIndex(p => p.deviceId === deviceId);
+    if (existingIndex !== -1) {
+      const position = devicePositions.value[existingIndex];
+      if (position) {
+        position.x = x;
+        position.y = y;
+      }
+    } else {
+      devicePositions.value.push({ deviceId, x, y });
+    }
+  };
+  
+  const removeDevicePosition = (deviceId: number) => {
+    const index = devicePositions.value.findIndex(p => p.deviceId === deviceId);
+    if (index !== -1) {
+      devicePositions.value.splice(index, 1);
+    }
+  };
+  
+  const clearDevicePositions = () => {
+    devicePositions.value = [];
+  };
+  
   // 初始化时清理过期日志
   cleanOldLogs();
   
   return {
     devices,
     deviceLogs,
+    isFullscreen,
     getDevices,
     addDevice,
     updateDevice,
@@ -111,6 +179,15 @@ export const useDeviceStore = () => {
     getDeviceStats,
     getDeviceLogs,
     addDeviceLog,
-    cleanOldLogs
+    cleanOldLogs,
+    getDevicePositions,
+    addDevicePosition,
+    updateDevicePosition,
+    removeDevicePosition,
+    clearDevicePositions,
+    setFullscreen: (value: boolean) => {
+      isFullscreen.value = value;
+    },
+    getFullscreen: () => isFullscreen.value
   };
 };

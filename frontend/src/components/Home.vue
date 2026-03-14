@@ -55,7 +55,10 @@
    </div>
     <div v-else class="fullscreen-layout">
       <div class="fullscreen-header">
-        <h3>大图模式</h3>
+        <div class="header-content">
+          <h3>大图模式</h3>
+          <p class="hint-text">点击设备图标查看设备详细信息</p>
+        </div>
         <el-button @click="exitFullscreen" type="primary">退出</el-button>
       </div>
       <div class="fullscreen-content">
@@ -94,6 +97,7 @@
               class="placed-device"
               :style="getPlacedDeviceStyle(placedDevice)"
               @mousedown="handleMouseDown($event, index)"
+              @click="handleDeviceClick(placedDevice.id)"
             >
               <div class="device-marker">
                 <div class="device-status" :class="placedDevice.status"></div>
@@ -101,7 +105,7 @@
                   <div class="device-name">{{ placedDevice.name }}</div>
                   <div class="device-id">ID: {{ placedDevice.id }}</div>
                 </div>
-                <div class="device-close" @mousedown.stop @click="removePlacedDevice(index)">×</div>
+                <div class="device-close" @mousedown.stop @click.stop="removePlacedDevice(index)">×</div>
               </div>
             </div>
           </div>
@@ -112,22 +116,30 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, computed, onMounted, watch } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useDeviceStore } from '../stores/deviceStore';
 
 const router = useRouter();
-const { devices, getDeviceStats, getDeviceLogs } = useDeviceStore();
+const route = useRoute();
+const { 
+  devices, 
+  getDeviceStats, 
+  getDeviceLogs,
+  getDevicePositions,
+  addDevicePosition,
+  updateDevicePosition,
+  removeDevicePosition,
+  isFullscreen,
+  setFullscreen
+} = useDeviceStore();
 const deviceStats = getDeviceStats();
 
 const errorCount = computed(() => {
   const allLogs = getDeviceLogs();
   return allLogs.filter(log => log.level === 'warning' || log.level === 'error').length;
 });
-
-// 全屏状态
-const isFullscreen = ref(false);
 
 // 已放置的设备（使用相对于图片原始尺寸的百分比）
 interface PlacedDevice {
@@ -138,12 +150,53 @@ interface PlacedDevice {
   y: number; // 0-100 百分比
 }
 const placedDevices = ref<PlacedDevice[]>([]);
+
+// 从store加载设备位置
+const loadDevicePositions = () => {
+  const positions = getDevicePositions();
+  placedDevices.value = positions.map(position => {
+    const device = devices.value.find(d => d.id === position.deviceId);
+    if (device) {
+      return {
+        id: device.id,
+        name: device.name,
+        status: device.status,
+        x: position.x,
+        y: position.y
+      };
+    }
+    return null;
+  }).filter((device): device is PlacedDevice => device !== null);
+};
+
+// 组件挂载时加载设备位置
+onMounted(() => {
+  loadDevicePositions();
+  
+  // 检查是否需要进入全屏状态
+  if (route.query.fullscreen === 'true') {
+    setFullscreen(true);
+  }
+});
+
+// 监听路由参数变化
+watch(() => route.query.fullscreen, (newFullscreen) => {
+  if (newFullscreen === 'true') {
+    setFullscreen(true);
+  } else if (newFullscreen === 'false' || newFullscreen === undefined || newFullscreen === null) {
+    setFullscreen(false);
+  }
+}, { immediate: true });
 const draggedDevice = ref<{ id: number; name: string; status: string } | null>(null);
 
 // 正在拖动的设备索引
 const draggingIndex = ref<number | null>(null);
 // 拖动起始位置
 const dragStart = ref({ x: 0, y: 0 });
+// 是否正在拖动
+const isDragging = ref(false);
+// 是否刚刚完成了拖动
+const justDragged = ref(false);
 
 // 图片引用
 const imageRef = ref<HTMLImageElement | null>(null);
@@ -171,12 +224,14 @@ const getPlacedDeviceStyle = (placedDevice: PlacedDevice) => {
 
 // 进入全屏
 const enterFullscreen = () => {
-  isFullscreen.value = true;
+  setFullscreen(true);
 };
 
 // 退出全屏
 const exitFullscreen = () => {
-  isFullscreen.value = false;
+  setFullscreen(false);
+  // 清除URL中的fullscreen参数
+  router.replace({ query: {} });
 };
 
 // 拖拽开始
@@ -227,14 +282,50 @@ const handleDrop = (event: DragEvent) => {
     y: y
   });
 
+  // 保存设备位置到store
+  addDevicePosition({
+    deviceId: draggedDevice.value.id,
+    x: x,
+    y: y
+  });
+
   draggedDevice.value = null;
   ElMessage.success('设备放置成功');
 };
 
 // 移除放置的设备
 const removePlacedDevice = (index: number) => {
+  const device = placedDevices.value[index];
+  if (device) {
+    // 从store中删除设备位置
+    removeDevicePosition(device.id);
+  }
   placedDevices.value.splice(index, 1);
   ElMessage.success('设备已移除');
+};
+
+// 点击设备图标跳转到数据界面
+const handleDeviceClick = (deviceId: number) => {
+  // 如果正在拖动，则不执行点击操作
+  if (isDragging.value) {
+    return;
+  }
+  
+  // 如果刚刚完成了拖动，则不执行点击操作
+  if (justDragged.value) {
+    return;
+  }
+  
+  // 只在全屏状态下才允许跳转
+  if (!isFullscreen.value) {
+    return;
+  }
+  
+  // 跳转到数据界面
+  router.push({
+    path: '/Data',
+    query: { deviceId: deviceId.toString() }
+  });
 };
 
 // 鼠标按下开始拖动
@@ -248,6 +339,7 @@ const handleMouseDown = (event: MouseEvent, index: number) => {
     x: event.clientX,
     y: event.clientY
   };
+  isDragging.value = false;
   
   // 添加鼠标移动和释放事件监听器
   document.addEventListener('mousemove', handleMouseMove);
@@ -257,6 +349,17 @@ const handleMouseDown = (event: MouseEvent, index: number) => {
 // 鼠标移动处理
 const handleMouseMove = (event: MouseEvent) => {
   if (draggingIndex.value === null) return;
+  
+  // 检测是否发生了移动
+  const moveDistance = Math.sqrt(
+    Math.pow(event.clientX - dragStart.value.x, 2) + 
+    Math.pow(event.clientY - dragStart.value.y, 2)
+  );
+  
+  // 如果移动距离超过5像素，则认为是拖动操作
+  if (moveDistance > 5) {
+    isDragging.value = true;
+  }
   
   const imgElement = imageRef.value;
   if (!imgElement) return;
@@ -285,8 +388,23 @@ const handleMouseUp = () => {
   document.removeEventListener('mousemove', handleMouseMove);
   document.removeEventListener('mouseup', handleMouseUp);
   
+  // 如果正在拖动，更新设备位置到store
+  if (draggingIndex.value !== null && isDragging.value) {
+    const device = placedDevices.value[draggingIndex.value];
+    if (device) {
+      updateDevicePosition(device.id, device.x, device.y);
+    }
+    // 标记刚刚完成了拖动
+    justDragged.value = true;
+    // 100ms后清除标记，允许点击事件
+    setTimeout(() => {
+      justDragged.value = false;
+    }, 100);
+  }
+  
   // 结束拖动
   draggingIndex.value = null;
+  isDragging.value = false;
 };
 
 const goToDeviceLogs = () => {
@@ -449,6 +567,19 @@ const goToDeviceManagement = () => {
 
 .fullscreen-header h3 {
   margin: 0;
+}
+
+.header-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.hint-text {
+  margin: 5px 0 0 0;
+  font-size: 12px;
+  color: #909399;
+  font-weight: normal;
 }
 
 .fullscreen-img {

@@ -4,7 +4,7 @@
       <el-row class="header-card">
         <el-col :span="3">
           <router-link to="/Home" custom v-slot="{ navigate }">
-            <el-button @click="navigate" style="color: #8bad42" text>
+            <el-button @click="handleHomeClick(navigate)" style="color: #8bad42" text>
               <el-icon size="30">
                 <grid />
               </el-icon>
@@ -15,7 +15,7 @@
         <el-col :span="2" :offset="6">
           <router-link to="/Home" custom v-slot="{ navigate }">
             <el-button 
-              @click="navigate" 
+              @click="handleHomeClick(navigate)" 
               :style="{ color: isActive('/Home') ? '#8bad42' : '#000' }" 
               :type="isActive('/Home') ? 'primary' : 'default'"
               text
@@ -25,11 +25,11 @@
           </router-link>
         </el-col>
         <el-col :span="2">
-          <router-link to="/Stream" custom v-slot="{ navigate }">
+          <router-link to="/Data" custom v-slot="{ navigate }">
             <el-button 
               @click="navigate" 
-              :style="{ color: isActive('/Stream') ? '#8bad42' : '#000' }" 
-              :type="isActive('/Stream') ? 'primary' : 'default'"
+              :style="{ color: isActive('/Data') ? '#8bad42' : '#000' }" 
+              :type="isActive('/Data') ? 'primary' : 'default'"
               text
             > 
               数据 
@@ -62,12 +62,28 @@
 </template>
 
 <script lang="ts" setup>
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
+import { useDeviceStore } from '../stores/deviceStore';
 
 const route = useRoute();
+const router = useRouter();
+const { isFullscreen, setFullscreen } = useDeviceStore();
 
 const isActive = (path: string) => {
   return route.path === path;
+};
+
+const handleHomeClick = (navigate: () => void) => {
+  // 检查当前是否处于全屏状态
+  if (isFullscreen.value) {
+    // 退出全屏状态
+    setFullscreen(false);
+    // 清除URL中的fullscreen参数
+    router.replace({ query: {} });
+  } else {
+    // 直接导航
+    navigate();
+  }
 };
 </script>
 
