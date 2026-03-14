@@ -1,4 +1,5 @@
 #include "Wifista.h"
+#include "cJSON.h"
 
 const char *WS_TAG = "WifiSecurity";
 
@@ -34,16 +35,40 @@ void obtain_time(void)
              timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
 }
 
+// 在文件顶部添加静态变量
+static bool is_json_response = false;
+
 static esp_err_t http_event_handler(esp_http_client_event_t *evt)
 {
     switch (evt->event_id)
     {
     case HTTP_EVENT_ON_HEADER:
-        ESP_LOGI("HTTP", "Header: %s: %s", evt->header_key, evt->header_value);
+        ESP_LOGI(WS_TAG, "Header: %s: %s", evt->header_key, evt->header_value);
+        if (strcasecmp(evt->header_key, "Content-Type") == 0)
+        {
+            is_json_response = (strstr(evt->header_value, "application/json") != NULL);
+        }
         break;
+
     case HTTP_EVENT_ON_DATA:
-        ESP_LOGI("HTTP", "Data (len=%d): %.*s", evt->data_len, evt->data_len, (char *)evt->data);
+        ESP_LOGI(WS_TAG, "Data (len=%d): %.*s", evt->data_len, evt->data_len, (char *)evt->data);
+        if (is_json_response)
+        {
+            cJSON *json = cJSON_Parse(evt->data); // 假设数据完整且以 \0 结尾
+            if (json != NULL)
+            {
+                char *string = cJSON_Print(json);
+                ESP_LOGI(WS_TAG, "收到 JSON 数据, 解析成功: \n%s\n", string);
+                cJSON_free(string); // 或 free(string) 取决于 cJSON 配置
+                cJSON_Delete(json);
+            }
+            else
+            {
+                ESP_LOGI(WS_TAG, "收到 JSON 数据, 解析失败");
+            }
+        }
         break;
+
     default:
         break;
     }
@@ -54,7 +79,7 @@ void WifiSecurityClientInit()
 {
 
     config.event_handler = http_event_handler;
-    config.url = "https://www.mintlab.top";           // 这里必须给初值, 否则初始化失败
+    config.url = "https://www.mintlab.top"; // 这里必须给初值, 否则初始化失败
     config.buffer_size = 4096;
     config.timeout_ms = 2000;
     config.crt_bundle_attach = esp_crt_bundle_attach; // 使用证书包
