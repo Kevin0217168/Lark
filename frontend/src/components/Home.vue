@@ -52,17 +52,53 @@
           />
         </el-card>
       </div>
-    </div>
-    <div v-else class="fullscreen-image">
+   </div>
+    <div v-else class="fullscreen-layout">
       <div class="fullscreen-header">
         <h3>大图模式</h3>
         <el-button @click="exitFullscreen" type="primary">退出</el-button>
       </div>
-      <el-image 
-        src="/banner.jpg" 
-        fit="contain"
-        class="fullscreen-img"
-      />
+      <div class="fullscreen-content">
+        <!-- 左侧设备列表 -->
+        <div class="device-list-panel">
+          <h4>设备列表</h4>
+          <div class="device-list">
+            <div 
+              v-for="device in devices" 
+              :key="device.id"
+              class="device-item"
+              draggable="true"
+              @dragstart="handleDragStart($event, device)"
+            >
+              {{ device.name }}
+            </div>
+          </div>
+        </div>
+        <!-- 右侧图片区域 -->
+        <div 
+          class="image-drop-zone"
+          @dragover.prevent
+          @drop="handleDrop"
+        >
+          <div class="image-wrapper" ref="imageWrapperRef">
+            <img 
+              src="/banner.jpg" 
+              class="fullscreen-img"
+              ref="imageRef"
+              @load="onImageLoad"
+            />
+            <!-- 已放置的设备标记 -->
+            <div
+              v-for="(placedDevice, index) in placedDevices"
+              :key="index"
+              class="placed-device"
+              :style="getPlacedDeviceStyle(placedDevice)"
+            >
+              <el-tag type="primary" size="small" closable @close="removePlacedDevice(index)">{{ placedDevice.name }}</el-tag>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </el-card>
 </template>
@@ -70,10 +106,11 @@
 <script lang="ts" setup>
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import { ElMessage } from 'element-plus';
 import { useDeviceStore } from '../stores/deviceStore';
 
 const router = useRouter();
-const { getDeviceStats, getDeviceLogs } = useDeviceStore();
+const { devices, getDeviceStats, getDeviceLogs } = useDeviceStore();
 const deviceStats = getDeviceStats();
 
 const errorCount = computed(() => {
@@ -84,6 +121,40 @@ const errorCount = computed(() => {
 // 全屏状态
 const isFullscreen = ref(false);
 
+// 已放置的设备（使用相对于图片原始尺寸的百分比）
+interface PlacedDevice {
+  id: number;
+  name: string;
+  x: number; // 0-100 百分比
+  y: number; // 0-100 百分比
+}
+const placedDevices = ref<PlacedDevice[]>([]);
+const draggedDevice = ref<{ id: number; name: string } | null>(null);
+
+// 图片引用
+const imageRef = ref<HTMLImageElement | null>(null);
+const imageWrapperRef = ref<HTMLElement | null>(null);
+const imageNaturalSize = ref({ width: 0, height: 0 });
+
+// 图片加载完成后获取原始尺寸
+const onImageLoad = () => {
+  if (imageRef.value) {
+    imageNaturalSize.value = {
+      width: imageRef.value.naturalWidth,
+      height: imageRef.value.naturalHeight
+    };
+  }
+};
+
+// 计算设备标记的样式
+const getPlacedDeviceStyle = (placedDevice: PlacedDevice) => {
+  return {
+    left: placedDevice.x + '%',
+    top: placedDevice.y + '%',
+    transform: 'translate(-50%, -50%)'
+  };
+};
+
 // 进入全屏
 const enterFullscreen = () => {
   isFullscreen.value = true;
@@ -92,6 +163,63 @@ const enterFullscreen = () => {
 // 退出全屏
 const exitFullscreen = () => {
   isFullscreen.value = false;
+};
+
+// 拖拽开始
+const handleDragStart = (event: DragEvent, device: { id: number; name: string }) => {
+  draggedDevice.value = device;
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'copy';
+  }
+};
+
+// 放置设备
+const handleDrop = (event: DragEvent) => {
+  event.preventDefault();
+  if (!draggedDevice.value) return;
+
+  // 检查设备是否已放置
+  const existingIndex = placedDevices.value.findIndex(d => d.id === draggedDevice.value!.id);
+  if (existingIndex !== -1) {
+    ElMessage.warning('该设备已放置，请先移除后再放置');
+    return;
+  }
+
+  const imgElement = imageRef.value;
+  if (!imgElement) return;
+
+  const imgRect = imgElement.getBoundingClientRect();
+
+  // 检查鼠标是否在图片显示区域内
+  if (
+    event.clientX < imgRect.left ||
+    event.clientX > imgRect.right ||
+    event.clientY < imgRect.top ||
+    event.clientY > imgRect.bottom
+  ) {
+    ElMessage.warning('请将设备放置在图片区域内');
+    return;
+  }
+
+  // 计算相对于图片显示区域的位置（百分比）
+  const x = ((event.clientX - imgRect.left) / imgRect.width) * 100;
+  const y = ((event.clientY - imgRect.top) / imgRect.height) * 100;
+
+  placedDevices.value.push({
+    id: draggedDevice.value.id,
+    name: draggedDevice.value.name,
+    x: x,
+    y: y
+  });
+
+  draggedDevice.value = null;
+  ElMessage.success('设备放置成功');
+};
+
+// 移除已放置的设备
+const removePlacedDevice = (index: number) => {
+  placedDevices.value.splice(index, 1);
+  ElMessage.success('设备已移除');
 };
 
 const goToDeviceLogs = () => {
@@ -260,5 +388,103 @@ const goToDeviceManagement = () => {
   flex: 1;
   width: 100%;
   min-height: 0;
+}
+
+.fullscreen-layout {
+  width: 100%;
+  height: calc(100vh - 200px);
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+}
+
+.fullscreen-content {
+  display: flex;
+  flex: 1;
+  gap: 20px;
+  overflow: hidden;
+}
+
+.device-list-panel {
+  width: 200px;
+  background: #f5f7fa;
+  border-radius: 8px;
+  padding: 15px;
+  overflow-y: auto;
+}
+
+.device-list-panel h4 {
+  margin: 0 0 15px 0;
+  color: #303133;
+  font-size: 16px;
+}
+
+.device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.device-item {
+  padding: 10px 15px;
+  background: #fff;
+  border-radius: 6px;
+  cursor: move;
+  transition: all 0.3s;
+  border: 1px solid #e4e7ed;
+  font-size: 14px;
+}
+
+.device-item:hover {
+  background: #ecf5ff;
+  border-color: #409eff;
+}
+
+.device-item:active {
+  cursor: grabbing;
+}
+
+.image-drop-zone {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5f7fa;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+}
+
+.image-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-wrapper {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.image-wrapper img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.placed-device {
+  position: absolute;
+  z-index: 10;
+  pointer-events: auto;
+}
+
+.placed-device .el-tag {
+  cursor: pointer;
 }
 </style>
