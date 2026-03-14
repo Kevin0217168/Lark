@@ -55,19 +55,26 @@
         
         <!-- 右侧视频流区域 -->
         <div class="data-right">
-          <h3>视频流</h3>
+          <h3>实时监控</h3>
           <el-card class="video-card">
-            <div class="video-container" v-if="selectedDevice && selectedDevice.videoStreamUrl">
-              <video 
-                :src="selectedDevice.videoStreamUrl" 
+            <div class="video-container" v-if="selectedDevice && currentFrameImage">
+              <img 
+                :src="currentFrameImage" 
                 class="video-stream"
-                controls
-                autoplay
-                muted
-              ></video>
+                alt="实时监控画面"
+              />
+              <div class="frame-info">
+                <span>更新时间: {{ lastFrameTime }}</span>
+              </div>
+            </div>
+            <div class="video-error" v-else-if="selectedDevice && connectionError">
+              <div class="error-content">
+                <el-icon class="error-icon" :size="48"><Warning /></el-icon>
+                <div class="error-message">{{ connectionError }}</div>
+              </div>
             </div>
             <div class="video-placeholder" v-else>
-              <el-empty description="请选择设备查看视频流" />
+              <el-empty description="请选择设备查看实时监控" />
             </div>
           </el-card>
         </div>
@@ -83,7 +90,7 @@
               </div>
               <div class="card-actions">
                 <el-select v-model="selectedDeviceId" @change="handleDeviceChange" class="device-select">
-                  <el-option
+                    <el-option
                     v-for="device in devices"
                     :key="device.id"
                     :label="device.name"
@@ -186,12 +193,14 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useDeviceStore } from '../stores/deviceStore';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElIcon } from 'element-plus';
+import { Warning } from '@element-plus/icons-vue';
 import * as echarts from 'echarts';
 
 const route = useRoute();
 const router = useRouter();
 const { getDevices, getDeviceHistoryData } = useDeviceStore();
+// 直接获取设备数据
 const devices = getDevices();
 
 // 接收父组件传递的activeTab
@@ -213,6 +222,8 @@ const handleDeviceChange = () => {
     nextTick(() => {
       initCharts();
     });
+    // 重新开始实时监控
+    startRealtimeMonitoring();
   }
 };
 
@@ -266,6 +277,110 @@ let temperatureChart: echarts.ECharts | null = null;
 let humidityChart: echarts.ECharts | null = null;
 let qualityChart: echarts.ECharts | null = null;
 let averageChart: echarts.ECharts | null = null;
+
+// 实时监控图片帧
+const currentFrameImage = ref<string>('');
+const lastFrameTime = ref<string>('');
+const connectionError = ref<string>('');
+let ws: WebSocket | null = null;
+let currentImageUrl: string = '';
+
+// 处理接收到的图片帧数据
+const handleFrameData = async (base64Data: string) => {
+  try {
+    // 将base64数据转换为Blob
+    const response = await fetch(`data:image/jpeg;base64,${base64Data}`);
+    const blob = await response.blob();
+    
+    // 释放旧的URL对象
+    if (currentImageUrl) {
+      URL.revokeObjectURL(currentImageUrl);
+    }
+    
+    // 创建新的URL
+    currentImageUrl = URL.createObjectURL(blob);
+    currentFrameImage.value = currentImageUrl;
+    lastFrameTime.value = new Date().toLocaleTimeString('zh-CN');
+  } catch (error) {
+    console.error('处理图片数据失败:', error);
+  }
+};
+
+// 开始实时监控
+const startRealtimeMonitoring = () => {
+  // 关闭旧的连接
+  stopRealtimeMonitoring();
+  
+  if (!selectedDeviceId.value) return;
+  
+  try {
+    // 建立WebSocket连接
+    // 自动根据当前协议选择 ws:// 或 wss://
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    ws = new WebSocket(`${protocol}//${host}/api/device/${selectedDeviceId.value}/stream`);
+    
+    // 监听消息事件
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.frame) {
+          handleFrameData(data.frame);
+        }
+      } catch (error) {
+        console.error('解析WebSocket消息失败:', error);
+      }
+    };
+    
+    // 监听错误事件
+    ws.onerror = (error) => {
+      console.error('WebSocket连接错误:', error);
+      // 显示错误代码
+      connectionError.value = 'WSS连接错误';
+      currentFrameImage.value = '';
+      lastFrameTime.value = '';
+    };
+    
+    // 监听连接打开事件
+    ws.onopen = () => {
+      console.log('WebSocket连接已建立');
+      connectionError.value = '';
+    };
+    
+    // 监听连接关闭事件
+    ws.onclose = (event) => {
+      console.log('WebSocket连接已关闭:', event);
+      if (!event.wasClean) {
+        connectionError.value = 'WSS连接已关闭';
+      }
+    };
+    
+  } catch (error) {
+    console.error('建立WebSocket连接失败:', error);
+    // 显示错误代码
+    connectionError.value = '建立WSS连接失败';
+    currentFrameImage.value = '';
+    lastFrameTime.value = '';
+  }
+};
+
+// 停止实时监控
+const stopRealtimeMonitoring = () => {
+  if (ws) {
+    ws.close();
+    ws = null;
+  }
+  
+  // 释放URL对象
+  if (currentImageUrl) {
+    URL.revokeObjectURL(currentImageUrl);
+    currentImageUrl = '';
+  }
+  
+  currentFrameImage.value = '';
+  lastFrameTime.value = '';
+  connectionError.value = '';
+};
 
 // 从deviceStore获取历史数据
 const generateMockData = (deviceId: number, type: 'temperature' | 'humidity' | 'quality') => {
@@ -563,15 +678,27 @@ const handleResize = () => {
 onMounted(() => {
   window.addEventListener('resize', handleResize);
   
+  console.log('Component mounted');
+  console.log('Initial active tab:', props.activeTab);
+  console.log('Devices available:', devices.length);
+  
   // 如果默认有设备，初始化图表
   if (devices.length > 0 && !selectedDeviceId.value) {
+    console.log('Setting default device:', devices[0]?.id);
     selectedDeviceId.value = devices[0]?.id || null;
+  }
+  
+  // 如果在实时数据标签页，启动实时监控
+  if (props.activeTab === 'realtime' && selectedDeviceId.value) {
+    console.log('Starting realtime monitoring for device:', selectedDeviceId.value);
+    startRealtimeMonitoring();
   }
 });
 
 // 组件卸载时清理
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize);
+  stopRealtimeMonitoring();
   temperatureChart?.dispose();
   humidityChart?.dispose();
   qualityChart?.dispose();
@@ -579,7 +706,11 @@ onUnmounted(() => {
 });
 
 // 监听activeTab变化，重置设备选择
-watch(() => props.activeTab, (newTab) => {
+watch(() => props.activeTab, (newTab, oldTab) => {
+  console.log('Active tab changed:', newTab, 'Old tab:', oldTab);
+  console.log('Devices available:', devices.length);
+  console.log('Selected device ID:', selectedDeviceId.value);
+  
   if (newTab === 'analysis') {
     // 切换到分析标签时，如果有设备，初始化图表
     if (devices.length > 0 && !selectedDeviceId.value) {
@@ -588,15 +719,38 @@ watch(() => props.activeTab, (newTab) => {
     nextTick(() => {
       initCharts();
     });
+    // 停止实时监控
+    stopRealtimeMonitoring();
   } else if (newTab === 'history') {
     // 切换到历史数据标签时，如果有设备，自动选择第一个设备
     if (devices.length > 0 && !historyDeviceId.value) {
       historyDeviceId.value = devices[0]?.id || null;
     }
+    // 停止实时监控
+    stopRealtimeMonitoring();
+  } else if (newTab === 'realtime') {
+    // 切换到实时数据标签时，确保有设备被选择
+    if (devices.length > 0) {
+      // 不管之前是否有选择，都强制选择第一个设备
+      console.log('Forcing selection of first device for realtime tab:', devices[0]?.id);
+      selectedDeviceId.value = devices[0]?.id || null;
+      
+      // 启动实时监控
+      if (selectedDeviceId.value) {
+        console.log('Starting realtime monitoring from activeTab change');
+        startRealtimeMonitoring();
+      } else {
+        console.log('No device selected, cannot start realtime monitoring');
+      }
+    } else {
+      console.log('No devices available, cannot start realtime monitoring');
+    }
   } else {
     selectedDeviceId.value = null;
+    // 停止实时监控
+    stopRealtimeMonitoring();
   }
-});
+}, { immediate: true });
 
 // 监听路由参数变化，自动选择设备
 watch(() => route.query.deviceId, (newDeviceId) => {
@@ -608,16 +762,35 @@ watch(() => route.query.deviceId, (newDeviceId) => {
   }
 }, { immediate: true });
 
-// 组件挂载时检查URL参数
-onMounted(() => {
-  const deviceId = route.query.deviceId;
-  if (deviceId) {
-    const id = parseInt(deviceId as string);
-    if (!isNaN(id)) {
-      selectedDeviceId.value = id;
+// 监听路由变化，确保在导航到数据页面时自动选择设备
+watch(() => route.path, (newPath) => {
+  console.log('Route path changed:', newPath);
+  if (newPath === '/Data' || newPath === '/Stream') {
+    console.log('Navigated to data page, checking device selection');
+    if (devices.length > 0 && !selectedDeviceId.value) {
+      console.log('Auto-selecting first device:', devices[0]?.id);
+      selectedDeviceId.value = devices[0]?.id || null;
     }
   }
 });
+
+// 监听selectedDeviceId变化，自动开启实时监控
+watch(() => selectedDeviceId.value, (newDeviceId, oldDeviceId) => {
+  console.log('Selected device ID changed:', newDeviceId, 'Old device ID:', oldDeviceId);
+  console.log('Current active tab:', props.activeTab);
+  
+  // 使用nextTick确保activeTab已经更新
+  nextTick(() => {
+    console.log('Active tab after nextTick:', props.activeTab);
+    // 只有当有设备ID且当前是实时标签时才启动监控
+    if (newDeviceId && props.activeTab === 'realtime') {
+      console.log('Auto-starting realtime monitoring for device:', newDeviceId);
+      startRealtimeMonitoring();
+    }
+  });
+});
+
+// 组件挂载时检查URL参数已移至上面的onMounted函数
 
 // 跳转到总览界面的大图模式全屏状态
 const goToFullscreen = () => {
@@ -766,15 +939,31 @@ const goToFullscreen = () => {
   border-radius: 10px;
   overflow: hidden;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   min-height: 0;
+  position: relative;
 }
 
 .video-stream {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  flex: 1;
+}
+
+.frame-info {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  padding: 8px 12px;
+  font-size: 12px;
+  text-align: right;
+  z-index: 10;
 }
 
 .video-placeholder {
@@ -785,6 +974,34 @@ const goToFullscreen = () => {
   align-items: center;
   justify-content: center;
   min-height: 0;
+}
+
+.video-error {
+  flex: 1;
+  background: #f5f7fa;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+
+.error-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.error-icon {
+  color: #f56c6c;
+}
+
+.error-message {
+  font-size: 16px;
+  color: #606266;
+  text-align: center;
 }
 
 .tab-content {
