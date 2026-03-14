@@ -29,6 +29,16 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 1.3.1
+  espressif/esp_websocket_client:
+    component_hash: c5a067a9fddea370c478017e66fac302f4b79c3d4027e9bdd42a019786cceb92
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.6.1
   idf:
     source:
       type: idf
@@ -36,7 +46,8 @@ dependencies:
 direct_dependencies:
 - Wifista
 - espressif/esp32-camera
+- espressif/esp_websocket_client
 - idf
-manifest_hash: e76d3387d87e7d2d3bc16623b2ee05ef2c209954c46fbe185d31210a2b09e912
+manifest_hash: 3e92e6c7296118342cd53405a17d893622cd44c3e712597203f36f6efb6c1170
 target: esp32
 version: 2.0.0

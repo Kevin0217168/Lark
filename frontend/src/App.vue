@@ -8,21 +8,30 @@
     <el-header>
       <Header />
     </el-header>
-    <Sider />
+    <Sider @tabChange="handleTabChange" />
     <el-main>
-      <RouterView />
+      <RouterView v-slot="{ Component }">
+        <component :is="Component" :activeTab="activeTab" />
+      </RouterView>
     </el-main>
     <el-footer> © 2026 </el-footer>
   </el-container>
 </template>
 
 <script setup lang="ts">
+import { ref } from "vue";
 import { el } from "element-plus/es/locale/index.mjs";
 import Header from "./components/Header.vue";
 import Login from "./components/Login.vue";
 import Sider from "./components/Sider.vue";
 
 import { RouterView, RouterLink } from "vue-router";
+
+const activeTab = ref<string>('realtime');
+
+const handleTabChange = (tab: string) => {
+  activeTab.value = tab;
+};
 </script>
 
 <style scoped>
@@ -51,5 +60,11 @@ header {
   margin: 0;
   --el-header-padding: 0;
   height: 400px;
+}
+
+.content-container {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
 }
 </style>
