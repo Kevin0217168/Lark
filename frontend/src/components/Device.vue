@@ -58,8 +58,46 @@
     
     <!-- 日志视图 -->
     <div v-else-if="activeTab === 'logs'">
-      <h4>设备日志</h4>
-      <p>设备日志功能待实现</p>
+      <div class="logs-header">
+        <h4>设备日志</h4>
+        <el-select v-model="selectedDeviceId" placeholder="选择设备" style="width: 200px;">
+          <el-option label="全部设备" :value="null" />
+          <el-option 
+            v-for="device in devices" 
+            :key="device.id" 
+            :label="device.name" 
+            :value="device.id" 
+          />
+        </el-select>
+      </div>
+      
+      <el-table :data="filteredLogs" style="width: 100%" border>
+        <el-table-column prop="id" label="日志ID" min-width="80" />
+        <el-table-column prop="deviceName" label="设备名称" min-width="120" />
+        <el-table-column prop="level" label="级别" min-width="100">
+          <template #default="scope">
+            <el-tag 
+              :type="{
+                'info': 'info',
+                'warning': 'warning',
+                'error': 'danger'
+              }[scope.row.level as 'info' | 'warning' | 'error']"
+            >
+              {{ {
+                'info': '信息',
+                'warning': '警告',
+                'error': '错误'
+              }[scope.row.level as 'info' | 'warning' | 'error'] }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="message" label="日志内容" min-width="300" />
+        <el-table-column prop="timestamp" label="时间" min-width="180" />
+      </el-table>
+      
+      <div v-if="filteredLogs.length === 0" class="no-logs">
+        <p>暂无日志数据</p>
+      </div>
     </div>
   </el-card>
   
@@ -81,16 +119,25 @@
 </template>
 
 <script lang="ts" setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { useDeviceStore, type Device } from '../stores/deviceStore';
+import { useDeviceStore, type Device, type DeviceLog } from '../stores/deviceStore';
 
 // 接收从父组件传递的 activeTab 属性
 defineProps<{
   activeTab: string;
 }>();
 
-const { devices, addDevice, updateDevice, deleteDevice } = useDeviceStore();
+const { devices, getDeviceLogs, addDevice, updateDevice, deleteDevice } = useDeviceStore();
+
+const selectedDeviceId = ref<number | null>(null);
+
+const filteredLogs = computed<DeviceLog[]>(() => {
+  const logs = getDeviceLogs(selectedDeviceId.value || undefined);
+  return logs.sort((a, b) => {
+    return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+  });
+});
 
 const dialogVisible = ref(false);
 const isEdit = ref(false);
@@ -225,5 +272,22 @@ const handleUpdateFirmware = (device: Device) => {
 
 .management-header h4 {
   margin: 0;
+}
+
+.logs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.logs-header h4 {
+  margin: 0;
+}
+
+.no-logs {
+  text-align: center;
+  padding: 40px 0;
+  color: #999;
 }
 </style>
