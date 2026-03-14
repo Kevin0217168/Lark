@@ -12,11 +12,30 @@
 #include "nvs_flash.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "cJSON.h"
+
+typedef enum{
+    WS_CLINENT_METHOD_GET,
+    WS_CLINENT_METHOD_POST,
+    WS_CLINENT_METHOD_PUT,
+    WS_CLINENT_METHOD_DELETE,
+} WifiSecurityMethod_t;
+
+typedef struct 
+{
+    esp_http_client_handle_t* client;   // 指向全局客户端句柄
+    bool is_json;                        // 是否为 JSON 响应
+    cJSON* json;                          // 解析后的 JSON 对象（若成功）
+    char *buffer;                         // 动态累积响应数据的缓冲区
+    size_t buffer_size;                   // 当前已接收数据长度
+    size_t buffer_capacity;                // 缓冲区总容量
+} RequestContext_t;
 
 void WifistaInit();
-
 void obtain_time(void);
-void https_request_task(void *pvParameters);
-esp_err_t WifiSecurityRequest(const char *host, const char *path, uint16_t port);
+void WifiSecurityClientInit();
+esp_err_t WifiSecurityRequest(const char *host, const char *path, uint16_t port, WifiSecurityMethod_t method,
+     char *post_data, void (ResponseUserHandler)(RequestContext_t*));
+void WebsocketStart(const char *host, const char *path, uint16_t port);
 
 #endif

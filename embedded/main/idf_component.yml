@@ -15,7 +15,8 @@ dependencies:
   #   # All dependencies of `main` are public by default.
   #   public: true
   espressif/esp32-camera: '*'
-  
+
   # 通过相对路径定义本地依赖项
   Wifista:
     path: ../components/Wifista
+  espressif/esp_websocket_client: '*'

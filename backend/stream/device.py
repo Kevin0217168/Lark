@@ -38,9 +38,15 @@ class Esp32:
   def unsubscribe(self, subscriber):
     self.subsrcibers.remove(subscriber)
 
+# 定义请求体模型
+class RegisterItem(BaseModel):
+  secret: str = Field(..., 
+                      description="设备密钥, 须与服务端一致", 
+                      examples=["ae2823b8b2e14205b5e75d30c68d282d"])
+
 @router.post("/register")
-async def register_device(token: str):
-  if token not in esp32TokenList:
+async def register_device(item: RegisterItem):
+  if item.secret not in esp32TokenList:
     return Response(status_code=403, 
                     content=json.dumps({"error": "Invalid token"}), 
                     media_type="application/json")
