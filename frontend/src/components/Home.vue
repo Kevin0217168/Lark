@@ -34,7 +34,7 @@
               <h5>系统状态</h5>
               <el-tag type="success" size="large">运行正常</el-tag>
               <p style="margin-top: 10px;">系统运行时间: 15天</p>
-              <p style="margin-top: 10px;">报错数量: </p>
+              <p style="margin-top: 10px;color: #FF4D4F;">报错数量: {{ errorCount }}</p>
             </div>
             <div class="view-logs-section">
               <el-button type="primary" @click="goToDeviceLogs">查看日志</el-button>
@@ -68,13 +68,18 @@
 </template>
 
 <script lang="ts" setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useDeviceStore } from '../stores/deviceStore';
 
 const router = useRouter();
-const { getDeviceStats } = useDeviceStore();
+const { getDeviceStats, getDeviceLogs } = useDeviceStore();
 const deviceStats = getDeviceStats();
+
+const errorCount = computed(() => {
+  const allLogs = getDeviceLogs();
+  return allLogs.filter(log => log.level === 'warning' || log.level === 'error').length;
+});
 
 // 全屏状态
 const isFullscreen = ref(false);
