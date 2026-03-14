@@ -3,9 +3,9 @@
 
 typedef struct
 {
-    char *uuid;
-    char *name;
-    uint8_t status;
+    char name[48];
+    char uuid[48];
+    bool isOnline;
 } DeviceStatus_t;
 
 #endif
