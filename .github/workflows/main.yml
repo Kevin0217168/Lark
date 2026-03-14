@@ -36,12 +36,15 @@ jobs:
         working-directory: ./frontend
         run: pnpm run build         # 确保 package.json 中有 build 脚本
 
-      - name: Deploy to server via rsync
-        uses: burnett01/rsync-deployments@7.0.1
+      # 将构建产物通过 scp 上传到服务器指定目录
+      - name: Copy build to server via scp
+        uses: appleboy/scp-action@v0.1.7
         with:
-          switches: -avz --delete    # 同步并删除远端多余文件
-          path: frontend/dist/       # 本地构建输出目录（注意末尾斜杠）
-          remote_path: ${{ secrets.REMOTE_TARGET }}   # 服务器上的目标路径
-          remote_host: ${{ secrets.DEPLOY_HOST }}
-          remote_user: ${{ secrets.DEPLOY_USER }}
-          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+          host: ${{ secrets.HOST }}
+          port: ${{ secrets.PORT }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "dist/*"          # 本地构建产物（相对于工作目录）
+          target: "/home/mint/web/blog"   # 服务器目标目录（注意末尾不要加斜杠）
+          strip_components: 1        # 去掉 dist 层级，直接将内部文件放入目标目录
+          rm: true                   # 可选：上传前先删除目标目录下的所有文件（慎用）
