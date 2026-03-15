@@ -20,14 +20,30 @@
         <el-card class="data_summary">
           <h4>数据概览</h4>
           <div class="stats-content">
-            <p><strong>厂区平均温度:</strong> 100°C</p>
-            <p><strong>厂区平均湿度:</strong> 100%</p>
-            <p><strong>厂区平均空气质量:</strong> 良好</p>
+            <p><strong>厂区平均温度:</strong> {{ averageData.temperature }}°C</p>
+            <p><strong>厂区平均湿度:</strong> {{ averageData.humidity }}%</p>
+            <p><strong>厂区平均空气质量:</strong> {{ getQualityText(averageData.quality) }}</p>
             <div class="extreme-values">
               <h5>极值数据</h5>
-              <p>温度极值: </p>
-              <p>湿度极值: </p>
-              <p>空气质量极值: </p>
+              <p class="extreme-hint">（最近24小时内）</p>
+              <div class="extreme-item">
+                <span class="extreme-label">温度极值:</span>
+                <span class="extreme-high">最高 {{ temperatureExtreme.max }}°C</span>
+                <span class="extreme-divider">/</span>
+                <span class="extreme-low">最低 {{ temperatureExtreme.min }}°C</span>
+              </div>
+              <div class="extreme-item">
+                <span class="extreme-label">湿度极值:</span>
+                <span class="extreme-high">最高 {{ humidityExtreme.max }}%</span>
+                <span class="extreme-divider">/</span>
+                <span class="extreme-low">最低 {{ humidityExtreme.min }}%</span>
+              </div>
+              <div class="extreme-item">
+                <span class="extreme-label">空气质量极值:</span>
+                <span class="extreme-high">最高 {{ qualityExtreme.max }}</span>
+                <span class="extreme-divider">/</span>
+                <span class="extreme-low">最低 {{ qualityExtreme.min }}</span>
+              </div>
             </div>
             <hr>
             <div class="system-status-section">
@@ -132,13 +148,92 @@ const {
   updateDevicePosition,
   removeDevicePosition,
   isFullscreen,
-  setFullscreen
+  setFullscreen,
+  deviceHistoryData,
+  getDeviceAverageData
 } = useDeviceStore();
 const deviceStats = getDeviceStats();
 
 const errorCount = computed(() => {
   const allLogs = getDeviceLogs();
   return allLogs.filter(log => log.level === 'warning' || log.level === 'error').length;
+});
+
+// 计算最新的平均值数据
+const averageData = computed(() => {
+  const data = getDeviceAverageData();
+  // 获取最新的数据点（最后一个元素）
+  const latestIndex = data.times.length - 1;
+  return {
+    temperature: data.temperatureValues[latestIndex] || 0,
+    humidity: data.humidityValues[latestIndex] || 0,
+    quality: data.qualityValues[latestIndex] || 0
+  };
+});
+
+// 获取质量状态文本
+const getQualityText = (quality: number) => {
+  if (quality >= 80) return '优秀';
+  if (quality >= 60) return '良好';
+  return '一般';
+};
+
+// 获取24小时前的时间
+const get24HoursAgo = () => {
+  const date = new Date();
+  date.setHours(date.getHours() - 24);
+  return date;
+};
+
+// 计算温度极值（24小时内）
+const temperatureExtreme = computed(() => {
+  const twentyFourHoursAgo = get24HoursAgo();
+  
+  const temps = deviceHistoryData.value
+    .filter(d => {
+      const dataTime = new Date(d.timestamp);
+      return dataTime >= twentyFourHoursAgo;
+    })
+    .map(d => d.temperature);
+  
+  return {
+    max: temps.length > 0 ? Math.max(...temps) : 0,
+    min: temps.length > 0 ? Math.min(...temps) : 0
+  };
+});
+
+// 计算湿度极值（24小时内）
+const humidityExtreme = computed(() => {
+  const twentyFourHoursAgo = get24HoursAgo();
+  
+  const humidities = deviceHistoryData.value
+    .filter(d => {
+      const dataTime = new Date(d.timestamp);
+      return dataTime >= twentyFourHoursAgo;
+    })
+    .map(d => d.humidity);
+  
+  return {
+    max: humidities.length > 0 ? Math.max(...humidities) : 0,
+    min: humidities.length > 0 ? Math.min(...humidities) : 0
+  };
+});
+
+// 计算空气质量极值（24小时内）
+const qualityExtreme = computed(() => {
+  const twentyFourHoursAgo = get24HoursAgo();
+  
+  const qualities = deviceHistoryData.value
+    .filter(d => {
+      const dataTime = new Date(d.timestamp);
+      return dataTime >= twentyFourHoursAgo;
+    })
+    .map(d => d.quality);
+  
+  return {
+    max: qualities.length > 0 ? Math.max(...qualities) : 0,
+    min: qualities.length > 0 ? Math.min(...qualities) : 0
+  };
 });
 
 // 已放置的设备（使用相对于图片原始尺寸的百分比）
@@ -457,11 +552,11 @@ const goToDeviceManagement = () => {
 }
 
 .summary {
-  height: 350px;
   border-radius: 15px;
   display: flex;
   flex-direction: column;
   justify-content: center;
+  overflow: visible;
 }
 
 .data_summary {
@@ -489,15 +584,45 @@ const goToDeviceManagement = () => {
 }
 
 .extreme-values h5 {
-  margin-bottom: 10px;
+  margin-bottom: 5px;
   color: #409eff;
   font-size: 14px;
 }
 
-.extreme-values p {
-  margin: 5px 0;
+.extreme-hint {
+  margin: 0 0 10px 0;
+  font-size: 12px;
+  color: #909399;
+  font-style: italic;
+}
+
+.extreme-item {
+  margin: 8px 0;
   font-size: 14px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.extreme-label {
   color: #666;
+  margin-right: 5px;
+}
+
+.extreme-high {
+  color: #f56c6c;
+  font-weight: 500;
+}
+
+.extreme-low {
+  color: #67c23a;
+  font-weight: 500;
+}
+
+.extreme-divider {
+  color: #999;
+  margin: 0 3px;
 }
 
 .right-column {
