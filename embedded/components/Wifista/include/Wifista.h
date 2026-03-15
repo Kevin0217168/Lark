@@ -37,5 +37,7 @@ void WifiSecurityClientInit();
 esp_err_t WifiSecurityRequest(const char *host, const char *path, uint16_t port, WifiSecurityMethod_t method,
      char *post_data, void (ResponseUserHandler)(RequestContext_t*));
 void WebsocketStart(const char *host, const char *path, uint16_t port);
+bool WebsocketIsConnected();
+bool WebsocketSendbytes(uint8_t *data, int len);
 
 #endif

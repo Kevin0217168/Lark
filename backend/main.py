@@ -1,13 +1,13 @@
 from fastapi import FastAPI
 import uvicorn
 
-from stream import viewer, stream, device
+from stream import Device, Stream, Viewer
 
 app = FastAPI()
 
-app.include_router(device.router)
-app.include_router(viewer.router)
-app.include_router(stream.router)
+app.include_router(Device.router)
+app.include_router(Viewer.router)
+app.include_router(Stream.router)
 
 @app.get("/")
 async def hello(name: str):

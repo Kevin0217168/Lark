@@ -1,6 +1,6 @@
 #include "Wifista.h"
 
-const char* TAG = "Wifista";
+static const char* TAG = "Wifista";
 
 bool Wifi_isConnected = false;
 
