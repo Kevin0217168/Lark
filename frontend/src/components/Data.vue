@@ -158,12 +158,12 @@
           
           <div class="history-table">
             <h3>历史数据记录</h3>
-            <el-table :data="historyDataList" stripe style="width: 100%" max-height="400">
-              <el-table-column prop="timestamp" label="时间" width="180" />
-              <el-table-column prop="temperature" label="温度 (℃)" width="120" />
-              <el-table-column prop="humidity" label="湿度 (%)" width="120" />
-              <el-table-column prop="quality" label="环境质量指数" width="150" />
-              <el-table-column label="状态" width="100">
+            <el-table :data="historyDataList" stripe style="width: 100%;" max-height="400" border>
+              <el-table-column prop="timestamp" label="时间" min-width="180" align="left" />
+              <el-table-column prop="temperature" label="温度 (℃)" min-width="120" align="center" />
+              <el-table-column prop="humidity" label="湿度 (%)" min-width="120" align="center" />
+              <el-table-column prop="quality" label="环境质量指数" min-width="150" align="center" />
+              <el-table-column label="状态" min-width="100" align="center">
                 <template #default="{ row }">
                   <el-tag :type="getQualityType(row.quality)">
                     {{ getQualityText(row.quality) }}
@@ -191,7 +191,7 @@ import * as echarts from 'echarts';
 
 const route = useRoute();
 const router = useRouter();
-const { getDevices, getDeviceHistoryData } = useDeviceStore();
+const { getDevices, getDeviceHistoryData, getDeviceAverageData } = useDeviceStore();
 // 直接获取设备数据
 const devices = getDevices();
 
@@ -417,62 +417,6 @@ const generateMockData = (deviceId: number, type: 'temperature' | 'humidity' | '
   return { times, values };
 };
 
-// 生成所有设备的平均值数据
-const generateAverageData = () => {
-  const times: string[] = [];
-  const temperatureValues: number[] = [];
-  const humidityValues: number[] = [];
-  const qualityValues: number[] = [];
-  
-  // 从store获取所有设备的历史数据
-  const allHistoryData = getDeviceHistoryData();
-  
-  // 只取最近24小时的数据
-  const filteredData = allHistoryData.slice(-24 * devices.length);
-  
-  // 按时间分组
-  const timeGroups: Record<string, { temp: number[], humidity: number[], quality: number[] }> = {};
-  
-  filteredData.forEach(data => {
-    const date = new Date(data.timestamp);
-    const hourKey = `${date.getHours().toString().padStart(2, '0')}:00`;
-    
-    if (!timeGroups[hourKey]) {
-      timeGroups[hourKey] = { temp: [], humidity: [], quality: [] };
-    }
-    
-    timeGroups[hourKey].temp.push(data.temperature);
-    timeGroups[hourKey].humidity.push(data.humidity);
-    timeGroups[hourKey].quality.push(data.quality);
-  });
-  
-  // 生成最近24小时的时间
-  for (let i = 23; i >= 0; i--) {
-    const date = new Date();
-    date.setHours(date.getHours() - i);
-    const hourKey = `${date.getHours().toString().padStart(2, '0')}:00`;
-    times.push(hourKey);
-    
-    // 计算每个时间点的平均值
-    const group = timeGroups[hourKey];
-    if (group) {
-      const tempAvg = group.temp.length > 0 ? group.temp.reduce((sum, val) => sum + val, 0) / group.temp.length : 0;
-      const humidityAvg = group.humidity.length > 0 ? group.humidity.reduce((sum, val) => sum + val, 0) / group.humidity.length : 0;
-      const qualityAvg = group.quality.length > 0 ? group.quality.reduce((sum, val) => sum + val, 0) / group.quality.length : 0;
-      
-      temperatureValues.push(Number(tempAvg.toFixed(1)));
-      humidityValues.push(Number(humidityAvg.toFixed(1)));
-      qualityValues.push(Number(qualityAvg.toFixed(1)));
-    } else {
-      temperatureValues.push(0);
-      humidityValues.push(0);
-      qualityValues.push(0);
-    }
-  }
-  
-  return { times, temperatureValues, humidityValues, qualityValues };
-};
-
 // 初始化图表
 const initCharts = () => {
   if (!selectedDeviceId.value) return;
@@ -608,7 +552,7 @@ const initCharts = () => {
     averageChart = echarts.init(averageChartRef.value);
     
     // 计算所有设备的平均值
-    const avgData = generateAverageData();
+    const avgData = getDeviceAverageData();
     
     averageChart.setOption({
       tooltip: {

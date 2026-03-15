@@ -223,6 +223,62 @@ export const useDeviceStore = () => {
     return deviceHistoryData.value;
   };
   
+  // 计算所有设备的平均值数据（最近24小时）
+  const getDeviceAverageData = () => {
+    const times: string[] = [];
+    const temperatureValues: number[] = [];
+    const humidityValues: number[] = [];
+    const qualityValues: number[] = [];
+    
+    // 获取所有设备的历史数据
+    const allHistoryData = deviceHistoryData.value;
+    
+    // 只取最近24小时的数据
+    const filteredData = allHistoryData.slice(-24 * devices.value.length);
+    
+    // 按时间分组
+    const timeGroups: Record<string, { temp: number[], humidity: number[], quality: number[] }> = {};
+    
+    filteredData.forEach(data => {
+      const date = new Date(data.timestamp);
+      const hourKey = `${date.getHours().toString().padStart(2, '0')}:00`;
+      
+      if (!timeGroups[hourKey]) {
+        timeGroups[hourKey] = { temp: [], humidity: [], quality: [] };
+      }
+      
+      timeGroups[hourKey].temp.push(data.temperature);
+      timeGroups[hourKey].humidity.push(data.humidity);
+      timeGroups[hourKey].quality.push(data.quality);
+    });
+    
+    // 生成最近24小时的时间
+    for (let i = 23; i >= 0; i--) {
+      const date = new Date();
+      date.setHours(date.getHours() - i);
+      const hourKey = `${date.getHours().toString().padStart(2, '0')}:00`;
+      times.push(hourKey);
+      
+      // 计算每个时间点的平均值
+      const group = timeGroups[hourKey];
+      if (group) {
+        const tempAvg = group.temp.length > 0 ? group.temp.reduce((sum, val) => sum + val, 0) / group.temp.length : 0;
+        const humidityAvg = group.humidity.length > 0 ? group.humidity.reduce((sum, val) => sum + val, 0) / group.humidity.length : 0;
+        const qualityAvg = group.quality.length > 0 ? group.quality.reduce((sum, val) => sum + val, 0) / group.quality.length : 0;
+        
+        temperatureValues.push(Number(tempAvg.toFixed(1)));
+        humidityValues.push(Number(humidityAvg.toFixed(1)));
+        qualityValues.push(Number(qualityAvg.toFixed(1)));
+      } else {
+        temperatureValues.push(0);
+        humidityValues.push(0);
+        qualityValues.push(0);
+      }
+    }
+    
+    return { times, temperatureValues, humidityValues, qualityValues };
+  };
+  
   return {
     devices,
     deviceLogs,
@@ -242,6 +298,7 @@ export const useDeviceStore = () => {
     removeDevicePosition,
     clearDevicePositions,
     getDeviceHistoryData,
+    getDeviceAverageData,
     setFullscreen: (value: boolean) => {
       isFullscreen.value = value;
     },
