@@ -3,7 +3,7 @@
 #include "freertos/task.h"
 #include "nvs_flash.h"
 #include "Wifista.h"
-#include "nvs_flash.h"
+#include "Camera.h"
 #include "main.h"
 
 static const char* TAG = "main";
@@ -48,6 +48,10 @@ void register_handler(RequestContext_t *ctx)
     }
 }
 
+void PhotoTransmit(camera_fb_t *fb){
+    WebsocketSendbytes(fb->buf, fb->len);
+}
+
 void app_main(void)
 {
     printf("Hello ESP-IDF!\n");
@@ -65,10 +69,31 @@ void app_main(void)
     WifiSecurityClientInit();
     // WifiSecurityRequest("https://file.mintlab.top", "/", 443, WS_CLINENT_METHOD_GET, NULL);
 
-    WifiSecurityRequest("http://192.168.216.109", "/?name=ESP-32", 8080, WS_CLINENT_METHOD_GET, NULL, NULL);
+    // WifiSecurityRequest("http://192.168.216.109", "/?name=ESP-32", 8080, WS_CLINENT_METHOD_GET, NULL, NULL);
 
-    char post_data[128];
+    // 注册设备, 获得id
+    char post_data[64];
     snprintf(post_data, sizeof(post_data), "{\"secret\":\"%s\"}", secret);
     WifiSecurityRequest("http://192.168.216.109", "/device/register", 8080,
          WS_CLINENT_METHOD_POST, post_data, register_handler);
+    
+    // 通过id开启ws连接
+    char path_data[128];
+    snprintf(path_data, sizeof(path_data), "/stream/device/ws?id=%s", deviceStatus.uuid);
+    WebsocketStart("ws://192.168.216.109", path_data, 8080);
+
+    // 等待ws连接成功
+    while (!WebsocketIsConnected()){
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+    }
+
+    CameraInit();
+    sensor_t *s = esp_camera_sensor_get();
+    s->set_framesize(s, FRAMESIZE_SVGA);
+
+    while(1){
+        CameraTakePhoto(PhotoTransmit);
+        vTaskDelay(5000 / portTICK_PERIOD_MS);
+    }
+    
 }
