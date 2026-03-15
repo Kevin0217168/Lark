@@ -124,34 +124,37 @@
           <div class="card-title">
             <span>历史数据</span>
           </div>
-          <div class="card-actions">
-            <el-select v-model="historyDeviceId" @change="handleHistoryDeviceChange" class="device-select">
-              <el-option
-                v-for="device in devices"
-                :key="device.id"
-                :label="device.name"
-                :value="device.id"
-              />
-            </el-select>
-          </div>
         </div>
         <div class="history-content" v-if="historyDeviceId">
-          <div class="device-info">
-            <h3>设备信息</h3>
-            <div class="info-card">
-              <div class="info-item">
-                <span class="info-label">设备名称:</span>
-                <span class="info-value">{{ selectedHistoryDevice?.name }}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">设备ID:</span>
-                <span class="info-value">{{ selectedHistoryDevice?.id }}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">设备状态:</span>
-                <span class="info-value" :class="selectedHistoryDevice?.status">
-                  {{ selectedHistoryDevice?.status === 'online' ? '在线' : '离线' }}
-                </span>
+          <div class="top-section">
+            <div class="device-selector">
+              <h3>设备选择</h3>
+              <el-select v-model="historyDeviceId" @change="handleHistoryDeviceChange" class="device-select">
+                <el-option
+                  v-for="device in devices"
+                  :key="device.id"
+                  :label="device.name"
+                  :value="device.id"
+                />
+              </el-select>
+            </div>
+            <div class="device-info">
+              <h3>设备信息</h3>
+              <div class="info-card">
+                <div class="info-item">
+                  <span class="info-label">设备名称:</span>
+                  <span class="info-value">{{ selectedHistoryDevice?.name }}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">设备ID:</span>
+                  <span class="info-value">{{ selectedHistoryDevice?.id }}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">设备状态:</span>
+                  <span class="info-value" :class="selectedHistoryDevice?.status">
+                    {{ selectedHistoryDevice?.status === 'online' ? '在线' : '离线' }}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -980,8 +983,30 @@ const goToFullscreen = () => {
   gap: 20px;
 }
 
+.top-section {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.device-selector {
+  flex: 1;
+  min-width: 200px;
+}
+
+.device-selector h3 {
+  margin: 0 0 10px 0;
+  font-size: 16px;
+  color: #303133;
+}
+
+.device-select {
+  width: 100%;
+}
+
 .device-info {
-  margin-bottom: 20px;
+  flex: 1;
+  min-width: 300px;
 }
 
 .device-info h3 {
