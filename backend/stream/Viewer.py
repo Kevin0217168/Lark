@@ -2,6 +2,8 @@ import uuid
 from fastapi import WebSocket, APIRouter, WebSocketException
 from typing import Annotated
 
+from stream import Device
+
 router = APIRouter(prefix="/viewer", tags=["viewer"])
 
 # TODO: 回收机制
@@ -41,9 +43,9 @@ async def subscribe_to_device(id: Annotated[str, "Viewer ID", ],
                               device_id: Annotated[str, "Device ID"]):
     if id not in viewerIdDict:
         raise WebSocketException(code=1008, reason="Viewer ID not found")
-    if device_id not in device.esp32IdDict:
+    if device_id not in Device.esp32IdDict:
         raise WebSocketException(code=1008, reason="Device ID not found")
     viewer = viewerIdDict[id]
-    device = device.esp32IdDict[device_id]
+    device = Device.esp32IdDict[device_id]
     viewer.subscribe(device)
     return {"code": 200, "message": f"Subscribed to device {device_id}"}
