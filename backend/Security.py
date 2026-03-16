@@ -17,26 +17,21 @@ SECRET_KEY = "289313931e02a200f1b5288395d36515d8daa90b279202f879a6da680b974975"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-class Token(BaseModel):
-  access_token: str
-  token_type: str
 
-class TokenData(BaseModel):
-  username: str | None = None
-
-
-
-async def VerifyToken(db:Db.Session, token:str, credentials_exception:HTTPException) -> (Db.M_Users):
+def VerifyToken(db:Db.Session, token:str, credentials_exception:HTTPException) -> (Db.M_Users):
   try:
       payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
       username = payload.get("username")
-      sub = payload.get("username")
-      if username == None or sub == "cookie":
-          raise credentials_exception
-      token_data = TokenData(username=username)
+      sub = payload.get("sub")
+      print(f"解码token: username:{username} sub:{sub}")
+      if username is None:
+        raise credentials_exception
+      if credentials_exception.detail == "Could not validate credentials" and sub == "cookie":
+        raise credentials_exception
   except InvalidTokenError:
-      raise credentials_exception
-  users = Db.GetUsers(db, username=token_data.username)
+    print("token解码失败")
+    raise credentials_exception
+  users = Db.GetUsers(db, username=username)
   if users is None:
       raise credentials_exception
   return users.pop()
