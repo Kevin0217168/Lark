@@ -8,8 +8,9 @@ import Db
 import Security
 
 router = APIRouter(prefix="/login", tags=["Login"])
+refresh_router = APIRouter(prefix="/refresh", tags=["Login"])
 
-@router.post("", description="用户登录",
+@router.post("", description="用户登录, 记录cookie, 并发放短token",
             responses={**R200_LOGIN_SUCCESS, **R400_LOGIN_INCORRECT})
 def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
           response:Response,
@@ -32,8 +33,9 @@ def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
   else:
     return CommonOut(code=400, msg="Incorrect username or password", data=None)
 
-@router.get("")
-async def read_users_me(
+@refresh_router.post("", description= "通过cookie验证登录状态, 刷新token",
+            responses=R200_LOGIN_SUCCESS)
+async def RefreshToken(
   op:Annotated[Db.M_Users, Depends(Security.GetCurrentUserByCookie)],
   long_token: Annotated[str, Cookie()]
 ):

@@ -11,6 +11,7 @@ app.include_router(Viewer.router, prefix="/api")
 app.include_router(Stream.router, prefix="/api")
 app.include_router(User.router, prefix="/api")
 app.include_router(Login.router, prefix="/api")
+app.include_router(Login.refresh_router, prefix="/api")
 
 @app.get("/")
 async def hello(name: str):
