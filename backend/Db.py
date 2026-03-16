@@ -4,8 +4,16 @@ from typing import Optional, Literal, List
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session, declarative_base
 from sqlalchemy import Column, Integer, String
+from pwdlib import PasswordHash
 
-import hashlib
+password_hash = PasswordHash.recommended()
+
+def VerifyPassword(plain_password, hashed_password):
+    return password_hash.verify(plain_password, hashed_password)
+
+def ConvertHash(password):
+    return password_hash.hash(password)
+
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///database/lark.db"
 
@@ -66,7 +74,7 @@ def GetDb(tag: str):
   return dependency
     
 
-def GetUsers(db: Session, id=None, username=None, nickname=None, role=None, email=None) -> (List): 
+def GetUsers(db: Session, id=None, username=None, nickname=None, role=None, email=None) -> (List[M_Users]): 
   conditions = []
   if id is not None:
     conditions.append(M_Users.id == id)
@@ -84,9 +92,7 @@ def GetUsers(db: Session, id=None, username=None, nickname=None, role=None, emai
 
 def RegisterUser(db: Session, username:str, password:str, nickname:str, role:str, email:str=None, avatar:str=None):
   # 计算密码哈希
-  sha1 = hashlib.sha1()
-  sha1.update(password.encode('utf-8'))
-  password = sha1.hexdigest()
+  password = ConvertHash(password)
   
   new_user = M_Users(username = username, password=password, nickname=nickname, role=role, email=email, avatar=avatar)
   db.add(new_user)
@@ -102,9 +108,7 @@ def UpdateUser(db: Session, id:int, username:str=None, password:str=None, nickna
 
   # 密码：非空字符串才更新
   if password is not None and password != "":
-      sha1 = hashlib.sha1()
-      sha1.update(password.encode('utf-8'))
-      user.password = sha1.hexdigest()
+      user.password = ConvertHash(password)
 
   # 用户名：非空字符串才更新
   if username is not None and username != "":

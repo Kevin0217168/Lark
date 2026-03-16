@@ -6,8 +6,16 @@ from fastapi.responses import JSONResponse
 from .schema import *
 
 import Db
+import Security
 
 router = APIRouter(prefix="/users", tags=["Users"])
+
+@router.get("/me", 
+            response_model=CommonOut[Db.UserOut])
+async def read_users_me(
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
+):
+  return CommonOut(data=current_user)
 
 @router.get("", description="查询符合条件的用户",
             response_model=CommonOut[List[Db.UserOut]], 
@@ -41,15 +49,14 @@ def GetUsers(
              responses=R400_USER_ALREADY_EXIST)
 def RegisterUser(
   body: Annotated[UserItem, Body()],
-  db:Db.Session = Depends(Db.GetDb("GetUsers"))
+  db:Db.Session = Depends(Db.GetDb("RegisterUser"))
 ):
   if (len(Db.GetUsers(db, username = body.username))):
     # 用户已存在
     return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, 
                         content=CommonOut(code=status.HTTP_400_BAD_REQUEST, msg="User already exist.", data=None).model_dump())
   
-  # 否则直接注册 格式交由前端判断
-  # TODO: 格式检查
+  # 直接注册
   return CommonOut(data=Db.RegisterUser(db, **body.model_dump(exclude_unset=True)))
 
 
@@ -60,7 +67,7 @@ def RegisterUser(
 def UpdateUser(
   id:Annotated[int, Path(title="用户id", description="数据库用户唯一主键id")],
   body: Annotated[UserUpdateItem, Body()],
-  db:Db.Session = Depends(Db.GetDb("GetUsers"))
+  db:Db.Session = Depends(Db.GetDb("UpdateUser"))
 ):
   data = Db.UpdateUser(db, id=id, **body.model_dump(exclude_unset=True))
   if (data):
@@ -74,11 +81,15 @@ def UpdateUser(
 
 @router.delete("/{id}", description="删除指定id的用户",
             response_model=CommonOut[Db.UserOut],
-            responses=R404_USER_NOT_FOUND)
+            responses={**R404_USER_NOT_FOUND, **R403_FORBIDDEN})
 def DeleteUser(
   id:Annotated[int, Path(title="用户id", description="数据库用户唯一主键id")],
-  db:Db.Session = Depends(Db.GetDb("GetUsers"))
+  op: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
+  db:Db.Session = Depends(Db.GetDb("DeleteUser"))
 ):
+  if op.role != "root":
+    return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, 
+                        content=CommonOut(code=status.HTTP_403_FORBIDDEN, msg="Permission denied.", data=None).model_dump())
   data = Db.DeleteUser(db, id=id)
   if (data):
     # 用户唯一

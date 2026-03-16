@@ -80,11 +80,11 @@ class UserItem(BaseModel):
   @field_validator("avatar")
   @classmethod
   def validate_image_url(cls, v: Optional[str]) -> Optional[str]:
-      if v is None:
-          return v
+      if v == None or v == "":
+        return v
       # 简单的 URL 格式校验（可扩展为更严格的检查）
       if not v.startswith(("http://", "https://")):
-          raise ValueError("图片地址必须以 http:// 或 https:// 开头")
+        raise ValueError("图片地址必须以 http:// 或 https:// 开头")
       # 可继续校验文件扩展名等
       return v
 
@@ -132,6 +132,10 @@ class UserUpdateItem(BaseModel):
       return v
   
 
+class LoginItem(BaseModel):
+  username:str = Field(title="用户名", description="数据库唯一用户名", examples=["mint"])
+  password:str = Field(title="用户密码", description="用户密码", examples=["123456789"])
+
 R404_USER_NOT_FOUND = {404: {
               "model": CommonOut[None],
               "description": "User not found",
@@ -160,6 +164,37 @@ R400_USER_IS_NOT_UNIQUE = {400: {
               "content": {
                 "application/json": {
                   "example": {"code": 400, "msg": "User is not unique."}
+                }
+              }
+            }
+          }
+
+R400_LOGIN_INCORRECT = {400: {
+              "model": CommonOut[None],
+              "description": "Incorrect username or password.",
+              "content": {
+                "application/json": {
+                  "example": {"code": 400, "msg": "Incorrect username or password"}
+                }
+              }
+            }
+          }
+
+R200_LOGIN_SUCCESS = {200: {
+              "description": "Login is successful.",
+              "content": {
+                "application/json": {
+                  "example": {"access_token": "token", "token_type": "bearer"}
+                }
+              }
+            }
+          }
+
+R403_FORBIDDEN = {403: {
+              "description": "Permission denied.",
+              "content": {
+                "application/json": {
+                  "example": {"code": 403, "msg": "Permission denied."}
                 }
               }
             }
