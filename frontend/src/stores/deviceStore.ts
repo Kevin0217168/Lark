@@ -5,6 +5,17 @@ export interface Device {
   name: string;
   status: string;
   createTime: string;
+  temperature?: number; // 温度数据
+  humidity?: number; // 湿度数据
+  videoStreamUrl?: string; // 视频流数据
+}
+
+export interface DeviceHistoryData {
+  deviceId: number;
+  timestamp: string;
+  temperature: number;
+  humidity: number;
+  quality: number; // 环境质量指数
 }
 
 export interface DeviceLog {
@@ -16,9 +27,31 @@ export interface DeviceLog {
   timestamp: string;
 }
 
+export interface DevicePosition {
+  deviceId: number;
+  x: number; // 0-100 百分比
+  y: number; // 0-100 百分比
+}
+
 const devices = ref<Device[]>([
-  { id: 1, name: '设备1', status: 'online', createTime: '2026/03/14 01:28:24' },
-  { id: 2, name: '设备2', status: 'offline', createTime: '2026/03/14 01:28:24' },
+  { 
+    id: 1, 
+    name: '设备1', 
+    status: 'online', 
+    createTime: '2026/03/14 01:28:24',
+    temperature: 25.5,
+    humidity: 45.0,
+    videoStreamUrl: 'http://example.com/stream1'
+  },
+  { 
+    id: 2, 
+    name: '设备2', 
+    status: 'offline', 
+    createTime: '2026/03/14 01:28:24',
+    temperature: 22.0,
+    humidity: 50.0,
+    videoStreamUrl: 'http://example.com/stream2'
+  },
 ]);
 
 const deviceLogs = ref<DeviceLog[]>([
@@ -27,6 +60,51 @@ const deviceLogs = ref<DeviceLog[]>([
   { id: 3, deviceId: 1, deviceName: '设备1', level: 'warning', message: '温度偏高', timestamp: '2026/03/14 08:30:00' },
   { id: 4, deviceId: 2, deviceName: '设备2', level: 'error', message: '设备离线', timestamp: '2026/03/14 09:00:00' },
 ]);
+
+// 设备位置存储
+const devicePositions = ref<DevicePosition[]>([]);
+
+// 设备历史数据存储
+const deviceHistoryData = ref<DeviceHistoryData[]>([]);
+
+// 全屏状态
+const isFullscreen = ref(false);
+
+// 生成设备历史数据，后期改成从后端获取历史数据
+const generateDeviceHistoryData = () => {
+  const history: DeviceHistoryData[] = [];
+  
+  // 为每个设备生成最近72小时（3天）的历史数据
+  devices.value.forEach(device => {
+    for (let i = 71; i >= 0; i--) {
+      const date = new Date();
+      date.setHours(date.getHours() - i);
+      
+      // 根据设备ID生成不同的基础数据
+      const baseTemp = 25 + (device.id * 2);
+      const baseHumidity = 60 + (device.id * 5);
+      const baseQuality = 80 + (device.id * 3);
+      
+      // 添加随机波动
+      const temperature = Number((baseTemp + (Math.random() * 10 - 5)).toFixed(1));
+      const humidity = Number((baseHumidity + (Math.random() * 20 - 10)).toFixed(1));
+      const quality = Number((baseQuality + (Math.random() * 30 - 15)).toFixed(1));
+      
+      history.push({
+        deviceId: device.id,
+        timestamp: date.toLocaleString('zh-CN'),
+        temperature,
+        humidity,
+        quality
+      });
+    }
+  });
+  
+  deviceHistoryData.value = history;
+};
+
+// 初始化时生成历史数据
+generateDeviceHistoryData();
 
 export const useDeviceStore = () => {
   const getDevices = () => devices.value;
@@ -98,12 +176,114 @@ export const useDeviceStore = () => {
     cleanOldLogs(); // 添加新日志后清理过期日志
   };
   
+  // 设备位置相关方法
+  const getDevicePositions = () => devicePositions.value;
+  
+  const addDevicePosition = (position: DevicePosition) => {
+    const existingIndex = devicePositions.value.findIndex(p => p.deviceId === position.deviceId);
+    if (existingIndex !== -1) {
+      devicePositions.value[existingIndex] = position;
+    } else {
+      devicePositions.value.push(position);
+    }
+  };
+  
+  const updateDevicePosition = (deviceId: number, x: number, y: number) => {
+    const existingIndex = devicePositions.value.findIndex(p => p.deviceId === deviceId);
+    if (existingIndex !== -1) {
+      const position = devicePositions.value[existingIndex];
+      if (position) {
+        position.x = x;
+        position.y = y;
+      }
+    } else {
+      devicePositions.value.push({ deviceId, x, y });
+    }
+  };
+  
+  const removeDevicePosition = (deviceId: number) => {
+    const index = devicePositions.value.findIndex(p => p.deviceId === deviceId);
+    if (index !== -1) {
+      devicePositions.value.splice(index, 1);
+    }
+  };
+  
+  const clearDevicePositions = () => {
+    devicePositions.value = [];
+  };
+  
   // 初始化时清理过期日志
   cleanOldLogs();
+  
+  // 获取设备历史数据
+  const getDeviceHistoryData = (deviceId?: number) => {
+    if (deviceId) {
+      return deviceHistoryData.value.filter(data => data.deviceId === deviceId);
+    }
+    return deviceHistoryData.value;
+  };
+  
+  // 计算所有设备的平均值数据（最近24小时）
+  const getDeviceAverageData = () => {
+    const times: string[] = [];
+    const temperatureValues: number[] = [];
+    const humidityValues: number[] = [];
+    const qualityValues: number[] = [];
+    
+    // 获取所有设备的历史数据
+    const allHistoryData = deviceHistoryData.value;
+    
+    // 只取最近24小时的数据
+    const filteredData = allHistoryData.slice(-24 * devices.value.length);
+    
+    // 按时间分组
+    const timeGroups: Record<string, { temp: number[], humidity: number[], quality: number[] }> = {};
+    
+    filteredData.forEach(data => {
+      const date = new Date(data.timestamp);
+      const hourKey = `${date.getHours().toString().padStart(2, '0')}:00`;
+      
+      if (!timeGroups[hourKey]) {
+        timeGroups[hourKey] = { temp: [], humidity: [], quality: [] };
+      }
+      
+      timeGroups[hourKey].temp.push(data.temperature);
+      timeGroups[hourKey].humidity.push(data.humidity);
+      timeGroups[hourKey].quality.push(data.quality);
+    });
+    
+    // 生成最近24小时的时间
+    for (let i = 23; i >= 0; i--) {
+      const date = new Date();
+      date.setHours(date.getHours() - i);
+      const hourKey = `${date.getHours().toString().padStart(2, '0')}:00`;
+      times.push(hourKey);
+      
+      // 计算每个时间点的平均值
+      const group = timeGroups[hourKey];
+      if (group) {
+        const tempAvg = group.temp.length > 0 ? group.temp.reduce((sum, val) => sum + val, 0) / group.temp.length : 0;
+        const humidityAvg = group.humidity.length > 0 ? group.humidity.reduce((sum, val) => sum + val, 0) / group.humidity.length : 0;
+        const qualityAvg = group.quality.length > 0 ? group.quality.reduce((sum, val) => sum + val, 0) / group.quality.length : 0;
+        
+        temperatureValues.push(Number(tempAvg.toFixed(1)));
+        humidityValues.push(Number(humidityAvg.toFixed(1)));
+        qualityValues.push(Number(qualityAvg.toFixed(1)));
+      } else {
+        temperatureValues.push(0);
+        humidityValues.push(0);
+        qualityValues.push(0);
+      }
+    }
+    
+    return { times, temperatureValues, humidityValues, qualityValues };
+  };
   
   return {
     devices,
     deviceLogs,
+    deviceHistoryData,
+    isFullscreen,
     getDevices,
     addDevice,
     updateDevice,
@@ -111,6 +291,17 @@ export const useDeviceStore = () => {
     getDeviceStats,
     getDeviceLogs,
     addDeviceLog,
-    cleanOldLogs
+    cleanOldLogs,
+    getDevicePositions,
+    addDevicePosition,
+    updateDevicePosition,
+    removeDevicePosition,
+    clearDevicePositions,
+    getDeviceHistoryData,
+    getDeviceAverageData,
+    setFullscreen: (value: boolean) => {
+      isFullscreen.value = value;
+    },
+    getFullscreen: () => isFullscreen.value
   };
 };

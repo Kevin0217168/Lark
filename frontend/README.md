@@ -18,14 +18,18 @@ Vue.js + Element Plus + axios
 │   ├── assets                 资源文件夹(存放公用css js)                 
 │   │   └── style.css
 │   ├── components             子组件文件夹
-│   │   ├── Header.vue
-│   │   ├── Home.vue
-│   │   ├── Login.vue
-│   │   ├── Sider.vue
-│   │   └── Stream.vue
+│   │   ├── Data.vue           数据总览组件
+│   │   ├── Device.vue         设备总览组件
+│   │   ├── Header.vue         全局导航栏组件
+│   │   ├── Home.vue           主页面组件
+│   │   ├── Login.vue          登录注册组件
+│   │   ├── Sider.vue          侧边导航栏组件
+│   │   └── Stream.vue         实时数据流组件
 │   ├── main.ts                Vue入口文件(注册根组件)
-│   └── router                 路由文件夹
-│       └── index.ts
+│   ├── router                 路由文件夹
+│   │   └── index.ts
+│   └── stores                 数据管理文件夹
+│       └── deviceStore.ts     设备数据管理模块
 ├── tsconfig.app.json
 ├── tsconfig.json
 ├── tsconfig.node.json

@@ -32,7 +32,7 @@ const activeTab = ref<string>('realtime');
 // 暴露给父组件的事件
 const emit = defineEmits(['tabChange']);
 
-const isDataPage = computed(() => route.path === '/Stream');
+const isDataPage = computed(() => route.path === '/Stream' || route.path === '/Data');
 const isDevicePage = computed(() => route.path === '/Device');
 
 // 处理菜单选择
@@ -43,7 +43,7 @@ const handleMenuSelect = (key: string) => {
 
 // 监听路由变化，重置默认激活项
 watch(() => route.path, (newPath) => {
-  if (newPath === '/Stream') {
+  if (newPath === '/Stream' || newPath === '/Data') {
     activeTab.value = 'realtime';
   } else if (newPath === '/Device') {
     // 检查是否有 tab 查询参数
@@ -72,9 +72,9 @@ watch(() => route.query.tab, (newTab) => {
 <style lang="scss" scoped>
 aside {
   position: sticky;
-  left: 4%;
+  left: 1%;
   top: 30%;
-  // margin-left: 4%;
+  // margin-left: 8%;
   // margin-top: 10%;
   width: 200px;
   z-index: 1;
