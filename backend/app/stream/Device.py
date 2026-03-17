@@ -18,7 +18,7 @@ class Esp32:
     self.name = name if name else "ESP32 - " + str(len(esp32IdDict) + 1)
     self.status = "offline"
     self.websocket = None
-    self.subsrcibers = []
+    self.subscribers = []
     esp32IdDict[self.id] = self
 
   def __delete__(self, instance):
@@ -33,10 +33,10 @@ class Esp32:
     self.websocket = None
 
   def subscribe(self, subscriber):
-    self.subsrcibers.append(subscriber)
+    self.subscribers.append(subscriber)
 
   def unsubscribe(self, subscriber):
-    self.subsrcibers.remove(subscriber)
+    self.subscribers.remove(subscriber)
 
 # 定义请求体模型
 class RegisterItem(BaseModel):
