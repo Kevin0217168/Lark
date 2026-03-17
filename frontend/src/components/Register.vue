@@ -15,13 +15,21 @@
         <el-input v-model="form.confirmPassword" type="password" placeholder="请再次输入密码" show-password></el-input>
       </el-form-item>
 
+      <el-form-item label="昵称" prop="nickname">
+        <el-input v-model="form.nickname" placeholder="请输入昵称"></el-input>
+      </el-form-item>
+
+      <!-- 角色默认设置为root，用户无需修改 -->
+      <el-form-item label="角色" prop="role" style="display: none;">
+        <el-input v-model="form.role" readonly></el-input>
+      </el-form-item>
+
+      <el-form-item label="头像" prop="avatar">
+        <el-input v-model="form.avatar" placeholder="请输入头像URL（可选）"></el-input>
+      </el-form-item>
+
       <el-button style="width: 100%; margin-bottom: 10px;" @click="handleRegister" type="primary" :loading="loading">
         注册
-      </el-button>
-      
-      <!-- 测试注册按钮 - 仅用于前端测试，没有后端时使用 -->
-      <el-button style="width: 100%;" @click="handleTestRegister" type="success" plain>
-        测试注册（无后端）
       </el-button>
       
       <div class="login-link">
@@ -41,10 +49,17 @@ const router = useRouter();
 const formRef = ref();
 const loading = ref(false);
 
+// API基础地址
+// 使用相对路径，通过Vite代理解决CORS问题
+const API_BASE_URL = '';
+
 const form = ref({
   username: "",
   password: "",
   confirmPassword: "",
+  nickname: "",
+  role: "root", // 默认角色为root
+  avatar: "",
 });
 
 // 验证两次密码是否一致
@@ -68,6 +83,16 @@ const rules = {
   confirmPassword: [
     { required: true, message: '请再次输入密码', trigger: 'blur' },
     { validator: validateConfirmPassword, trigger: 'blur' }
+  ],
+  nickname: [
+    { required: true, message: '请输入昵称', trigger: 'blur' },
+    { min: 1, max: 20, message: '长度在 1 到 20 个字符', trigger: 'blur' }
+  ],
+  role: [
+    { required: true, message: '请选择角色', trigger: 'change' }
+  ],
+  avatar: [
+    { max: 255, message: '头像URL长度不能超过255个字符', trigger: 'blur' }
   ]
 };
 
@@ -79,62 +104,52 @@ const handleRegister = async () => {
     loading.value = true;
     
     // 给后端发送注册请求
-    const response = await fetch('http://localhost:3000/api/register', {
+    const response = await fetch(`${API_BASE_URL}/api/users`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
       body: JSON.stringify({
         username: form.value.username,
         password: form.value.password,
+        nickname: form.value.nickname,
+        role: form.value.role,
+        avatar: form.value.avatar,
       }),
     });
     
+    const data = await response.json();
+    
     if (response.ok) {
-      const data = await response.json();
+      // 注册成功
+      ElMessage.success("注册成功，请登录");
       
-      if (data.success) {
-        ElMessage.success("注册成功，请登录");
-        
-        // 跳转到登录页面
-        router.push('/Login');
-      } else {
-        ElMessage.error(data.message || '注册失败，请检查用户名是否已存在');
-      }
+      // 跳转到登录页面
+      router.push('/Login');
     } else {
-      ElMessage.error('注册失败，请检查网络连接');
+      // 处理错误响应
+      if (response.status === 400) {
+        // 用户已存在
+        ElMessage.error(data.detail || '注册失败，用户名已存在');
+      } else if (response.status === 422) {
+        // 验证错误
+        const errorMsg = data.detail?.map((err: any) => err.msg).join('; ') || '注册信息验证失败';
+        ElMessage.error(errorMsg);
+      } else {
+        // 其他错误
+        ElMessage.error(data.detail || data.msg || '注册失败，请稍后重试');
+      }
     }
   } catch (error) {
     console.error('注册错误:', error);
-    ElMessage.error('注册失败，请稍后重试');
+    ElMessage.error('注册失败，请检查网络连接');
   } finally {
     loading.value = false;
   }
 };
 
-// ============================================
-// 测试注册方法 - 仅用于前端测试，没有后端时使用
-// 注意：此方法不连接后端，直接模拟注册成功
-// 后端开发完成后，请删除此方法和对应的测试按钮
-// ============================================
-const handleTestRegister = async () => {
-  try {
-    await formRef.value.validate();
-    
-    loading.value = true;
-    
-    // 模拟注册成功，不连接后端
-    ElMessage.success("测试注册成功，请登录");
-    
-    // 跳转到登录页面
-    router.push('/Login');
-  } catch (error) {
-    console.error('注册错误:', error);
-    ElMessage.error('注册失败，请稍后重试');
-  } finally {
-    loading.value = false;
-  }
-};
+
 </script>
 
 <style lang="scss" scoped>

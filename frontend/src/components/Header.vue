@@ -130,20 +130,42 @@ const handleHomeClick = (navigate: () => void) => {
   }
 };
 
-// 退出登录功能
-const handleLogout = () => {
-  // 清除登录状态
+// 清除cookie的函数
+const clearCookies = () => {
+  // 清除所有可能的登录相关cookie
+  const cookies = document.cookie.split(';');
+  for (let cookie of cookies) {
+    const eqPos = cookie.indexOf('=');
+    const name = eqPos > -1 ? cookie.substring(0, eqPos).trim() : cookie.trim();
+    if (name) {
+      // 尝试多种方式清除cookie
+      document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+      document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${window.location.hostname}`;
+      document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.${window.location.hostname.split('.').slice(-2).join('.')}`;
+    }
+  }
+  
+  // 确保localStorage和sessionStorage也被清除
   localStorage.removeItem('isAuthenticated');
   localStorage.removeItem('username');
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('tokenType');
+  sessionStorage.removeItem('isFromLogout');
+};
+
+// 退出登录功能
+const handleLogout = () => {
+  // 显示退出成功提示
+  ElMessage.success('已退出登录');
+  
+  // 清除所有登录相关信息
+  clearCookies();
   
   // 立即更新登录状态
   checkLoginStatus();
   
   // 触发自定义事件，通知其他组件登录状态已变化
   window.dispatchEvent(new CustomEvent('loginStatusChanged'));
-  
-  // 显示退出成功提示
-  ElMessage.success('已退出登录');
   
   // 重定向到登录页面
   router.push('/Login');

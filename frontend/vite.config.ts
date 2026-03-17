@@ -21,6 +21,12 @@ export default defineConfig({
         target: 'http://192.168.216.109:8080',
         changeOrigin: true,
         rewrite: path => path.replace(/^\/fastapi/, '')
+      },
+      '/api': {
+        target: 'https://lark.mintlab.top',
+        changeOrigin: true,
+        secure: false,
+        rewrite: path => path
       }
     }
   }

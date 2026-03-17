@@ -15,11 +15,6 @@
         登录
       </el-button>
       
-      <!-- 测试登录按钮 - 仅用于前端测试，没有后端时使用 -->
-      <el-button style="width: 100%;" @click="handleTestLogin" type="success" plain>
-        测试登录（无后端）
-      </el-button>
-      
       <div class="register-link">
         <span>还没有账号？</span>
         <router-link to="/Register">去注册</router-link>
@@ -29,7 +24,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref } from "vue";
+import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 
@@ -53,84 +48,142 @@ const rules = {
   ]
 };
 
+// API基础地址
+// 使用相对路径，通过Vite代理解决CORS问题
+const API_BASE_URL = '';
+
+// 自动登录 - 尝试使用refresh token获取新的access token
+const tryAutoLogin = async (): Promise<boolean> => {
+  try {
+    // 检查是否有登录状态
+    const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true';
+    if (!isAuthenticated) {
+      console.log('未登录，跳过自动登录');
+      return false;
+    }
+    
+    const response = await fetch(`${API_BASE_URL}/api/refresh`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+      },
+      credentials: 'include', // 携带cookie
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.access_token) {
+        // 自动登录成功，保存token
+        localStorage.setItem('isAuthenticated', 'true');
+        localStorage.setItem('accessToken', data.access_token);
+        localStorage.setItem('tokenType', data.token_type || 'bearer');
+        
+        // 设置全局请求头（实际项目中应在请求拦截器中设置）
+        console.log('自动登录成功，token已更新');
+        return true;
+      }
+    }
+    
+    // 自动登录失败（401或其他状态码）
+    // 清除登录状态
+    localStorage.removeItem('isAuthenticated');
+    localStorage.removeItem('username');
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('tokenType');
+    return false;
+  } catch (error) {
+    console.error('自动登录失败:', error);
+    // 清除登录状态
+    localStorage.removeItem('isAuthenticated');
+    localStorage.removeItem('username');
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('tokenType');
+    return false;
+  }
+};
+
+// 组件挂载时尝试自动登录
+onMounted(async () => {
+  // 检查是否是从退出登录跳转而来
+  const isFromLogout = sessionStorage.getItem('isFromLogout') === 'true';
+  
+  if (!isFromLogout) {
+    // 尝试自动登录
+    const autoLoginSuccess = await tryAutoLogin();
+    if (autoLoginSuccess) {
+      ElMessage.success('自动登录成功');
+      // 触发自定义事件，通知其他组件登录状态已变化
+      window.dispatchEvent(new CustomEvent('loginStatusChanged'));
+      // 跳转到首页
+      router.push('/Home');
+    }
+    // 自动登录失败则留在登录页面，让用户手动登录
+  } else {
+    // 清除退出登录标记
+    sessionStorage.removeItem('isFromLogout');
+    console.log('从退出登录跳转而来，跳过自动登录');
+  }
+});
+
 // 正常登录方法 - 连接后端API
+// 后端接口地址: 通过Vite代理访问 /api/login
 const handleLogin = async () => {
   try {
     await formRef.value.validate();
     
+
+    
     loading.value = true;
     
+    // 构建请求参数，符合OAuth2密码模式
+    const params = new URLSearchParams();
+    params.append('grant_type', 'password');
+    params.append('username', form.value.username);
+    params.append('password', form.value.password);
+    params.append('scope', '');
+    params.append('client_id', '');
+    params.append('client_secret', '');
+    
     // 给后端发送登录请求
-    const response = await fetch('http://localhost:3000/api/login', {
+    const response = await fetch(`${API_BASE_URL}/api/login`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
       },
-      body: JSON.stringify({
-        username: form.value.username,
-        password: form.value.password,
-      }),
+      body: params.toString(),
     });
     
-    if (response.ok) {
-      const data = await response.json();
+    const data = await response.json();
+    
+    if (response.ok && data.access_token) {
+      ElMessage.success("登录成功");
       
-      if (data.success) {
-        ElMessage.success("登录成功");
-        
-        // 设置登录状态
-        localStorage.setItem('isAuthenticated', 'true');
-        localStorage.setItem('username', form.value.username);
-        
-        // 触发自定义事件，通知其他组件登录状态已变化
-        window.dispatchEvent(new CustomEvent('loginStatusChanged'));
-        
-        // 跳转到首页
-        router.push('/Home');
-      } else {
-        ElMessage.error(data.message || '登录失败，请检查用户名和密码');
-      }
+      // 设置登录状态
+      localStorage.setItem('isAuthenticated', 'true');
+      localStorage.setItem('username', form.value.username);
+      localStorage.setItem('accessToken', data.access_token);
+      localStorage.setItem('tokenType', data.token_type || 'bearer');
+      
+      // 触发自定义事件，通知其他组件登录状态已变化
+      window.dispatchEvent(new CustomEvent('loginStatusChanged'));
+      
+      // 跳转到首页
+      router.push('/Home');
     } else {
-      ElMessage.error('登录失败，请检查网络连接');
+      // 处理错误响应
+      const errorMsg = data.detail || data.msg || '登录失败，请检查用户名和密码';
+      ElMessage.error(errorMsg);
     }
   } catch (error) {
     console.error('登录错误:', error);
-    ElMessage.error('登录失败，请稍后重试');
+    ElMessage.error('登录失败，请检查网络连接');
   } finally {
     loading.value = false;
   }
 };
 
-// ============================================
-// 测试登录方法 - 仅用于前端测试，没有后端时使用
-// 注意：此方法不连接后端，直接模拟登录成功
-// 后端开发完成后，请删除此方法和对应的测试按钮
-// ============================================
-const handleTestLogin = async () => {
-  try {
-    await formRef.value.validate();
-    
-    loading.value = true;
-    
-    // 模拟登录成功，不连接后端
-    ElMessage.success("测试登录成功");
-    
-    // 设置登录状态
-    localStorage.setItem('isAuthenticated', 'true');
-    localStorage.setItem('username', form.value.username);
-    
-    // 触发自定义事件，通知其他组件登录状态已变化
-    window.dispatchEvent(new CustomEvent('loginStatusChanged'));
-    
-    // 跳转到首页
-    router.push('/Home');
-  } catch (error) {
-    console.error('登录错误:', error);
-    ElMessage.error('登录失败，请稍后重试');
-  } finally {
-    loading.value = false;
-  }
-};
+
 </script>
 
 <style lang="scss" scoped>
