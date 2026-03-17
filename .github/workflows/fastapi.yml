@@ -39,6 +39,7 @@ jobs:
           capture_stdout: true
           script: |
             whomi
+            systemctl --user daemon-reload
             systemctl --user restart fastapi.service 
             systemctl --user status fastapi.service 
             
