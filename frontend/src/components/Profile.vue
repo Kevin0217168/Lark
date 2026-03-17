@@ -40,7 +40,49 @@
     <div class="action-container">
       <el-button type="primary" @click="openEditDialog">修改账号信息</el-button>
       <el-button type="danger" @click="handleLogout">退出登录</el-button>
+      <el-button type="danger" @click="openDeleteAccountDialog">注销账号</el-button>
     </div>
+
+    <!-- 验证密码对话框 -->
+    <el-dialog
+      v-model="verifyPasswordDialogVisible"
+      title="验证密码"
+      width="400px"
+    >
+      <el-form
+        :model="verifyPasswordForm"
+        ref="verifyPasswordFormRef"
+        :rules="verifyPasswordRules"
+        label-width="100px"
+      >
+        <el-form-item label="当前密码" prop="password">
+          <el-input v-model="verifyPasswordForm.password" type="password" placeholder="请输入当前密码" />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="verifyPasswordDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="verifyPasswordAndConfirmDelete" :loading="verifyingPassword">验证</el-button>
+        </span>
+      </template>
+    </el-dialog>
+
+    <!-- 确认注销账号对话框 -->
+    <el-dialog
+      v-model="confirmDeleteDialogVisible"
+      title="确认注销账号"
+      width="400px"
+    >
+      <p>确定要注销账号吗？此操作不可恢复，您的所有数据将被永久删除。</p>
+
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="confirmDeleteDialogVisible = false">取消</el-button>
+          <el-button type="danger" @click="handleDeleteAccount" :loading="deletingAccount">确认注销</el-button>
+        </span>
+      </template>
+    </el-dialog>
 
     <!-- 修改账号信息对话框 -->
     <el-dialog
@@ -104,6 +146,11 @@ const error = ref('');
 const editDialogVisible = ref(false);
 const saving = ref(false);
 const editFormRef = ref();
+const verifyPasswordDialogVisible = ref(false);
+const confirmDeleteDialogVisible = ref(false);
+const verifyingPassword = ref(false);
+const deletingAccount = ref(false);
+const verifyPasswordFormRef = ref();
 
 const editForm = ref({
   username: '',
@@ -114,6 +161,17 @@ const editForm = ref({
   newPassword: '',
   confirmNewPassword: ''
 });
+
+const verifyPasswordForm = ref({
+  password: ''
+});
+
+const verifyPasswordRules = {
+  password: [
+    { required: true, message: '请输入当前密码', trigger: 'blur' },
+    { min: 6, max: 20, message: '长度在 6 到 20 个字符', trigger: 'blur' }
+  ]
+};
 
 const editRules = {
   username: [
@@ -257,6 +315,136 @@ const tryRefreshToken = async (): Promise<boolean> => {
   } catch (error) {
     console.error('刷新token失败:', error);
     return false;
+  }
+};
+
+// 打开注销账号对话框
+const openDeleteAccountDialog = () => {
+  verifyPasswordForm.value.password = '';
+  verifyPasswordDialogVisible.value = true;
+};
+
+// 验证密码并打开确认对话框
+const verifyPasswordAndConfirmDelete = async () => {
+  try {
+    await verifyPasswordFormRef.value.validate();
+    verifyingPassword.value = true;
+
+    // 使用与Login.vue相同的登录逻辑验证密码
+    const params = new URLSearchParams();
+    params.append('grant_type', 'password');
+    params.append('username', userInfo.value.username);
+    params.append('password', verifyPasswordForm.value.password);
+    params.append('scope', '');
+    params.append('client_id', '');
+    params.append('client_secret', '');
+
+    const response = await fetch(`${API_BASE_URL}/api/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
+      },
+      body: params.toString(),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.access_token) {
+        // 密码验证成功，关闭验证对话框，打开确认对话框
+        verifyPasswordDialogVisible.value = false;
+        confirmDeleteDialogVisible.value = true;
+      } else {
+        throw new Error('密码验证失败');
+      }
+    } else {
+      throw new Error('密码不正确');
+    }
+  } catch (err) {
+    ElMessage.error((err as Error).message || '密码验证失败');
+  } finally {
+    verifyingPassword.value = false;
+  }
+};
+
+// 处理注销账号
+const handleDeleteAccount = async () => {
+  try {
+    deletingAccount.value = true;
+
+    // 先调用 /api/users/me 获取当前账号id
+    const meResponse = await fetch(`${API_BASE_URL}/api/users/me`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
+      },
+      credentials: 'include'
+    });
+
+    if (!meResponse.ok) {
+      throw new Error('获取账号信息失败');
+    }
+
+    const meResponseData = await meResponse.json();
+    if (meResponseData.code !== 200 || !meResponseData.data) {
+      throw new Error('获取账号信息失败');
+    }
+
+    const userId = meResponseData.data.id;
+
+    // 再调用 /api/users/{id} 删除账号
+    const deleteResponse = await fetch(`${API_BASE_URL}/api/users/${userId}`, {
+      method: 'DELETE',
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
+      },
+      credentials: 'include'
+    });
+
+    if (!deleteResponse.ok) {
+      throw new Error('注销账号失败');
+    }
+
+    const deleteResponseData = await deleteResponse.json();
+    if (deleteResponseData.code === 200) {
+      ElMessage.success('账号已注销');
+      // 清除登录状态和token信息
+      localStorage.removeItem('isAuthenticated');
+      localStorage.removeItem('username');
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('tokenType');
+      localStorage.removeItem('avatar');
+      
+      // 清除cookie
+      const clearCookies = () => {
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+          const eqPos = cookie.indexOf('=');
+          const name = eqPos > -1 ? cookie.substring(0, eqPos).trim() : cookie.trim();
+          if (name) {
+            document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+            document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${window.location.hostname}`;
+            document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.${window.location.hostname.split('.').slice(-2).join('.')}`;
+          }
+        }
+      };
+      
+      clearCookies();
+      
+      // 触发自定义事件，通知其他组件登录状态已变化
+      window.dispatchEvent(new CustomEvent('loginStatusChanged'));
+      
+      // 重定向到登录页面
+      router.push('/Login');
+    } else {
+      throw new Error(deleteResponseData.msg || '注销账号失败');
+    }
+  } catch (err) {
+    ElMessage.error((err as Error).message || '注销账号失败');
+  } finally {
+    deletingAccount.value = false;
   }
 };
 
