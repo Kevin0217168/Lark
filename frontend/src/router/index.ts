@@ -7,6 +7,7 @@ import Home from "@/components/Home.vue";
 import Stream from "@/components/Stream.vue";
 import Device from "@/components/Device.vue";
 import Data from "@/components/Data.vue";
+import Profile from "@/components/Profile.vue";
 
 const router = createRouter({
   history: createWebHistory(),
@@ -34,6 +35,10 @@ const router = createRouter({
     {
       path: "/Data",
       component: Data,
+    },
+    {
+      path: "/Profile",
+      component: Profile,
     },
     {
       path: "/",
