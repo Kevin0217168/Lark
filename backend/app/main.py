@@ -14,7 +14,16 @@ app = FastAPI(title="云雀 Lark",
               version="0.3.2",
               root_path="/api",
               docs_url=None, 
-              redoc_url=None)
+              redoc_url=None,
+              contact={
+                "name": "Mint",
+                "url": "https://www.mintlab.top/",
+                },
+              openapi_external_docs = {
+                "description": "云雀 Lark Github项目",
+                "url": "https://github.com/Kevin0217168/Lark",
+                }
+              )
 
 app.include_router(Device.router)
 app.include_router(Viewer.router)
@@ -38,7 +47,6 @@ from fastapi.openapi.docs import (
 @app.get("/docs", include_in_schema=False)
 async def custom_swagger_ui_html():
     return get_swagger_ui_html(
-        openapi_url=app.openapi_url,
         title=app.title + " - Swagger UI",
         oauth2_redirect_url=app.swagger_ui_oauth2_redirect_url,
         openapi_url="openapi.json",
@@ -55,7 +63,6 @@ async def swagger_ui_redirect():
 @app.get("/redoc", include_in_schema=False)
 async def redoc_html():
     return get_redoc_html(
-        openapi_url=app.openapi_url,
         title=app.title + " - ReDoc",
         openapi_url="openapi.json",
         redoc_js_url=f"{prefix}/static/redoc.standalone.js",
@@ -67,4 +74,3 @@ async def hello(name: str):
 
 if __name__ == "__main__":
     uvicorn.run(app="main:app", host="localhost", port=8080, reload=True)
-
