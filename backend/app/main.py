@@ -17,7 +17,7 @@ app.include_router(Login.refresh_router)
 
 # 挂载静态文件
 from fastapi.staticfiles import StaticFiles
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 from fastapi.openapi.docs import (
     get_redoc_html,

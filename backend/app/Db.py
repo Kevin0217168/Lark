@@ -15,7 +15,7 @@ def ConvertHash(password):
     return password_hash.hash(password)
 
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///database/lark.db"
+SQLALCHEMY_DATABASE_URL = "sqlite:///./database/lark.db"
 
 engine = create_engine(
   SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread":False}
@@ -146,9 +146,10 @@ def DeleteUser(db: Session, id:int):
 
 
 if __name__ == "__main__":
-  with OpenDb("test") as db:
+  with OpenDb("test1") as db:
     c = GetUsers(db=db, id=None)
     print(c)
-  for i in GetDb("test"):
+    
+  for i in GetDb("test2")():
     c = GetUsers(db=db, id=None)
     print(c)
