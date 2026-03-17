@@ -48,15 +48,22 @@
             </el-button>
           </router-link>
         </el-col>
-        <el-col :span="4" :offset="1" v-if="isLoggedIn">
-          <span class="username-display">用户：{{ username }}</span>
-        </el-col>
-        <el-col :span="2" :offset="isLoggedIn ? 1 : 5">
+        <el-col :span="2" :offset="isLoggedIn ? 5 : 5">
           <router-link v-if="!isLoggedIn" to="/Login" custom v-slot="{ navigate }">
             <el-button @click="navigate" color="#8bad42" plain>登录</el-button>
           </router-link>
-          <el-button v-else @click="handleLogout" color="#f56c6c" plain>退出登录</el-button>
         </el-col>
+        <el-col :span="2" v-if="isLoggedIn">
+          <div class="avatar-header" @click="navigateToProfile">
+            <div class="avatar-circle-header">
+              <img v-if="avatar" :src="avatar" :alt="username" />
+              <div v-else class="default-avatar-header">
+                {{ username ? username.charAt(0) : '?' }}
+              </div>
+            </div>
+          </div>
+        </el-col>
+
         <el-col :span="2" v-if="!isLoggedIn">
           <router-link to="/Register" custom v-slot="{ navigate }">
             <el-button @click="navigate" text>注册</el-button>
@@ -80,11 +87,13 @@ const { isFullscreen, setFullscreen } = useDeviceStore();
 // 响应式登录状态
 const isLoggedIn = ref(false);
 const username = ref('');
+const avatar = ref('');
 
 // 检查是否已登录
 const checkLoginStatus = () => {
   isLoggedIn.value = localStorage.getItem('isAuthenticated') === 'true';
   username.value = localStorage.getItem('username') || '';
+  avatar.value = localStorage.getItem('avatar') || '';
 };
 
 // 处理登录状态变化事件
@@ -150,7 +159,13 @@ const clearCookies = () => {
   localStorage.removeItem('username');
   localStorage.removeItem('accessToken');
   localStorage.removeItem('tokenType');
+  localStorage.removeItem('avatar');
   sessionStorage.removeItem('isFromLogout');
+};
+
+// 导航到个人信息页面
+const navigateToProfile = () => {
+  router.push('/Profile');
 };
 
 // 退出登录功能
@@ -190,13 +205,40 @@ const handleLogout = () => {
   align-items: center;
 }
 
-.username-display {
-  font-size: 14px;
-  color: #606266;
-  font-weight: 500;
-  white-space: nowrap;
-  display: inline-block;
-  line-height: 40px;
-  margin-right: 30px;
+.avatar-header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+}
+
+.avatar-circle-header {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+.default-avatar-header {
+  width: 100%;
+  height: 100%;
+  background-color: #8bad42;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.avatar-header:hover .avatar-circle-header {
+  box-shadow: 0 2px 8px rgba(139, 173, 66, 0.3);
 }
 </style>

@@ -77,6 +77,14 @@ const tryAutoLogin = async (): Promise<boolean> => {
         localStorage.setItem('isAuthenticated', 'true');
         localStorage.setItem('accessToken', data.access_token);
         localStorage.setItem('tokenType', data.token_type || 'bearer');
+        // 保留现有的用户名和头像信息
+        if (!localStorage.getItem('username')) {
+          // 如果没有用户名，尝试从某处获取（这里可能需要根据实际情况调整）
+          localStorage.setItem('username', '');
+        }
+        if (!localStorage.getItem('avatar')) {
+          localStorage.setItem('avatar', '');
+        }
         
         // 设置全局请求头（实际项目中应在请求拦截器中设置）
         console.log('自动登录成功，token已更新');
@@ -164,6 +172,7 @@ const handleLogin = async () => {
       localStorage.setItem('username', form.value.username);
       localStorage.setItem('accessToken', data.access_token);
       localStorage.setItem('tokenType', data.token_type || 'bearer');
+      localStorage.setItem('avatar', data.avatar || '');
       
       // 触发自定义事件，通知其他组件登录状态已变化
       window.dispatchEvent(new CustomEvent('loginStatusChanged'));
