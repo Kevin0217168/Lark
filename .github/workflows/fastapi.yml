@@ -1,0 +1,44 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'backend/**'          # 仅当 frontend 目录下文件变化时触发
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 将构建产物通过 scp 上传到服务器指定目录
+      - name: Copy build to server via scp
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOST }}
+          port: ${{ secrets.PORT }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "backend/app/*"          # 本地构建产物（相对于工作目录）
+          target: "/home/mint/web/lark/backend/app"   # 服务器目标目录（注意末尾不要加斜杠）
+          strip_components: 2        # 去掉 dist 层级，直接将内部文件放入目标目录
+          rm: true                   # 可选：上传前先删除目标目录下的所有文件（慎用）
+          
+      - name: Restart service
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.PORT }}
+          capture_stdout: true
+          script: |
+            whomi
+            systemctl --user restart fastapi.service 
+            systemctl --user status fastapi.service 
+            
