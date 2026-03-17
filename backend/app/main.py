@@ -4,9 +4,21 @@ import uvicorn
 from stream import Device, Stream, Viewer
 from userapi import User, Login
 
-app = FastAPI(root_path="/api",
+app = FastAPI(title="云雀 Lark", 
+              summary="物联网系统后端API开放接口文档", 
+              version="0.3.2",
+              root_path="/api",
               docs_url=None, 
-              redoc_url=None)
+              redoc_url=None,
+              contact={
+                "name": "Mint",
+                "url": "https://www.mintlab.top/",
+                },
+              openapi_external_docs = {
+                "description": "云雀 Lark Github项目",
+                "url": "https://github.com/Kevin0217168/Lark",
+                }
+              )
 
 app.include_router(Device.router)
 app.include_router(Viewer.router)
@@ -17,7 +29,7 @@ app.include_router(Login.refresh_router)
 
 # 挂载静态文件
 from fastapi.staticfiles import StaticFiles
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 from fastapi.openapi.docs import (
     get_redoc_html,
@@ -28,11 +40,11 @@ from fastapi.openapi.docs import (
 @app.get("/docs", include_in_schema=False)
 async def custom_swagger_ui_html():
     return get_swagger_ui_html(
-        openapi_url=app.openapi_url,
         title=app.title + " - Swagger UI",
         oauth2_redirect_url=app.swagger_ui_oauth2_redirect_url,
-        swagger_js_url="/api/static/swagger-ui-bundle.js",
-        swagger_css_url="/api/static/swagger-ui.css",
+        openapi_url="api/openapi.json",
+        swagger_js_url="api/static/swagger-ui-bundle.js",
+        swagger_css_url="api/static/swagger-ui.css",
     )
 
 
@@ -44,9 +56,9 @@ async def swagger_ui_redirect():
 @app.get("/redoc", include_in_schema=False)
 async def redoc_html():
     return get_redoc_html(
-        openapi_url=app.openapi_url,
         title=app.title + " - ReDoc",
-        redoc_js_url="/api/static/redoc.standalone.js",
+        openapi_url="api/openapi.json",
+        redoc_js_url="api/static/redoc.standalone.js",
     )
 
 @app.get("/")
@@ -55,4 +67,3 @@ async def hello(name: str):
 
 if __name__ == "__main__":
     uvicorn.run(app="main:app", host="localhost", port=8080, reload=True)
-
