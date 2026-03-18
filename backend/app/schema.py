@@ -278,10 +278,8 @@ class DeviceItem(BaseModel):
         title="设备名称",
         examples=["ESP32"],
     )
-    area: str = Field(
-        default="default", min_length=1, title="设备所在区域", examples=["雏鸟区"]
-    )
-    number: int = Field(default=1, ge=0, title="区域内编号", examples=[1])
+    area: str = Field(..., min_length=1, title="设备所在区域", examples=["雏鸟区"])
+    number: int = Field(..., ge=0, title="区域内编号", examples=[1])
     isOnline: Optional[bool] = Field(default=False, title="是否在线")
     status: Optional[Literal["stream", "standby", "error", "warning", "none"]] = Field(
         default="none", title="设备状态"

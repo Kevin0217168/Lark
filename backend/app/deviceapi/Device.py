@@ -48,7 +48,11 @@ async def get_devices(
     filter_query: Annotated[DeviceFilter, Query()],
     db: Db.Session = Depends(Db.GetDb("GetDevices")),
 ):
-    """查询符合条件的设备列表"""
+    """
+    # 查询符合条件的设备列表
+    
+    结果为空返回404
+    """
     data = Db.GetDevices(db, **filter_query.model_dump(exclude_unset=True))
     if not data:
         return JSONResponse(
@@ -67,7 +71,11 @@ async def get_device(
     id: Annotated[int, Path(title="设备id", description="数据库设备唯一主键id")],
     db: Db.Session = Depends(Db.GetDb("GetDevice")),
 ):
-    """根据ID获取单个设备"""
+    """
+    # 根据ID获取单个设备
+    
+    结果为空返回404
+    """
     data = Db.GetDevices(db, id=id)
     if not data:
         return JSONResponse(
@@ -86,10 +94,15 @@ async def register_device(
     body: Annotated[DeviceItem, Body()],
     db: Db.Session = Depends(Db.GetDb("RegisterDevice")),
 ):
-    """注册新设备（设备密钥唯一）"""
-    # 检查密钥是否已存在
-    existing = Db.GetDevices(db, secret=body.secret)
-    if existing:
+    """
+    # 注册新设备（设备密钥唯一）
+    
+    区域+编号不可出现重复
+    """
+    # 检查密钥和区域+编号
+    s = Db.GetDevices(db, secret=body.secret)
+    an = Db.GetDevices(db, area=body.area, number=body.number)
+    if s or an:
         return JSONResponse(
             status_code=400,
             content=CommonOut(
@@ -110,7 +123,14 @@ async def update_device(
     body: Annotated[DeviceUpdateItem, Body()],
     db: Db.Session = Depends(Db.GetDb("UpdateDevice")),
 ):
-    """更新设备信息（不允许更新密钥）"""
+    """
+    # 使用唯一id更新设备信息
+    
+    不允许更新设备密钥 返回更新后的设备对象; 若设备不存在则返回404
+    ## 字段更新规则：
+    - 字符串字段：若传入 NULL 则不更新；若传入空字符串则置为 NULL; 否则更新为新值。
+    - 布尔/整数字段：仅当传入非 NULL 时更新
+    """
     updated = Db.UpdateDevice(db, id=id, **body.model_dump(exclude_unset=True))
     if not updated:
         return JSONResponse(
@@ -130,7 +150,9 @@ async def delete_device(
     current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
     db: Db.Session = Depends(Db.GetDb("DeleteDevice")),
 ):
-    """删除设备（仅 root 可操作）"""
+    """
+    # 使用唯一id删除设备（仅 root 可操作）
+    """
     if current_user.role != "root":
         return JSONResponse(
             status_code=403,
