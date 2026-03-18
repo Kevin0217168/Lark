@@ -177,20 +177,20 @@ const verifyPasswordForm = ref({
 
 const verifyPasswordRules = {
   password: [
-    { required: true, message: '请输入当前密码', trigger: 'blur' },
-    { min: 6, max: 20, message: '长度在 6 到 20 个字符', trigger: 'blur' }
+  { required: true, message: '请输入当前密码', trigger: 'blur' },
+    { min: 6, max: 20, message: '密码长度在 6 到 20 个字符', trigger: 'blur' }
   ]
 };
 
 const editRules = {
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
-    { min: 3, max: 20, message: '长度在 3 到 20 个字符', trigger: 'blur' },
-    { pattern: /^[a-zA-Z0-9][a-zA-Z0-9_]*[a-zA-Z0-9]$/, message: '只能包含字母、数字、下划线，且不能以下划线开头或结尾', trigger: 'blur' }
+    { min: 3, max: 20, message: '用户名长度在 3 到 20 个字符', trigger: 'blur' },
+    { pattern: /^[a-zA-Z0-9][a-zA-Z0-9_]*[a-zA-Z0-9]$/, message: '用户名只能包含字母、数字、下划线，且不能以下划线开头或结尾', trigger: 'blur' }
   ],
   nickname: [
     { required: true, message: '请输入昵称', trigger: 'blur' },
-    { min: 1, max: 50, message: '长度在 1 到 50 个字符', trigger: 'blur' }
+    { min: 1, max: 50, message: '昵称长度在 1 到 50 个字符', trigger: 'blur' }
   ],
   email: [
     { type: 'email', message: '请输入正确的邮箱地址', trigger: 'blur' }
@@ -212,8 +212,8 @@ const editRules = {
       message: '请输入新密码',
       trigger: 'blur'
     },
-    { min: 8, max: 32, message: '长度在 8 到 32 个字符', trigger: 'blur' },
-    { pattern: /^(?=.*[a-zA-Z0-9])[a-zA-Z0-9]+$/, message: '必须包含至少一个数字或字母', trigger: 'blur' }
+    { min: 8, max: 32, message: '密码长度在 8 到 32 个字符', trigger: 'blur' },
+    { pattern: /^(?=.*[a-zA-Z0-9])[a-zA-Z0-9]+$/, message: '密码必须包含至少一个数字或字母', trigger: 'blur' }
   ],
   confirmNewPassword: [
     {
@@ -544,7 +544,20 @@ const verifyPassword = async (username: string, password: string): Promise<boole
 // 保存修改
 const saveChanges = async () => {
   try {
-    await editFormRef.value.validate();
+    // 验证表单，如果失败会抛出错误
+    await editFormRef.value.validate((valid: boolean, invalidFields: any) => {
+      if (!valid) {
+        // 提取第一个错误信息并显示
+        const firstField = Object.keys(invalidFields)[0];
+        if (firstField && invalidFields[firstField][0]) {
+          ElMessage.error(invalidFields[firstField][0].message);
+        } else {
+          ElMessage.error('请检查输入信息是否符合要求');
+        }
+        throw new Error('表单验证失败');
+      }
+    });
+    
     saving.value = true;
 
     // 如果用户选择修改密码，先验证当前密码
@@ -606,7 +619,18 @@ const saveChanges = async () => {
       window.dispatchEvent(new CustomEvent('loginStatusChanged'));
     } else {
       // 处理422错误，显示详细错误信息
-      if (response.status === 422 && responseData.errors) {
+      if (response.status === 422 && responseData.detail && Array.isArray(responseData.detail) && responseData.detail.length > 0) {
+        // 处理 [{ loc: [...], msg: "...", type: "..." }] 格式的错误
+        const errorMessages = responseData.detail
+          .map((err: any) => {
+            const msg = err.msg || '';
+            // 移除 "Value error, " 前缀
+            return msg.replace(/^Value error,\s*/, '');
+          })
+          .filter((msg: string) => msg.length > 0)
+          .join('\n');
+        throw new Error(errorMessages || '修改账号信息失败');
+      } else if (response.status === 422 && responseData.errors) {
         // 提取错误信息并显示
         const errorMessages = Object.values(responseData.errors).flat().join('\n');
         throw new Error(errorMessages || '修改账号信息失败');
@@ -615,7 +639,18 @@ const saveChanges = async () => {
       }
     }
   } catch (err) {
-    ElMessage.error((err as Error).message || '修改账号信息失败');
+    const errorMessage = (err as Error).message;
+    
+    // 根据错误类型显示不同的错误信息
+    if (errorMessage === '表单验证失败') {
+      // 表单验证失败已经在validate回调中处理过，这里不需要重复显示
+    } else if (errorMessage === '当前密码不正确') {
+      ElMessage.error(errorMessage);
+    } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+      ElMessage.error('网络连接失败，请检查网络设置');
+    } else {
+      ElMessage.error(errorMessage || '修改账号信息失败');
+    }
   } finally {
     saving.value = false;
   }
@@ -636,11 +671,23 @@ onMounted(() => {
   border-radius: 5%;
 }
 
+/* 增加表单项目之间的间距，确保错误信息完整显示 */
+:deep(.el-form-item) {
+  margin-bottom: 36px;
+}
+
 /* 确保表单验证提示信息完整显示 */
 :deep(.el-form-item__error) {
   white-space: normal;
   word-break: break-word;
   max-width: 100%;
+  margin-top: 8px;
+  line-height: 1.4;
+  padding: 0 0 5px 0;
+  min-height: 30px;
+  display: block;
+  overflow: visible !important;
+  font-size: 11px;
 }
 
 .title {
