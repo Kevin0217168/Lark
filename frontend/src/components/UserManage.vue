@@ -24,6 +24,14 @@
           <el-option label="管理员" value="root" />
           <el-option label="普通用户" value="user" />
         </el-select>
+        <el-button 
+          type="danger" 
+          :disabled="selectedUsers.length === 0"
+          @click="handleBatchDelete"
+        >
+          <el-icon><Delete /></el-icon>
+          批量删除 ({{ selectedUsers.length }})
+        </el-button>
       </div>
       <div class="filter-right">
         <el-input
@@ -52,7 +60,13 @@
     </div>
 
     <div v-else>
-      <el-table :data="filteredUsers" style="width: 100%" v-loading="tableLoading">
+      <el-table 
+        :data="filteredUsers" 
+        style="width: 100%" 
+        v-loading="tableLoading"
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column type="selection" width="55" align="center" />
         <el-table-column prop="id" label="ID" width="60" align="center" />
         <el-table-column prop="avatar" label="头像" width="80" align="center">
           <template #default="scope">
@@ -210,7 +224,7 @@
 <script lang="ts" setup>
 import { ref, onMounted, computed } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Loading, Warning, Plus, Search } from "@element-plus/icons-vue";
+import { Loading, Warning, Plus, Search, Delete } from "@element-plus/icons-vue";
 
 const API_BASE_URL = '';
 
@@ -223,6 +237,9 @@ const currentUserId = ref(0);
 // 筛选和搜索
 const filterRole = ref('');
 const searchUsername = ref('');
+
+// 多选相关
+const selectedUsers = ref<any[]>([]);
 
 // 过滤后的用户列表
 const filteredUsers = computed(() => {
@@ -250,6 +267,111 @@ const handleFilterChange = () => {
 
 const handleSearchChange = () => {
   // 搜索变化时，computed会自动更新
+};
+
+// 处理表格选择变化
+const handleSelectionChange = (selection: any[]) => {
+  selectedUsers.value = selection;
+};
+
+// 批量删除用户
+const handleBatchDelete = async () => {
+  if (selectedUsers.value.length === 0) {
+    ElMessage.warning('请先选择要删除的用户');
+    return;
+  }
+
+  // 检查是否包含当前用户
+  const containsCurrentUser = selectedUsers.value.some(user => user.id === currentUserId.value);
+  if (containsCurrentUser) {
+    ElMessage.error('不能删除自己的账号');
+    return;
+  }
+
+  const usernames = selectedUsers.value.map(user => user.username).join('、');
+  
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除以下用户吗？此操作不可恢复。\n${usernames}`,
+      '确认批量删除',
+      {
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    );
+
+    const accessToken = localStorage.getItem('accessToken');
+    console.log('批量删除 - accessToken检查:', accessToken ? '存在' : '不存在');
+    
+    if (!accessToken) {
+      throw new Error('未登录，请先登录');
+    }
+
+    // 逐个删除用户
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const user of selectedUsers.value) {
+      try {
+        // 每次请求前重新获取token
+        const currentToken = localStorage.getItem('accessToken');
+        console.log('批量删除用户 - 发送请求:', {
+          url: `${API_BASE_URL}/api/users/${user.id}`,
+          method: 'DELETE',
+          userId: user.id,
+          username: user.username,
+          hasToken: !!currentToken,
+          tokenPrefix: currentToken ? currentToken.substring(0, 20) + '...' : 'null'
+        });
+
+        if (!currentToken) {
+          throw new Error('登录已过期，请重新登录');
+        }
+
+        const requestHeaders = {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${currentToken}`
+        };
+        console.log('请求头:', requestHeaders);
+
+        const requestUrl = `${API_BASE_URL}/api/users/${user.id}`;
+        console.log('实际请求URL:', requestUrl);
+
+        const response = await fetch(requestUrl, {
+          method: 'DELETE',
+          headers: requestHeaders,
+          credentials: 'include'
+        });
+
+        console.log(`删除用户 ${user.username} (ID: ${user.id}) 响应状态:`, response.status);
+
+        if (response.ok) {
+          successCount++;
+          console.log(`删除用户 ${user.username} (ID: ${user.id}) 成功`);
+        } else {
+          failCount++;
+          console.error(`删除用户 ${user.username} (ID: ${user.id}) 失败:`, response.status);
+        }
+      } catch (err) {
+        failCount++;
+        console.error(`删除用户 ${user.username} (ID: ${user.id}) 异常:`, err);
+      }
+    }
+    
+    if (failCount === 0) {
+      ElMessage.success(`成功删除 ${successCount} 个用户`);
+    } else {
+      ElMessage.warning(`成功删除 ${successCount} 个用户，失败 ${failCount} 个`);
+    }
+    
+    selectedUsers.value = [];
+    await fetchUsers();
+  } catch (err: any) {
+    if (err !== 'cancel') {
+      ElMessage.error(err.message || '批量删除失败');
+    }
+  }
 };
 
 const editDialogVisible = ref(false);
@@ -404,11 +526,15 @@ const fetchUsers = async () => {
     error.value = '';
 
     const accessToken = localStorage.getItem('accessToken');
+    console.log('获取用户列表 - accessToken检查:', accessToken ? '存在' : '不存在');
     if (!accessToken) {
       throw new Error('未登录，请先登录');
     }
 
-    const response = await fetch(`${API_BASE_URL}/api/users`, {
+    const getUrl = `${API_BASE_URL}/api/users`;
+    console.log('获取用户列表 - 请求URL:', getUrl);
+
+    const response = await fetch(getUrl, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
@@ -416,6 +542,8 @@ const fetchUsers = async () => {
       },
       credentials: 'include'
     });
+
+    console.log('获取用户列表 - 响应状态:', response.status);
 
     if (!response.ok) {
       throw new Error('获取用户列表失败');
@@ -585,11 +713,22 @@ const handleDeleteUser = async (user: any) => {
     );
 
     const accessToken = localStorage.getItem('accessToken');
+    const currentRole = localStorage.getItem('role');
+    console.log('单个删除 - accessToken检查:', accessToken ? '存在' : '不存在');
+    console.log('单个删除 - 当前用户角色:', currentRole);
+    console.log('单个删除 - 目标用户角色:', user.role);
     if (!accessToken) {
       throw new Error('未登录，请先登录');
     }
 
-    const response = await fetch(`${API_BASE_URL}/api/users/${user.id}`, {
+    const deleteUrl = `${API_BASE_URL}/api/users/${user.id}`;
+    console.log('单个删除 - 请求URL:', deleteUrl);
+    console.log('单个删除 - 完整请求头:', {
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${accessToken ? accessToken.substring(0, 30) + '...' : 'null'}`
+    });
+
+    const response = await fetch(deleteUrl, {
       method: 'DELETE',
       headers: {
         'Accept': 'application/json',
@@ -597,6 +736,8 @@ const handleDeleteUser = async (user: any) => {
       },
       credentials: 'include'
     });
+
+    console.log('单个删除 - 响应状态:', response.status);
 
     if (!response.ok) {
       throw new Error('删除用户失败');
