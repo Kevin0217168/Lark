@@ -32,6 +32,10 @@
         <el-input v-model="userInfo.nickname" readonly />
       </el-form-item>
 
+      <el-form-item label="账号类型">
+        <el-input :model-value="userInfo.role === 'root' ? '管理员' : '普通用户'" readonly />
+      </el-form-item>
+
       <el-form-item label="邮箱">
         <el-input v-model="userInfo.email" readonly placeholder="暂无邮箱" />
       </el-form-item>
@@ -108,6 +112,10 @@
           <el-input v-model="editForm.email" placeholder="请输入邮箱" />
         </el-form-item>
 
+        <el-form-item label="头像URL" prop="avatar">
+          <el-input v-model="editForm.avatar" placeholder="请输入头像图片URL" />
+        </el-form-item>
+
         <el-form-item>
           <el-checkbox v-model="editForm.changePassword">修改密码</el-checkbox>
         </el-form-item>
@@ -156,6 +164,7 @@ const editForm = ref({
   username: '',
   nickname: '',
   email: null,
+  avatar: '',
   changePassword: false,
   currentPassword: '',
   newPassword: '',
@@ -176,11 +185,12 @@ const verifyPasswordRules = {
 const editRules = {
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
-    { min: 3, max: 20, message: '长度在 3 到 20 个字符', trigger: 'blur' }
+    { min: 3, max: 20, message: '长度在 3 到 20 个字符', trigger: 'blur' },
+    { pattern: /^[a-zA-Z0-9][a-zA-Z0-9_]*[a-zA-Z0-9]$/, message: '只能包含字母、数字、下划线，且不能以下划线开头或结尾', trigger: 'blur' }
   ],
   nickname: [
     { required: true, message: '请输入昵称', trigger: 'blur' },
-    { min: 1, max: 20, message: '长度在 1 到 20 个字符', trigger: 'blur' }
+    { min: 1, max: 50, message: '长度在 1 到 50 个字符', trigger: 'blur' }
   ],
   email: [
     { type: 'email', message: '请输入正确的邮箱地址', trigger: 'blur' }
@@ -202,7 +212,8 @@ const editRules = {
       message: '请输入新密码',
       trigger: 'blur'
     },
-    { min: 6, max: 20, message: '长度在 6 到 20 个字符', trigger: 'blur' }
+    { min: 8, max: 32, message: '长度在 8 到 32 个字符', trigger: 'blur' },
+    { pattern: /^(?=.*[a-zA-Z0-9])[a-zA-Z0-9]+$/, message: '必须包含至少一个数字或字母', trigger: 'blur' }
   ],
   confirmNewPassword: [
     {
@@ -489,6 +500,7 @@ const openEditDialog = () => {
     username: userInfo.value.username,
     nickname: userInfo.value.nickname,
     email: userInfo.value.email,
+    avatar: userInfo.value.avatar || '',
     changePassword: false,
     currentPassword: '',
     newPassword: '',
@@ -546,7 +558,7 @@ const saveChanges = async () => {
     // 构建请求数据，只包含用户实际修改的字段
     const requestData: Record<string, string> = {};
     
-    // 只包含用户名、昵称、邮箱字段（这些字段用户可以修改）
+    // 只包含用户名、昵称、邮箱、头像字段（这些字段用户可以修改）
     if (editForm.value.username !== userInfo.value.username) {
       requestData["username"] = editForm.value.username || "";
     }
@@ -557,6 +569,10 @@ const saveChanges = async () => {
     
     if (editForm.value.email !== userInfo.value.email) {
       requestData["email"] = editForm.value.email || "";
+    }
+    
+    if (editForm.value.avatar !== userInfo.value.avatar) {
+      requestData["avatar"] = editForm.value.avatar || "";
     }
     
     // 如果用户选择修改密码，才包含password字段
@@ -576,22 +592,27 @@ const saveChanges = async () => {
       credentials: 'include'
     });
 
-    if (!response.ok) {
-      throw new Error('修改账号信息失败');
-    }
-
     const responseData = await response.json();
-    if (responseData.code === 200) {
+    
+    if (response.ok && responseData.code === 200) {
       ElMessage.success('修改账号信息成功');
       editDialogVisible.value = false;
       // 重新获取用户信息
       await fetchUserInfo();
-      // 更新localStorage中的用户名
+      // 更新localStorage中的用户名和头像
       localStorage.setItem('username', editForm.value.username);
+      localStorage.setItem('avatar', editForm.value.avatar || '');
       // 触发登录状态变化事件，通知Header组件更新
       window.dispatchEvent(new CustomEvent('loginStatusChanged'));
     } else {
-      throw new Error(responseData.msg || '修改账号信息失败');
+      // 处理422错误，显示详细错误信息
+      if (response.status === 422 && responseData.errors) {
+        // 提取错误信息并显示
+        const errorMessages = Object.values(responseData.errors).flat().join('\n');
+        throw new Error(errorMessages || '修改账号信息失败');
+      } else {
+        throw new Error(responseData.msg || '修改账号信息失败');
+      }
     }
   } catch (err) {
     ElMessage.error((err as Error).message || '修改账号信息失败');
@@ -613,6 +634,13 @@ onMounted(() => {
   width: 600px;
   margin: 5% auto;
   border-radius: 5%;
+}
+
+/* 确保表单验证提示信息完整显示 */
+:deep(.el-form-item__error) {
+  white-space: normal;
+  word-break: break-word;
+  max-width: 100%;
 }
 
 .title {
