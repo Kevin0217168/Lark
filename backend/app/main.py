@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 import uvicorn
 
-from stream import Stream, Viewer
+from stream import Stream
 from userapi import User, Login
 from deviceapi import Device
 
@@ -28,7 +28,7 @@ app = FastAPI(
     },
 )
 
-app.include_router(Viewer.router)
+# app.include_router(Viewer.router)
 app.include_router(Stream.router)
 app.include_router(User.router)
 app.include_router(Login.router)

@@ -1,9 +1,9 @@
 from fastapi import APIRouter, WebSocket, WebSocketException
 import json
 
-from stream import Viewer
+# from stream import Viewer
 
-router = APIRouter(prefix="/stream", tags=["stream"])
+router = APIRouter(prefix="/stream", tags=["Stream"])
 
 # @router.websocket("/device/ws")
 # async def websocket_endpoint(websocket: WebSocket, id: str):
