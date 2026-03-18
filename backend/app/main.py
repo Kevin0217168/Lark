@@ -29,7 +29,7 @@ app.include_router(Login.refresh_router)
 
 # 挂载静态文件
 from fastapi.staticfiles import StaticFiles
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/api/static", StaticFiles(directory="static"), name="static")
 
 from fastapi.openapi.docs import (
     get_redoc_html,
@@ -42,7 +42,7 @@ async def custom_swagger_ui_html():
     return get_swagger_ui_html(
         title=app.title + " - Swagger UI",
         oauth2_redirect_url=app.swagger_ui_oauth2_redirect_url,
-        openapi_url="api/openapi.json",
+        openapi_url="openapi.json",
         swagger_js_url="api/static/swagger-ui-bundle.js",
         swagger_css_url="api/static/swagger-ui.css",
     )
