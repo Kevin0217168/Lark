@@ -182,6 +182,7 @@ const clearCookies = () => {
   localStorage.removeItem('tokenType');
   localStorage.removeItem('avatar');
   localStorage.removeItem('role');
+  localStorage.removeItem('userId');
   sessionStorage.removeItem('isFromLogout');
 };
 

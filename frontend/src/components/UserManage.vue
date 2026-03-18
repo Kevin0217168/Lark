@@ -93,6 +93,18 @@
         <el-form-item label="头像URL" prop="avatar">
           <el-input v-model="editForm.avatar" placeholder="请输入头像图片URL" />
         </el-form-item>
+
+        <el-form-item>
+          <el-checkbox v-model="editForm.changePassword">修改密码</el-checkbox>
+        </el-form-item>
+
+        <el-form-item v-if="editForm.changePassword" label="新密码" prop="newPassword">
+          <el-input v-model="editForm.newPassword" type="password" placeholder="请输入新密码" />
+        </el-form-item>
+
+        <el-form-item v-if="editForm.changePassword" label="确认密码" prop="confirmPassword">
+          <el-input v-model="editForm.confirmPassword" type="password" placeholder="请确认新密码" />
+        </el-form-item>
       </el-form>
 
       <template #footer>
@@ -127,8 +139,13 @@ const editForm = ref({
   nickname: '',
   role: 'user',
   email: '',
-  avatar: ''
+  avatar: '',
+  changePassword: false,
+  newPassword: '',
+  confirmPassword: ''
 });
+
+const originalUserData = ref<any>(null);
 
 const editRules = {
   username: [
@@ -162,32 +179,44 @@ const editRules = {
       },
       trigger: 'blur'
     }
+  ],
+  newPassword: [
+    {
+      required: (rule: any, value: string, callback: Function) => {
+        return editForm.value.changePassword;
+      },
+      message: '请输入新密码',
+      trigger: 'blur'
+    },
+    { min: 8, max: 32, message: '密码长度在 8 到 32 个字符', trigger: 'blur' },
+    { pattern: /^(?=.*[a-zA-Z0-9])[a-zA-Z0-9]+$/, message: '密码必须包含至少一个数字或字母', trigger: 'blur' }
+  ],
+  confirmPassword: [
+    {
+      required: (rule: any, value: string, callback: Function) => {
+        return editForm.value.changePassword;
+      },
+      message: '请确认新密码',
+      trigger: 'blur'
+    },
+    {
+      validator: (rule: any, value: string, callback: Function) => {
+        if (editForm.value.changePassword && value !== editForm.value.newPassword) {
+          callback(new Error('两次输入的密码不一致'));
+        } else {
+          callback();
+        }
+      },
+      trigger: 'blur'
+    }
   ]
 };
 
 // 获取当前用户ID
-const getCurrentUserId = async () => {
-  try {
-    const accessToken = localStorage.getItem('accessToken');
-    if (!accessToken) return;
-
-    const response = await fetch(`${API_BASE_URL}/api/users/me`, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${accessToken}`
-      },
-      credentials: 'include'
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      if (data.code === 200 && data.data) {
-        currentUserId.value = data.data.id;
-      }
-    }
-  } catch (err) {
-    console.error('获取当前用户信息失败:', err);
+const getCurrentUserId = () => {
+  const userId = localStorage.getItem('userId');
+  if (userId) {
+    currentUserId.value = parseInt(userId);
   }
 };
 
@@ -230,13 +259,19 @@ const fetchUsers = async () => {
 
 // 编辑用户
 const handleEditUser = (user: any) => {
+  // 保存原始用户数据
+  originalUserData.value = { ...user };
+  
   editForm.value = {
     id: user.id,
     username: user.username,
     nickname: user.nickname,
     role: user.role,
     email: user.email || '',
-    avatar: user.avatar || ''
+    avatar: user.avatar || '',
+    changePassword: false,
+    newPassword: '',
+    confirmPassword: ''
   };
   editDialogVisible.value = true;
 };
@@ -263,14 +298,47 @@ const saveUserChanges = async () => {
       throw new Error('未登录，请先登录');
     }
 
-    const requestData = {
-      username: editForm.value.username,
-      nickname: editForm.value.nickname,
-      role: editForm.value.role,
-      email: editForm.value.email || null,
-      avatar: editForm.value.avatar || ''
-    };
+    // 构建请求数据，只包含用户实际修改的字段
+    const requestData: Record<string, any> = {};
+    
+    if (editForm.value.username !== originalUserData.value.username) {
+      requestData["username"] = editForm.value.username || "";
+    }
+    
+    if (editForm.value.nickname !== originalUserData.value.nickname) {
+      requestData["nickname"] = editForm.value.nickname || "";
+    }
+    
+    if (editForm.value.role !== originalUserData.value.role) {
+      requestData["role"] = editForm.value.role || "";
+    }
+    
+    if (editForm.value.email !== originalUserData.value.email) {
+      requestData["email"] = editForm.value.email || "";
+    }
+    
+    // 只有当头像URL有实际值且发生变化时才发送
+    if (editForm.value.avatar && editForm.value.avatar !== originalUserData.value.avatar) {
+      requestData["avatar"] = editForm.value.avatar;
+    }
+    
+    // 如果用户选择修改密码，才包含password字段（不需要验证当前密码）
+    if (editForm.value.changePassword) {
+      requestData["password"] = editForm.value.newPassword || "";
+    }
 
+    // 如果没有任何修改，提示用户
+    if (Object.keys(requestData).length === 0) {
+      ElMessage.warning('没有任何修改');
+      saving.value = false;
+      return;
+    }
+
+    // 显示发送到后端的数据格式
+    console.log('用户管理 - 向后端发送的数据:', JSON.stringify(requestData, null, 2));
+    console.log('用户管理 - 请求数据对象:', requestData);
+
+    // 发送请求
     const response = await fetch(`${API_BASE_URL}/api/users/${editForm.value.id}`, {
       method: 'PUT',
       headers: {
@@ -282,22 +350,44 @@ const saveUserChanges = async () => {
       credentials: 'include'
     });
 
-    if (!response.ok) {
-      throw new Error('更新用户失败');
-    }
-
-    const data = await response.json();
-    if (data.code === 200) {
+    const responseData = await response.json();
+    
+    if (response.ok && responseData.code === 200) {
       ElMessage.success('用户更新成功');
       editDialogVisible.value = false;
       // 重新加载用户列表
       await fetchUsers();
     } else {
-      throw new Error(data.msg || '更新用户失败');
+      // 处理422错误，显示详细错误信息
+      if (response.status === 422 && responseData.detail && Array.isArray(responseData.detail) && responseData.detail.length > 0) {
+        // 处理 [{ loc: [...], msg: "...", type: "..." }] 格式的错误
+        const errorMessages = responseData.detail
+          .map((err: any) => {
+            const msg = err.msg || '';
+            // 移除 "Value error, " 前缀
+            return msg.replace(/^Value error,\s*/, '');
+          })
+          .filter((msg: string) => msg.length > 0)
+          .join('\n');
+        throw new Error(errorMessages || '更新用户失败');
+      } else if (response.status === 422 && responseData.errors) {
+        // 提取错误信息并显示
+        const errorMessages = Object.values(responseData.errors).flat().join('\n');
+        throw new Error(errorMessages || '更新用户失败');
+      } else {
+        throw new Error(responseData.msg || '更新用户失败');
+      }
     }
   } catch (err: any) {
-    if (err.message !== '表单验证失败') {
-      ElMessage.error(err.message || '更新用户失败');
+    const errorMessage = err.message;
+    
+    // 根据错误类型显示不同的错误信息
+    if (errorMessage === '表单验证失败') {
+      // 表单验证失败已经在validate回调中处理过，这里不需要重复显示
+    } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+      ElMessage.error('网络连接失败，请检查网络设置');
+    } else {
+      ElMessage.error(errorMessage || '更新用户失败');
     }
   } finally {
     saving.value = false;

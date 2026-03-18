@@ -100,6 +100,9 @@ const tryAutoLogin = async (): Promise<boolean> => {
     localStorage.removeItem('username');
     localStorage.removeItem('accessToken');
     localStorage.removeItem('tokenType');
+    localStorage.removeItem('avatar');
+    localStorage.removeItem('role');
+    localStorage.removeItem('userId');
     return false;
   } catch (error) {
     console.error('自动登录失败:', error);
@@ -108,6 +111,9 @@ const tryAutoLogin = async (): Promise<boolean> => {
     localStorage.removeItem('username');
     localStorage.removeItem('accessToken');
     localStorage.removeItem('tokenType');
+    localStorage.removeItem('avatar');
+    localStorage.removeItem('role');
+    localStorage.removeItem('userId');
     return false;
   }
 };
@@ -204,6 +210,7 @@ const handleLogin = async () => {
             if (userData.code === 200 && userData.data) {
               localStorage.setItem('role', userData.data.role || '');
               localStorage.setItem('avatar', userData.data.avatar || '');
+              localStorage.setItem('userId', userData.data.id || '');
             }
           }
         } catch (err) {

@@ -330,9 +330,47 @@ const tryRefreshToken = async (): Promise<boolean> => {
 };
 
 // 打开注销账号对话框
-const openDeleteAccountDialog = () => {
-  verifyPasswordForm.value.password = '';
-  verifyPasswordDialogVisible.value = true;
+const openDeleteAccountDialog = async () => {
+  try {
+    // 如果当前用户是管理员，先检查管理员账号数量
+    if (userInfo.value.role === 'root') {
+      const accessToken = localStorage.getItem('accessToken');
+      if (!accessToken) {
+        ElMessage.error('未登录，请先登录');
+        return;
+      }
+
+      const usersResponse = await fetch(`${API_BASE_URL}/api/users`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        },
+        credentials: 'include'
+      });
+
+      if (usersResponse.ok) {
+        const usersData = await usersResponse.json();
+        if (usersData.code === 200 && usersData.data) {
+          // 统计管理员账号数量
+          const adminCount = usersData.data.filter((user: any) => user.role === 'root').length;
+          
+          // 如果只有一个管理员账号，不允许注销
+          if (adminCount <= 1) {
+            ElMessage.error('系统中只有一个管理员账号，无法注销。请先创建其他管理员账号。');
+            return;
+          }
+        }
+      }
+    }
+
+    // 检查通过，打开密码验证对话框
+    verifyPasswordForm.value.password = '';
+    verifyPasswordDialogVisible.value = true;
+  } catch (err) {
+    ElMessage.error('检查管理员账号数量失败');
+    console.error(err);
+  }
 };
 
 // 验证密码并打开确认对话框
@@ -427,6 +465,8 @@ const handleDeleteAccount = async () => {
       localStorage.removeItem('accessToken');
       localStorage.removeItem('tokenType');
       localStorage.removeItem('avatar');
+      localStorage.removeItem('role');
+      localStorage.removeItem('userId');
       
       // 清除cookie
       const clearCookies = () => {
@@ -466,6 +506,9 @@ const handleLogout = () => {
   localStorage.removeItem('username');
   localStorage.removeItem('accessToken');
   localStorage.removeItem('tokenType');
+  localStorage.removeItem('avatar');
+  localStorage.removeItem('role');
+  localStorage.removeItem('userId');
 
   // 清除cookie
   const clearCookies = () => {
@@ -584,8 +627,9 @@ const saveChanges = async () => {
       requestData["email"] = editForm.value.email || "";
     }
     
-    if (editForm.value.avatar !== userInfo.value.avatar) {
-      requestData["avatar"] = editForm.value.avatar || "";
+    // 只有当头像URL有实际值且发生变化时才发送
+    if (editForm.value.avatar && editForm.value.avatar !== userInfo.value.avatar) {
+      requestData["avatar"] = editForm.value.avatar;
     }
     
     // 如果用户选择修改密码，才包含password字段
