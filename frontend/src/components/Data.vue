@@ -280,19 +280,45 @@ const connectionError = ref<string>('');
 let ws: WebSocket | null = null;
 let currentImageUrl: string = '';
 
-// 处理接收到的图片帧数据
-const handleFrameData = async (base64Data: string) => {
+// 辅助函数：将 Hex 字符串转换为 Blob
+const hexToBlob = (hexString: string, mimeType: string = 'image/jpeg'): Blob => {
+  // 清理空格和 0x 前缀
+  const cleanHex = hexString.replace(/\s+/g, '').replace(/0x/g, '');
+  if (cleanHex.length % 2 !== 0) {
+    throw new Error('无效的 Hex 数据：长度必须为偶数');
+  }
+  const byteArray = new Uint8Array(cleanHex.length / 2);
+  for (let i = 0; i < cleanHex.length; i += 2) {
+    byteArray[i / 2] = parseInt(cleanHex.substr(i, 2), 16);
+  }
+  return new Blob([byteArray], { type: mimeType });
+};
+
+// 处理接收到的图片帧数据（支持多种输入类型）
+const handleFrameData = (data: string | Blob | ArrayBuffer | Uint8Array) => {
   try {
-    // 将base64数据转换为Blob
-    const response = await fetch(`data:image/jpeg;base64,${base64Data}`);
-    const blob = await response.blob();
-    
-    // 释放旧的URL对象
+    let blob: Blob;
+
+    // 根据数据类型转换为 Blob
+    if (typeof data === 'string') {
+      // 假设是 Hex 格式的字符串
+      blob = hexToBlob(data);
+    } else if (data instanceof Blob) {
+      // 已经是 Blob，直接使用
+      blob = data;
+    } else if (data instanceof ArrayBuffer || data instanceof Uint8Array) {
+      // 二进制数据，创建 Blob
+      blob = new Blob([data], { type: 'image/jpeg' });
+    } else {
+      throw new Error('不支持的数据类型');
+    }
+
+    // 释放旧的 URL 对象
     if (currentImageUrl) {
       URL.revokeObjectURL(currentImageUrl);
     }
-    
-    // 创建新的URL
+
+    // 创建新的对象 URL
     currentImageUrl = URL.createObjectURL(blob);
     currentFrameImage.value = currentImageUrl;
     lastFrameTime.value = new Date().toLocaleTimeString('zh-CN');
@@ -311,16 +337,18 @@ const startRealtimeMonitoring = () => {
   try {
     // 建立WebSocket连接
     // 自动根据当前协议选择 ws:// 或 wss://
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    ws = new WebSocket(`${protocol}//${host}/api/device/${selectedDeviceId.value}/stream`);
+    // const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    // const host = window.location.host;
+    // ws = new WebSocket(`${protocol}//${host}/api/device/${selectedDeviceId.value}/stream`);
+    ws = new WebSocket(`wss://lark.mintlab.top/api/stream/viewer/ws?id=721559e8352d435c977215c70b868233`);
     
     // 监听消息事件
     ws.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
-        if (data.frame) {
-          handleFrameData(data.frame);
+        // const data = JSON.parse(event.data);
+        if (event.data) {
+          handleFrameData(event.data);
+          console.log(event.data);
         }
       } catch (error) {
         console.error('解析WebSocket消息失败:', error);
