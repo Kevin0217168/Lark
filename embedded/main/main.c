@@ -72,15 +72,17 @@ void app_main(void)
     // WifiSecurityRequest("http://192.168.216.109", "/?name=ESP-32", 8080, WS_CLINENT_METHOD_GET, NULL, NULL);
 
     // 注册设备, 获得id
-    char post_data[64];
-    snprintf(post_data, sizeof(post_data), "{\"secret\":\"%s\"}", secret);
-    WifiSecurityRequest("http://192.168.216.109", "/device/register", 8080,
-         WS_CLINENT_METHOD_POST, post_data, register_handler);
+    // char post_data[64];
+    // snprintf(post_data, sizeof(post_data), "{\"secret\":\"%s\"}", secret);
+    // WifiSecurityRequest("https://lark.mintlab.top", "/api/device/register", 443,
+    //      WS_CLINENT_METHOD_POST, post_data, register_handler);
+
+    // vTaskDelay(1000 / portTICK_PERIOD_MS);
     
     // 通过id开启ws连接
     char path_data[128];
-    snprintf(path_data, sizeof(path_data), "/stream/device/ws?id=%s", deviceStatus.uuid);
-    WebsocketStart("ws://192.168.216.109", path_data, 8080);
+    snprintf(path_data, sizeof(path_data), "/api/stream/device/ws?id=%s", "0585331ecdd143fcac2b9951dfecc3f9");
+    WebsocketStart("wss://lark.mintlab.top", path_data, 443);
 
     // 等待ws连接成功
     while (!WebsocketIsConnected()){
@@ -89,11 +91,12 @@ void app_main(void)
 
     CameraInit();
     sensor_t *s = esp_camera_sensor_get();
-    s->set_framesize(s, FRAMESIZE_SVGA);
+    s->set_framesize(s, FRAMESIZE_240X240);
+    s->set_vflip(s, 1);
 
     while(1){
         CameraTakePhoto(PhotoTransmit);
-        vTaskDelay(5000 / portTICK_PERIOD_MS);
+        // vTaskDelay(5000 / portTICK_PERIOD_MS);
     }
     
 }
