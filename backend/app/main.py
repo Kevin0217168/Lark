@@ -8,8 +8,8 @@ from deviceapi import Device
 import os
 
 isDeploy = os.environ.get("FASTAPI_DEPLOY", None)
-prepath = "/api" if isDeploy is None else ""
-prefix = "api" if isDeploy is None else ""
+prepath = "" if isDeploy is None else "/"
+prefix = "/api" if isDeploy is None else ""
 
 app = FastAPI(
     title="云雀 Lark",
@@ -38,7 +38,7 @@ app.include_router(Device.router)
 # 挂载静态文件
 from fastapi.staticfiles import StaticFiles
 
-app.mount(path=f"{prepath}/static", app=StaticFiles(directory="static"), name="static")
+app.mount(path=f"{prefix}/static", app=StaticFiles(directory="static"), name="static")
 
 from fastapi.openapi.docs import (
     get_redoc_html,
@@ -53,8 +53,8 @@ async def custom_swagger_ui_html():
         title=app.title + " - Swagger UI",
         oauth2_redirect_url=app.swagger_ui_oauth2_redirect_url,
         openapi_url="openapi.json",
-        swagger_js_url=f"{prefix}/static/swagger-ui-bundle.js",
-        swagger_css_url=f"{prefix}/static/swagger-ui.css",
+        swagger_js_url=f"{prepath}api/static/swagger-ui-bundle.js",
+        swagger_css_url=f"{prepath}api/static/swagger-ui.css",
     )
 
 
@@ -68,7 +68,7 @@ async def redoc_html():
     return get_redoc_html(
         title=app.title + " - ReDoc",
         openapi_url="openapi.json",
-        redoc_js_url=f"{prefix}/static/redoc.standalone.js",
+        redoc_js_url=f"{prepath}api/static/redoc.standalone.js",
     )
 
 
