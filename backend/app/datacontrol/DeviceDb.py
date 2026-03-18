@@ -35,6 +35,7 @@ class DeviceOut(BaseModel):
 def GetDevices(
     db: Session,
     id: Optional[int] = None,
+    secret: Optional[str] = None,
     name: Optional[str] = None,
     area: Optional[str] = None,
     number: Optional[int] = None,
@@ -48,6 +49,8 @@ def GetDevices(
     conditions = []
     if id is not None:
         conditions.append(M_Devices.id == id)
+    if secret is not None:
+        conditions.append(M_Devices.secret == secret)
     if name is not None:
         conditions.append(M_Devices.name == name)
     if area is not None:

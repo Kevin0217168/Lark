@@ -9,7 +9,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 import Db
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/login")
 
 # to get a string like this run:
 # openssl rand -hex 32
@@ -28,8 +28,8 @@ def VerifyToken(db:Db.Session, token:str, credentials_exception:HTTPException) -
         raise credentials_exception
       if credentials_exception.detail == "Could not validate credentials" and sub == "cookie":
         raise credentials_exception
-  except InvalidTokenError:
-    print("token解码失败")
+  except InvalidTokenError as e:
+    print("token解码失败: ", e)
     raise credentials_exception
   users = Db.GetUsers(db, username=username)
   if users is None:

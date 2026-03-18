@@ -2,7 +2,7 @@ import uuid
 from fastapi import WebSocket, APIRouter, WebSocketException
 from typing import Annotated
 
-from stream import Device
+from deviceapi import Device
 
 router = APIRouter(prefix="/viewer", tags=["viewer"])
 
