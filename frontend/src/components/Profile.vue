@@ -712,7 +712,7 @@ onMounted(() => {
   padding: 20px;
   width: 600px;
   margin: 5% auto;
-  border-radius: 5%;
+  border-radius: 15px;
 }
 
 /* 增加表单项目之间的间距，确保错误信息完整显示 */

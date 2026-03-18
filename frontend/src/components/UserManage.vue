@@ -1,6 +1,15 @@
 <template>
   <el-card class="user-manage-card">
-    <h3 class="title">用户管理</h3>
+    <div class="header-section">
+      <div class="header-left">
+        <el-button type="primary" @click="openAddUserDialog">
+          <el-icon><Plus /></el-icon>
+          新增用户
+        </el-button>
+      </div>
+      <h3 class="title">用户管理</h3>
+      <div class="header-right"></div>
+    </div>
 
     <div v-if="loading" class="loading-container">
       <el-icon class="is-loading"><Loading /></el-icon>
@@ -114,13 +123,65 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- 新增用户对话框 -->
+    <el-dialog
+      v-model="addDialogVisible"
+      title="新增用户"
+      width="500px"
+    >
+      <el-form
+        :model="addForm"
+        ref="addFormRef"
+        :rules="addRules"
+        label-width="100px"
+      >
+        <el-form-item label="用户名" prop="username">
+          <el-input v-model="addForm.username" placeholder="请输入用户名" />
+        </el-form-item>
+
+        <el-form-item label="密码" prop="password">
+          <el-input v-model="addForm.password" type="password" placeholder="请输入密码" show-password />
+        </el-form-item>
+
+        <el-form-item label="确认密码" prop="confirmPassword">
+          <el-input v-model="addForm.confirmPassword" type="password" placeholder="请再次输入密码" show-password />
+        </el-form-item>
+
+        <el-form-item label="昵称" prop="nickname">
+          <el-input v-model="addForm.nickname" placeholder="请输入昵称" />
+        </el-form-item>
+
+        <el-form-item label="角色" prop="role">
+          <el-select v-model="addForm.role" placeholder="请选择角色">
+            <el-option label="管理员" value="root" />
+            <el-option label="普通用户" value="user" />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="邮箱" prop="email">
+          <el-input v-model="addForm.email" placeholder="请输入邮箱（可选）" />
+        </el-form-item>
+
+        <el-form-item label="头像URL" prop="avatar">
+          <el-input v-model="addForm.avatar" placeholder="请输入头像URL（可选）" />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="addDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="handleAddUser" :loading="adding">创建</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </el-card>
 </template>
 
 <script lang="ts" setup>
 import { ref, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Loading, Warning } from "@element-plus/icons-vue";
+import { Loading, Warning, Plus } from "@element-plus/icons-vue";
 
 const API_BASE_URL = '';
 
@@ -146,6 +207,21 @@ const editForm = ref({
 });
 
 const originalUserData = ref<any>(null);
+
+// 新增用户相关
+const addDialogVisible = ref(false);
+const adding = ref(false);
+const addFormRef = ref();
+
+const addForm = ref({
+  username: '',
+  password: '',
+  confirmPassword: '',
+  nickname: '',
+  role: 'user',
+  email: '',
+  avatar: ''
+});
 
 const editRules = {
   username: [
@@ -209,6 +285,45 @@ const editRules = {
       },
       trigger: 'blur'
     }
+  ]
+};
+
+// 新增用户验证规则
+const validateConfirmPassword = (rule: any, value: string, callback: Function) => {
+  if (value !== addForm.value.password) {
+    callback(new Error('两次输入的密码不一致'));
+  } else {
+    callback();
+  }
+};
+
+const addRules = {
+  username: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { min: 3, max: 20, message: '用户名长度在 3 到 20 个字符', trigger: 'blur' },
+    { pattern: /^[a-zA-Z0-9][a-zA-Z0-9_]*[a-zA-Z0-9]$/, message: '用户名只能包含字母、数字、下划线，且不能以下划线开头或结尾', trigger: 'blur' }
+  ],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 8, max: 32, message: '密码长度在 8 到 32 个字符', trigger: 'blur' },
+    { pattern: /^(?=.*[a-zA-Z0-9])[a-zA-Z0-9]+$/, message: '密码必须包含至少一个数字或字母', trigger: 'blur' }
+  ],
+  confirmPassword: [
+    { required: true, message: '请再次输入密码', trigger: 'blur' },
+    { validator: validateConfirmPassword, trigger: 'blur' }
+  ],
+  nickname: [
+    { required: true, message: '请输入昵称', trigger: 'blur' },
+    { min: 1, max: 50, message: '昵称长度在 1 到 50 个字符', trigger: 'blur' }
+  ],
+  role: [
+    { required: true, message: '请选择角色', trigger: 'change' }
+  ],
+  email: [
+    { type: 'email', message: '请输入正确的邮箱地址', trigger: 'blur' }
+  ],
+  avatar: [
+    { max: 255, message: '头像URL长度不能超过255个字符', trigger: 'blur' }
   ]
 };
 
@@ -440,6 +555,113 @@ const handleDeleteUser = async (user: any) => {
   }
 };
 
+// 打开新增用户对话框
+const openAddUserDialog = () => {
+  addForm.value = {
+    username: '',
+    password: '',
+    confirmPassword: '',
+    nickname: '',
+    role: 'user',
+    email: '',
+    avatar: ''
+  };
+  addDialogVisible.value = true;
+};
+
+// 新增用户
+const handleAddUser = async () => {
+  try {
+    await addFormRef.value.validate((valid: boolean, invalidFields: any) => {
+      if (!valid) {
+        const firstField = Object.keys(invalidFields)[0];
+        if (firstField && invalidFields[firstField][0]) {
+          ElMessage.error(invalidFields[firstField][0].message);
+        } else {
+          ElMessage.error('请检查输入信息是否符合要求');
+        }
+        throw new Error('表单验证失败');
+      }
+    });
+
+    adding.value = true;
+
+    const accessToken = localStorage.getItem('accessToken');
+    if (!accessToken) {
+      throw new Error('未登录，请先登录');
+    }
+
+    // 构建请求数据
+    const requestData: any = {
+      username: addForm.value.username,
+      password: addForm.value.password,
+      nickname: addForm.value.nickname,
+      role: addForm.value.role
+    };
+
+    // 可选字段
+    if (addForm.value.email) {
+      requestData.email = addForm.value.email;
+    }
+    if (addForm.value.avatar) {
+      requestData.avatar = addForm.value.avatar;
+    }
+
+    // 发送请求
+    const response = await fetch(`${API_BASE_URL}/api/users`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+      },
+      body: JSON.stringify(requestData),
+      credentials: 'include'
+    });
+
+    const responseData = await response.json();
+    
+    if (response.ok && responseData.code === 200) {
+      ElMessage.success('用户创建成功');
+      addDialogVisible.value = false;
+      // 重新加载用户列表
+      await fetchUsers();
+    } else {
+      // 处理错误响应
+      if (response.status === 400) {
+        throw new Error(responseData.detail || '用户名已存在');
+      } else if (response.status === 422 && responseData.detail && Array.isArray(responseData.detail) && responseData.detail.length > 0) {
+        // 处理 [{ loc: [...], msg: "...", type: "..." }] 格式的错误
+        const errorMessages = responseData.detail
+          .map((err: any) => {
+            const msg = err.msg || '';
+            return msg.replace(/^Value error,\s*/, '');
+          })
+          .filter((msg: string) => msg.length > 0)
+          .join('\n');
+        throw new Error(errorMessages || '创建用户失败');
+      } else if (response.status === 422 && responseData.errors) {
+        const errorMessages = Object.values(responseData.errors).flat().join('\n');
+        throw new Error(errorMessages || '创建用户失败');
+      } else {
+        throw new Error(responseData.msg || '创建用户失败');
+      }
+    }
+  } catch (err: any) {
+    const errorMessage = err.message;
+    
+    if (errorMessage === '表单验证失败') {
+      // 表单验证失败已经在validate回调中处理过
+    } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+      ElMessage.error('网络连接失败，请检查网络设置');
+    } else {
+      ElMessage.error(errorMessage || '创建用户失败');
+    }
+  } finally {
+    adding.value = false;
+  }
+};
+
 // 组件挂载时获取用户列表
 onMounted(() => {
   getCurrentUserId();
@@ -450,16 +672,39 @@ onMounted(() => {
 <style lang="scss" scoped>
 .user-manage-card {
   z-index: 1;
-  padding: 20px;
-  width: 1000px;
+  width: 75%;
   margin: 5% auto;
-  border-radius: 5%;
+  border-radius: 15px;
+  background-color: #fff;
+  padding: 30px;
+  min-height: 80vh;
+}
+
+.header-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.header-left,
+.header-right {
+  flex: 1;
+}
+
+.header-left {
+  text-align: left;
+}
+
+.header-right {
+  text-align: right;
 }
 
 .title {
-  text-align: center;
-  margin-bottom: 20px;
+  margin: 0;
   color: #303133;
+  text-align: center;
+  flex: 1;
 }
 
 .loading-container,

@@ -268,7 +268,7 @@ const handleLogin = async () => {
   padding-bottom: 30px;
   width: 400px;
   margin-top: 5%;
-  border-radius: 5%;
+  border-radius: 15px;
 }
 
 /* 增加表单项目之间的间距，确保错误信息完整显示 */
