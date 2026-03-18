@@ -74,11 +74,13 @@ const validateConfirmPassword = (rule: any, value: string, callback: Function) =
 const rules = {
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
-    { min: 3, max: 20, message: '长度在 3 到 20 个字符', trigger: 'blur' }
+    { min: 3, max: 20, message: '长度在 3 到 20 个字符', trigger: 'blur' },
+    { pattern: /^[a-zA-Z0-9][a-zA-Z0-9_]*[a-zA-Z0-9]$/, message: '只能包含字母、数字、下划线，且不能以下划线开头或结尾', trigger: 'blur' }
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, max: 20, message: '长度在 6 到 20 个字符', trigger: 'blur' }
+    { min: 8, max: 32, message: '长度在 8 到 32 个字符', trigger: 'blur' },
+    { pattern: /^(?=.*[a-zA-Z0-9])[a-zA-Z0-9]+$/, message: '必须包含至少一个数字或字母', trigger: 'blur' }
   ],
   confirmPassword: [
     { required: true, message: '请再次输入密码', trigger: 'blur' },
@@ -86,7 +88,7 @@ const rules = {
   ],
   nickname: [
     { required: true, message: '请输入昵称', trigger: 'blur' },
-    { min: 1, max: 20, message: '长度在 1 到 20 个字符', trigger: 'blur' }
+    { min: 1, max: 50, message: '长度在 1 到 50 个字符', trigger: 'blur' }
   ],
   role: [
     { required: true, message: '请选择角色', trigger: 'change' }
@@ -133,9 +135,16 @@ const handleRegister = async () => {
         // 用户已存在
         ElMessage.error(data.detail || '注册失败，用户名已存在');
       } else if (response.status === 422) {
-        // 验证错误
-        const errorMsg = data.detail?.map((err: any) => err.msg).join('; ') || '注册信息验证失败';
-        ElMessage.error(errorMsg);
+        // 验证错误，与Profile.vue中的处理方式一致
+        if (data.errors) {
+          const errorMessages = Object.values(data.errors).flat().join('\n');
+          ElMessage.error(errorMessages || '注册信息验证失败');
+        } else if (data.detail) {
+          const errorMsg = Array.isArray(data.detail) ? data.detail.map((err: any) => err.msg).join('; ') : data.detail;
+          ElMessage.error(errorMsg || '注册信息验证失败');
+        } else {
+          ElMessage.error('注册信息验证失败');
+        }
       } else {
         // 其他错误
         ElMessage.error(data.detail || data.msg || '注册失败，请稍后重试');
@@ -160,6 +169,13 @@ const handleRegister = async () => {
   width: 400px;
   margin-top: 5%;
   border-radius: 5%;
+}
+
+/* 确保表单验证提示信息完整显示 */
+:deep(.el-form-item__error) {
+  white-space: normal;
+  word-break: break-word;
+  max-width: 100%;
 }
 
 .login-link {
