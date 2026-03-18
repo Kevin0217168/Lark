@@ -11,6 +11,35 @@
       <div class="header-right"></div>
     </div>
 
+    <div class="filter-section">
+      <div class="filter-left">
+        <el-select
+          v-model="filterRole"
+          placeholder="筛选角色"
+          clearable
+          style="width: 150px"
+          @change="handleFilterChange"
+        >
+          <el-option label="全部角色" value="" />
+          <el-option label="管理员" value="root" />
+          <el-option label="普通用户" value="user" />
+        </el-select>
+      </div>
+      <div class="filter-right">
+        <el-input
+          v-model="searchUsername"
+          placeholder="输入用户名搜索"
+          clearable
+          style="width: 250px"
+          @input="handleSearchChange"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+      </div>
+    </div>
+
     <div v-if="loading" class="loading-container">
       <el-icon class="is-loading"><Loading /></el-icon>
       <span>加载中...</span>
@@ -23,7 +52,7 @@
     </div>
 
     <div v-else>
-      <el-table :data="users" style="width: 100%" v-loading="tableLoading">
+      <el-table :data="filteredUsers" style="width: 100%" v-loading="tableLoading">
         <el-table-column prop="id" label="ID" width="60" align="center" />
         <el-table-column prop="avatar" label="头像" width="80" align="center">
           <template #default="scope">
@@ -179,9 +208,9 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted } from "vue";
+import { ref, onMounted, computed } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Loading, Warning, Plus } from "@element-plus/icons-vue";
+import { Loading, Warning, Plus, Search } from "@element-plus/icons-vue";
 
 const API_BASE_URL = '';
 
@@ -190,6 +219,39 @@ const tableLoading = ref(false);
 const error = ref('');
 const users = ref<any[]>([]);
 const currentUserId = ref(0);
+
+// 筛选和搜索
+const filterRole = ref('');
+const searchUsername = ref('');
+
+// 过滤后的用户列表
+const filteredUsers = computed(() => {
+  let result = users.value;
+
+  // 根据角色筛选
+  if (filterRole.value) {
+    result = result.filter(user => user.role === filterRole.value);
+  }
+
+  // 根据用户名搜索
+  if (searchUsername.value) {
+    const searchTerm = searchUsername.value.toLowerCase();
+    result = result.filter(user => 
+      user.username.toLowerCase().includes(searchTerm)
+    );
+  }
+
+  return result;
+});
+
+const handleFilterChange = () => {
+  // 筛选变化时，computed会自动更新
+};
+
+const handleSearchChange = () => {
+  // 搜索变化时，computed会自动更新
+};
+
 const editDialogVisible = ref(false);
 const saving = ref(false);
 const editFormRef = ref();
@@ -685,6 +747,22 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+}
+
+.filter-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 15px 0;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.filter-left,
+.filter-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .header-left,
