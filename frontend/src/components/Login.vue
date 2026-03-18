@@ -185,6 +185,31 @@ const handleLogin = async () => {
       localStorage.setItem('accessToken', data.access_token);
       localStorage.setItem('tokenType', data.token_type || 'bearer');
       localStorage.setItem('avatar', data.avatar || '');
+      localStorage.setItem('role', data.role || '');
+      
+      // 立即获取用户信息以获取角色（如果登录接口没有返回角色）
+      if (!data.role) {
+        try {
+          const userResponse = await fetch(`${API_BASE_URL}/api/users/me`, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': `Bearer ${data.access_token}`
+            },
+            credentials: 'include'
+          });
+          
+          if (userResponse.ok) {
+            const userData = await userResponse.json();
+            if (userData.code === 200 && userData.data) {
+              localStorage.setItem('role', userData.data.role || '');
+              localStorage.setItem('avatar', userData.data.avatar || '');
+            }
+          }
+        } catch (err) {
+          console.error('获取用户信息失败:', err);
+        }
+      }
       
       // 触发自定义事件，通知其他组件登录状态已变化
       window.dispatchEvent(new CustomEvent('loginStatusChanged'));
