@@ -28,7 +28,7 @@ async def websocket_endpoint(websocket: WebSocket, id: str):
     if "bytes" in data:
       size = len(data["bytes"])
       print(f"Received {size} bytes")
-      for subscriber in device.subsrcibers:
+      for subscriber in device.subscribers:
         if subscriber.websocket == None:
           print(f"用户还未连接: {subscriber.id}")
           continue
