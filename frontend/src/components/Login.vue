@@ -40,11 +40,13 @@ const form = ref({
 const rules = {
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
-    { min: 3, max: 20, message: '长度在 3 到 20 个字符', trigger: 'blur' }
+    { min: 3, max: 20, message: '长度在 3 到 20 个字符', trigger: 'blur' },
+    { pattern: /^[a-zA-Z0-9][a-zA-Z0-9_]*[a-zA-Z0-9]$/, message: '用户名只能包含字母、数字、下划线，且不能以下划线开头或结尾', trigger: 'blur' }
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, max: 20, message: '长度在 6 到 20 个字符', trigger: 'blur' }
+    { min: 8, max: 32, message: '长度在 8 到 32 个字符', trigger: 'blur' },
+    { pattern: /^(?=.*[a-zA-Z0-9])[a-zA-Z0-9]+$/, message: '密码必须包含至少一个数字或字母', trigger: 'blur' }
   ]
 };
 
@@ -137,9 +139,19 @@ onMounted(async () => {
 // 后端接口地址: 通过Vite代理访问 /api/login
 const handleLogin = async () => {
   try {
-    await formRef.value.validate();
-    
-
+    // 验证表单，如果失败会抛出错误
+    await formRef.value.validate((valid: boolean, invalidFields: any) => {
+      if (!valid) {
+        // 提取第一个错误信息并显示
+        const firstField = Object.keys(invalidFields)[0];
+        if (firstField && invalidFields[firstField][0]) {
+          ElMessage.error(invalidFields[firstField][0].message);
+        } else {
+          ElMessage.error('请检查输入信息是否符合要求');
+        }
+        throw new Error('表单验证失败');
+      }
+    });
     
     loading.value = true;
     
@@ -181,12 +193,34 @@ const handleLogin = async () => {
       router.push('/Home');
     } else {
       // 处理错误响应
-      const errorMsg = data.detail || data.msg || '登录失败，请检查用户名和密码';
-      ElMessage.error(errorMsg);
+      if (response.status === 422 && data.detail && Array.isArray(data.detail) && data.detail.length > 0) {
+        // 处理 [{ loc: [...], msg: "...", type: "..." }] 格式的错误
+        const errorMessages = data.detail
+          .map((err: any) => {
+            const msg = err.msg || '';
+            // 移除 "Value error, " 前缀
+            return msg.replace(/^Value error,\s*/, '');
+          })
+          .filter((msg: string) => msg.length > 0)
+          .join('\n');
+        ElMessage.error(errorMessages || '登录失败');
+      } else {
+        const errorMsg = data.detail || data.msg || '登录失败，请检查用户名和密码';
+        ElMessage.error(errorMsg);
+      }
     }
   } catch (error) {
     console.error('登录错误:', error);
-    ElMessage.error('登录失败，请检查网络连接');
+    const errorMessage = (error as Error).message;
+    
+    // 根据错误类型显示不同的错误信息
+    if (errorMessage === '表单验证失败') {
+      // 表单验证失败已经在validate回调中处理过，这里不需要重复显示
+    } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+      ElMessage.error('网络连接失败，请检查网络设置');
+    } else {
+      ElMessage.error(errorMessage || '登录失败，请稍后重试');
+    }
   } finally {
     loading.value = false;
   }
@@ -203,6 +237,25 @@ const handleLogin = async () => {
   width: 400px;
   margin-top: 5%;
   border-radius: 5%;
+}
+
+/* 增加表单项目之间的间距，确保错误信息完整显示 */
+:deep(.el-form-item) {
+  margin-bottom: 36px;
+}
+
+/* 确保错误信息完整显示 */
+:deep(.el-form-item__error) {
+  white-space: normal;
+  word-break: break-word;
+  max-width: 100%;
+  margin-top: 8px;
+  line-height: 1.4;
+  padding: 0 0 5px 0;
+  min-height: 30px;
+  display: block;
+  overflow: visible !important;
+  font-size: 11px;
 }
 
 .register-link {
