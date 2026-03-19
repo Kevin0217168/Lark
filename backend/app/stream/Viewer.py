@@ -5,12 +5,13 @@ from typing import Annotated
 
 from deviceapi import Device
 from schema import CommonOut
+import json
 import Security
 import Db
 
 router = APIRouter(prefix="/viewer")
 
-# TODO: 回收机制
+
 viewerIdDict = {}
 
 
@@ -34,16 +35,26 @@ class Viewer:
     def disconnect(self):
         self.websocket = None
 
-    def subscribe(self, device):
-        self.subscribed_device.append(device)
+    async def subscribe(self, device:Device.Esp32):
+        print(device.subscribers)
+        # 检查设备状态
+        if len(device.subscribers) == 0:
+            # 如果之前还没有观看者, 通知上线
+            print("通知上线")
+            await device.websocket.send_json(json.dumps({"code":1, "item":"status", "key": "status", "value":"stream"}))
+            
+        # 用于向观看者转发
         device.subscribe(self)
+        # 用于注销时取消对应设备的转发
+        self.subscribed_device.append(device)
+        
 
     def unsubscribe(self, device):
         self.subscribed_device.remove(device)
         device.unsubscribe(self)
 
 
-@router.post("", response_model=CommonOut[None])
+@router.post("", response_model=CommonOut[None], deprecated=True)
 async def register_viewer(
     response: Response,
     op: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
@@ -60,7 +71,7 @@ async def register_viewer(
     return CommonOut(code=200, msg="viewer register OK.")
 
 
-@router.delete("", response_model=CommonOut[None])
+@router.delete("", response_model=CommonOut[None], deprecated=True)
 async def unregister_viewer(
     response: Response,
     op: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
@@ -103,7 +114,7 @@ async def subscribe_to_device(
         return CommonOut(code=400, msg="Device has not connected.")
     
     device = Device.esp32IdDict[device_id]
-    viewer.subscribe(device)
+    await viewer.subscribe(device)
     return CommonOut(code=200, msg="device subscribe OK.")
 
 @router.delete("/following/{device_id}", response_model=CommonOut[None])

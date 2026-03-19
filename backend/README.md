@@ -40,23 +40,23 @@ FastAPI + SQLite
 > 只要手动登录过, cookie有效期一天, 有效期使用`POST | /api/refresh`自动登录获取token, token有效期15分钟, 过期则会造成401响应, 此时再次调用自动登录获取新token, 在cookie有效期内都可以随时获取新token, 超过有效期返回401, 再次手动登录
  
 
-## 接口文档
-所有的接口都被搭建在api/路由下, 如路由`/device`相当于`api/device`
-### 路由 /users
+## 嵌入式ws通信规定
 
-
-### 路由 /device
-#### GET / 获取所有设备
-#### GET /{id} 获取对应id设备
-#### PUT /{id} 修改对应id设备,全部更新
-#### POST / 以服务端产生的id号创建设备
-#### POST /{id} 修改对应id设备,部分更新
-#### DELETE /{id} 删除对应id设备
-
-### 路由 /viewer
-#### GET / 获取所有观看者
-#### GET /{id} 获取对应id观看者
-#### PUT /{id} 修改对应id观看者,全部更新
-#### POST / 以服务端产生的id号创建观看者
-#### POST /{id} 修改对应id观看者,部分更新
-#### DELETE /{id} 删除对应id观看者
+### 发送格式
+```json
+{
+    "code": 0,         // 0查询, 1设定
+    "item": "status",  // 要操作的块
+    "key":  "status",
+    "value": "stream"
+}
+```
+### 接收格式
+```json
+{
+    "code": 0,         // 0失败, 1成功
+    "msg": "OK.",      // 返回信息
+    "key":  "status",  // 返回键
+    "value": "stream"  // 返回值
+}
+```
