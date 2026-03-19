@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 import uvicorn
 
-from stream import Stream
+from stream import Stream, Viewer
 from userapi import User, Login
 from deviceapi import Device
 
@@ -32,7 +32,6 @@ app = FastAPI(
 app.include_router(Stream.router)
 app.include_router(User.router)
 app.include_router(Login.router)
-app.include_router(Login.refresh_router)
 app.include_router(Device.router)
 
 # 挂载静态文件
@@ -78,4 +77,4 @@ async def hello(name: str):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app="main:app", host="localhost", port=8080, reload=True)
+    uvicorn.run(app="main:app", host="0.0.0.0", port=8080, reload=True)

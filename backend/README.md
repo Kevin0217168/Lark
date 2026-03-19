@@ -38,25 +38,48 @@ FastAPI + SQLite
             - 状态码200 参考1,设置请求头token, 登录成功
 
 > 只要手动登录过, cookie有效期一天, 有效期使用`POST | /api/refresh`自动登录获取token, token有效期15分钟, 过期则会造成401响应, 此时再次调用自动登录获取新token, 在cookie有效期内都可以随时获取新token, 超过有效期返回401, 再次手动登录
- 
 
-## 接口文档
-所有的接口都被搭建在api/路由下, 如路由`/device`相当于`api/device`
-### 路由 /users
+## 如何连接设备?
+1. 进入实时页面, 前端调用`wss://lark.mintlab.top/api/stream/viewer/ws?token=(登录获取的token)`
+与服务器建立ws连接, 注意token要传在参数里
+2. 调用`GET /devices`获取全部设备, 检查状态, 设备状态由后端自动设置
+    - **isOnline** 代表是否在线
+    - **status** 代表设备状态
+        - `standby`待机, 没有任何观看者
+        - `stream`推流, 自动采集图片并传输
+3. 按照返回设备数据中的`isOnline`字段显示可选列表, `为false`的显示灰色
+4. 用户选择在线设备, 前端发送请求`POST /stream/viewer/following/{device_id}`开启对应设备推流
+5. 从ws连接中接收设备json格式响应, code=1代表操作成功
+    -   ```json
+        {
+        "code": 1,
+        "msg": "进入推流模式.",
+        "key": "status",
+        "values": "stream"
+        }
+        ```
+6. 从ws连接中接收二进制数据, 直接显示图片
+    - 图片处理方法参考git `ws-test` 分支里的测试内容
+7. 调用`DELETE /stream/viewer/following/{device_id}` 取消服务器推流(也可以直接断开ws连接)
+8. 客户端ws断开服务器会自动处理内存, 当设备的观看者为0时, 自动关闭设备推流
 
+## 嵌入式ws通信规定(待完善)
 
-### 路由 /device
-#### GET / 获取所有设备
-#### GET /{id} 获取对应id设备
-#### PUT /{id} 修改对应id设备,全部更新
-#### POST / 以服务端产生的id号创建设备
-#### POST /{id} 修改对应id设备,部分更新
-#### DELETE /{id} 删除对应id设备
-
-### 路由 /viewer
-#### GET / 获取所有观看者
-#### GET /{id} 获取对应id观看者
-#### PUT /{id} 修改对应id观看者,全部更新
-#### POST / 以服务端产生的id号创建观看者
-#### POST /{id} 修改对应id观看者,部分更新
-#### DELETE /{id} 删除对应id观看者
+### 向设备发送格式
+```json
+{
+    "code": 0,         // 0查询, 1设定
+    "item": "status",  // 要操作的块
+    "key":  "status",
+    "value": "stream"
+}
+```
+### 从设备接收格式
+```json
+{
+    "code": 0,         // 0失败, 1成功
+    "msg": "OK.",      // 返回信息
+    "key":  "status",  // 返回键
+    "value": "stream"  // 返回值
+}
+```

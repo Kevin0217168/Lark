@@ -16,10 +16,9 @@ async def read_users_me(
     current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
 ):
     """
-    # 查询符合条件的用户列表
-    
-    结果为空返回404
+    # 根据请求头获取当前登录的用户信息
     """
+
     return CommonOut(data=current_user)
 
 
@@ -32,8 +31,11 @@ async def get_users(
     filter_query: Annotated[UsersFilter, Query()],
     db: Db.Session = Depends(Db.GetDb("GetUsers")),
 ):
+
     """
-    # 根据请求头获取当前登录的用户信息
+    # 查询符合条件的用户列表
+    
+    结果为空返回404
     """
     data = Db.GetUsers(db, **filter_query.model_dump())
     if len(data) == 0:
@@ -55,7 +57,7 @@ async def get_users(
     db: Db.Session = Depends(Db.GetDb("GetUsers")),
 ):
     """
-    # 根据ID获取单个设备
+    # 根据ID获取单个用户
     
     结果为空返回404
     """
@@ -114,7 +116,7 @@ async def update_user(
     db: Db.Session = Depends(Db.GetDb("UpdateUser")),
 ):
     """
-    # 使用唯一id更新设备信息
+    # 使用唯一id更新用户信息
     用户不存在返回404, 规则不符返回422, 更改成功返回修改后的用户信息
     
     ## 后端验证规则
@@ -153,15 +155,20 @@ async def delete_user(
     db: Db.Session = Depends(Db.GetDb("DeleteUser")),
 ):
     """
-    # 使用唯一id删除设备（仅 root 可操作）
+    # 使用唯一id删除用户
+    
+    
+    ## 后端规则
+    - user只能删除自己(用于注销)
+    - root可以删除所有
     """
-    if op.role != "root":
+
+    if op.id != id and op.role != "root":
         return JSONResponse(
             status_code=status.HTTP_403_FORBIDDEN,
             content=CommonOut(
                 code=status.HTTP_403_FORBIDDEN, msg="Permission denied.", data=None
-            ).model_dump(),
-        )
+            ).model_dump(),)
     data = Db.DeleteUser(db, id=id)
     if data:
         # 用户唯一

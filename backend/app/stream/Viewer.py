@@ -1,23 +1,33 @@
 import uuid
-from fastapi import WebSocket, APIRouter, WebSocketException
+from fastapi import WebSocket, APIRouter, WebSocketException, Response
+from fastapi import status, Path, Query, Depends, Body
 from typing import Annotated
 
 from deviceapi import Device
+from schema import CommonOut
+import json
+import Security
+import Db
 
-router = APIRouter(prefix="/viewer", tags=["viewer"])
+router = APIRouter(prefix="/viewer")
 
-# TODO: 回收机制
+
 viewerIdDict = {}
 
+
 class Viewer:
-    def __init__(self):
-        self.id = str(uuid.uuid4().hex)
+    def __init__(self, user: Db.M_Users):
+        self.id = user.id
         self.websocket = None
         viewerIdDict[self.id] = self
         self.subscribed_device = []
-    
-    def __delete__(self, instance):
-        viewerIdDict.pop(self.id, None)
+
+    def unregister(self):
+        viewerIdDict.pop(self.id)
+        # 在对应设备上取消订阅
+        for i in self.subscribed_device:
+            i.subscribers.pop()
+        del self
 
     def connect(self, websocket: WebSocket):
         self.websocket = websocket
@@ -25,27 +35,121 @@ class Viewer:
     def disconnect(self):
         self.websocket = None
 
-    def subscribe(self, device):
-        self.subscribed_device.append(device)
+    async def subscribe(self, device:Device.Esp32):
+        print(device.subscribers)
+        # 检查设备状态
+        if len(device.subscribers) == 0:
+            # 如果之前还没有观看者, 通知上线
+            print(f"通知设备{device.id}上线")
+            await device.websocket.send_json({"code":1, "item":"status", "key": "status", "values":"stream"})
+            
+        # 用于向观看者转发
         device.subscribe(self)
+        # 用于注销时取消对应设备的转发
+        self.subscribed_device.append(device)
+        
 
     def unsubscribe(self, device):
         self.subscribed_device.remove(device)
         device.unsubscribe(self)
 
-@router.get("/register")
-async def register_viewer():
-    viewer = Viewer()
-    return viewer.id
 
-@router.get("/subscribe")
-async def subscribe_to_device(id: Annotated[str, "Viewer ID", ],
-                              device_id: Annotated[str, "Device ID"]):
-    if id not in viewerIdDict:
-        raise WebSocketException(code=1008, reason="Viewer ID not found")
+@router.post("", response_model=CommonOut[None], deprecated=True)
+async def register_viewer(
+    response: Response,
+    op: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
+):
+    """
+    # 注册观看者身份
+
+    服务器创建临时内存对象
+    """
+    if op.id in viewerIdDict:
+        response.status_code = 400
+        return CommonOut(code=400, msg="Viewer has registered.")
+    Viewer(op)
+    return CommonOut(code=200, msg="viewer register OK.")
+
+
+@router.delete("", response_model=CommonOut[None], deprecated=True)
+async def unregister_viewer(
+    response: Response,
+    op: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
+):
+    """
+    # 注销观看者身份
+
+    服务器销毁临时内存对象
+    """
+    if op.id not in viewerIdDict:
+        response.status_code = 400
+        return CommonOut(code=400, msg="Viewer has not registered.")
+    
+    viewerIdDict[op.id].unregister()
+    return CommonOut(code=200, msg="viewer unregister OK.")
+
+
+@router.post("/following/{device_id}", response_model=CommonOut[None])
+async def subscribe_to_device(
+    device_id: Annotated[int, "Device ID"],
+    response: Response,
+    op: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
+    db: Db.Session = Depends(Db.GetDb("subscribe_to_device")),
+):
+    """
+    # 订阅设备推流
+    """
+    data = Db.GetDevices(db, id=device_id)
+    if len(data) == 0:
+        response.status_code = 404
+        return CommonOut(code=404, msg="Device ID not found.")
+    if op.id not in viewerIdDict:
+        response.status_code = 404
+        return CommonOut(code=404, msg="Viewer has not registerd.")
+    
+    viewer = viewerIdDict[op.id]
+    
     if device_id not in Device.esp32IdDict:
-        raise WebSocketException(code=1008, reason="Device ID not found")
-    viewer = viewerIdDict[id]
+        response.status_code = 400
+        return CommonOut(code=400, msg="Device has not connected.")
+    
     device = Device.esp32IdDict[device_id]
-    viewer.subscribe(device)
-    return {"code": 200, "message": f"Subscribed to device {device_id}"}
+    if device in viewer.subscribed_device:
+        response.status_code = 400
+        return CommonOut(code=400, msg="Device has subscribed.")
+    
+    await viewer.subscribe(device)
+    return CommonOut(code=200, msg="device subscribe OK.")
+
+@router.delete("/following/{device_id}", response_model=CommonOut[None])
+async def unsubscribe_to_device(
+    device_id: Annotated[int, "Device ID"],
+    response: Response,
+    op: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
+    db: Db.Session = Depends(Db.GetDb("unsubscribe_to_device")),
+):
+    """
+    # 取消订阅设备
+    """
+    data = Db.GetDevices(db, id=device_id)
+    if len(data) == 0:
+        response.status_code = 404
+        return CommonOut(code=404, msg="Device ID not found.")
+    if op.id not in viewerIdDict:
+        response.status_code = 404
+        return CommonOut(code=404, msg="Viewer has not registerd.")
+    
+    viewer = viewerIdDict[op.id]
+    
+    if device_id not in Device.esp32IdDict:
+        response.status_code = 400
+        return CommonOut(code=400, msg="Device has not connected.")
+    
+    
+    device = Device.esp32IdDict[device_id]
+    if device not in viewer.subscribed_device:
+        response.status_code = 404
+        return CommonOut(code=404, msg="Device has not subscribed.")
+    
+    viewer.unsubscribe(device)
+    return CommonOut(code=200, msg="device unsubscribe OK.")
