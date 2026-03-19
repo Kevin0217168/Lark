@@ -159,7 +159,7 @@ void app_main(void)
     // 注册回调函数
     Websocket_event_handler_register(NULL, ws_text_handler);
 
-    WebsocketStart("ws://192.168.1.199", path_data, 8080);
+    WebsocketStart("wss://lark.mintlab.top", path_data, 443);
 
     // 等待ws连接成功
     while (!WebsocketIsConnected())
