@@ -24,17 +24,21 @@ class Esp32:
         self.id = device.id
         self.websocket = None
         esp32IdDict[self.id] = self
+        self.subscribers = []
 
     # def __delete__(self, instance):
 
-    def connected(self, db:Db.Session, websocket: WebSocket):
+    def connected(self, websocket: WebSocket):
         esp32IdDict[self.id] = self
         self.websocket = websocket
-        Db.UpdateDevice(db, id=self.id, isOnline=True, status="stream")
+        with Db.OpenDb("Device Connected") as db:
+            Db.UpdateDevice(db, id=self.id, isOnline=True, status="stream")
 
     def disconnected(self):
         self.websocket = None
-        esp32IdDict.pop(key=self.id)
+        esp32IdDict.pop(self.id)
+        with Db.OpenDb("Device Disconnected") as db:
+            Db.UpdateDevice(db, id=self.id, isOnline=False, status="none")
         del self
 
     def subscribe(self, subscriber):

@@ -22,7 +22,10 @@ class Viewer:
         self.subscribed_device = []
 
     def unregister(self):
-        viewerIdDict.pop(self.id, None)
+        viewerIdDict.pop(self.id)
+        # 在对应设备上取消订阅
+        for i in self.subscribed_device:
+            i.subscribers.pop()
         del self
 
     def connect(self, websocket: WebSocket):
@@ -93,10 +96,15 @@ async def subscribe_to_device(
         response.status_code = 404
         return CommonOut(code=404, msg="Viewer has not registerd.")
     
-    device = data.pop()
     viewer = viewerIdDict[op.id]
+    
+    if device_id not in Device.esp32IdDict:
+        response.status_code = 400
+        return CommonOut(code=400, msg="Device has not connected.")
+    
+    device = Device.esp32IdDict[device_id]
     viewer.subscribe(device)
-    return CommonOut(code=200, msg="viewer unregister OK.")
+    return CommonOut(code=200, msg="device subscribe OK.")
 
 @router.delete("/following/{device_id}", response_model=CommonOut[None])
 async def unsubscribe_to_device(
@@ -116,7 +124,12 @@ async def unsubscribe_to_device(
         response.status_code = 404
         return CommonOut(code=404, msg="Viewer has not registerd.")
     
-    device = data.pop()
     viewer = viewerIdDict[op.id]
+    
+    if device_id not in Device.esp32IdDict:
+        response.status_code = 400
+        return CommonOut(code=400, msg="Device has not connected.")
+    
+    device = Device.esp32IdDict[device_id]
     viewer.unsubscribe(device)
-    return CommonOut(code=200, msg="viewer unregister OK.")
+    return CommonOut(code=200, msg="device unsubscribe OK.")
