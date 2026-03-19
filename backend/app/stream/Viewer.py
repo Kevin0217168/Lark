@@ -40,8 +40,8 @@ class Viewer:
         # 检查设备状态
         if len(device.subscribers) == 0:
             # 如果之前还没有观看者, 通知上线
-            print("通知上线")
-            await device.websocket.send_json(json.dumps({"code":1, "item":"status", "key": "status", "value":"stream"}))
+            print(f"通知设备{device.id}上线")
+            await device.websocket.send_json({"code":1, "item":"status", "key": "status", "values":"stream"})
             
         # 用于向观看者转发
         device.subscribe(self)
@@ -114,6 +114,10 @@ async def subscribe_to_device(
         return CommonOut(code=400, msg="Device has not connected.")
     
     device = Device.esp32IdDict[device_id]
+    if device in viewer.subscribed_device:
+        response.status_code = 400
+        return CommonOut(code=400, msg="Device has subscribed.")
+    
     await viewer.subscribe(device)
     return CommonOut(code=200, msg="device subscribe OK.")
 
@@ -141,6 +145,11 @@ async def unsubscribe_to_device(
         response.status_code = 400
         return CommonOut(code=400, msg="Device has not connected.")
     
+    
     device = Device.esp32IdDict[device_id]
+    if device not in viewer.subscribed_device:
+        response.status_code = 404
+        return CommonOut(code=404, msg="Device has not subscribed.")
+    
     viewer.unsubscribe(device)
     return CommonOut(code=200, msg="device unsubscribe OK.")

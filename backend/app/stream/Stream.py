@@ -27,6 +27,7 @@ async def websocket_endpoint(
 
     # 默认进入standby
     device.connected(websocket)
+    await websocket.send_json({"code": 1, "item": "status", "key": "status", "values": "standby"})
     try:
         while True:
             data = await websocket.receive()
@@ -36,8 +37,9 @@ async def websocket_endpoint(
                 try:
                     json_data = json.loads(data["text"])
                 except json.JSONDecodeError:
-                    await websocket.send_text("Invalid JSON received")
+                    # await websocket.send_text("Invalid JSON received")
                     # 直接跳过这次解码环节
+                    print("解码失败")
                     continue
                 print(json_data)
                 try:
@@ -59,7 +61,6 @@ async def websocket_endpoint(
                 # 给所有订阅者转发消息
                 for subscriber in device.subscribers:
                     await subscriber.websocket.send_json(json_data)
-                
 
             if "bytes" in data:
                 size = len(data["bytes"])
@@ -68,13 +69,19 @@ async def websocket_endpoint(
                     print("设备观看者为0")
                     # 发送休眠信息
                     await websocket.send_json(
-                        json.dumps({"code":1, "item":"status", "key": "status", "value":"standby"})
+                            {
+                                "code": 1,
+                                "item": "status",
+                                "key": "status",
+                                "values": "standby",
+                            }
                     )
                 else:
                     # 给所有观看者转发信息
                     for subscriber in device.subscribers:
                         await subscriber.websocket.send_bytes(data["bytes"])
-    except (WebSocketDisconnect, RuntimeError):
+    except (WebSocketDisconnect, RuntimeError) as e:
+        print("设备已断开: ", e)
         for subscriber in device.subscribers:
             if subscriber.websocket == None:
                 print(f"用户还未连接: {subscriber.id}")

@@ -32,7 +32,7 @@ class Esp32:
         esp32IdDict[self.id] = self
         self.websocket = websocket
         with Db.OpenDb("Device Connected") as db:
-            Db.UpdateDevice(db, id=self.id, isOnline=True, status="standy")
+            Db.UpdateDevice(db, id=self.id, isOnline=True, status="standby")
 
     def disconnected(self):
         self.websocket = None
