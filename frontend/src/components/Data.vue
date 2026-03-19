@@ -25,29 +25,45 @@
           <!-- 设备数据 -->
           <div class="device-data" v-if="selectedDevice">
             <h3>设备数据</h3>
-            <div class="data-card-content">
-              <div class="data-item">
-                <span class="data-label">设备名称:</span>
-                <span class="data-value">{{ selectedDevice.name }}</span>
+            <div class="data-card-content compact">
+              <div class="data-row">
+                <div class="data-cell">
+                  <el-icon><Monitor /></el-icon>
+                  <span class="cell-label">名称</span>
+                  <span class="cell-value">{{ selectedDevice.name }}</span>
+                </div>
+                <div class="data-cell">
+                  <el-icon><CircleCheck v-if="selectedDevice.status === 'online'" /><CircleClose v-else /></el-icon>
+                  <span class="cell-label">状态</span>
+                  <el-tag :type="selectedDevice.status === 'online' ? 'success' : 'danger'" size="small">
+                    {{ selectedDevice.status === 'online' ? '在线' : '离线' }}
+                  </el-tag>
+                </div>
               </div>
-              <div class="data-item">
-                <span class="data-label">设备状态:</span>
-                <span class="data-value" :class="selectedDevice.status">{{ selectedDevice.status === 'online' ? '在线' : '离线' }}</span>
+              <div class="data-row">
+                <div class="data-cell">
+                  <el-icon><Odometer /></el-icon>
+                  <span class="cell-label">温度</span>
+                  <span class="cell-value highlight">{{ selectedDevice.temperature }}°C</span>
+                </div>
+                <div class="data-cell">
+                  <el-icon><Sort /></el-icon>
+                  <span class="cell-label">湿度</span>
+                  <span class="cell-value highlight">{{ selectedDevice.humidity }}%</span>
+                </div>
               </div>
-              <div class="data-item">
-                <span class="data-label">温度:</span>
-                <span class="data-value">{{ selectedDevice.temperature }} °C</span>
-              </div>
-              <div class="data-item">
-                <span class="data-label">湿度:</span>
-                <span class="data-value">{{ selectedDevice.humidity }} %</span>
-              </div>
-              <div class="data-item">
-                <span class="data-label">创建时间:</span>
-                <span class="data-value">{{ selectedDevice.createTime }}</span>
+              <div class="data-row full">
+                <div class="data-cell">
+                  <el-icon><Clock /></el-icon>
+                  <span class="cell-label">创建时间</span>
+                  <span class="cell-value time">{{ selectedDevice.createTime }}</span>
+                </div>
               </div>
               <div class="data-actions">
-                <el-button type="primary" @click="goToFullscreen">查看大图模式</el-button>
+                <el-button type="primary" size="small" @click="goToFullscreen">
+                  <el-icon><FullScreen /></el-icon>
+                  查看大图
+                </el-button>
               </div>
             </div>
           </div>
@@ -55,12 +71,37 @@
         
         <!-- 右侧视频流区域 -->
         <div class="data-right">
-          <h3>实时监控</h3>
+          <div class="video-header">
+            <h3>实时监控</h3>
+            <div class="video-controls">
+              <el-button 
+                :type="flipHorizontal ? 'primary' : 'default'"
+                size="small"
+                @click="toggleHorizontalFlip"
+              >
+                <el-icon><Switch /></el-icon>
+                左右翻转
+              </el-button>
+              <el-button 
+                :type="flipVertical ? 'primary' : 'default'"
+                size="small"
+                @click="toggleVerticalFlip"
+              >
+                <el-icon><Sort /></el-icon>
+                上下翻转
+              </el-button>
+              <div class="quality-control">
+                <span class="quality-label">视频质量</span>
+                <el-slider v-model="imageQuality" :min="1" :max="100" :disabled="true" style="width: 120px" />
+              </div>
+            </div>
+          </div>
           <div class="video-card">
             <div class="video-container" v-if="selectedDevice && currentFrameImage">
               <img 
                 :src="currentFrameImage" 
                 class="video-stream"
+                :class="{ 'flip-horizontal': flipHorizontal, 'flip-vertical': flipVertical }"
                 alt="实时监控画面"
               />
               <div class="frame-info">
@@ -189,7 +230,7 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useDeviceStore } from '../stores/deviceStore';
 import { ElMessage, ElIcon } from 'element-plus';
-import { Warning } from '@element-plus/icons-vue';
+import { Warning, Switch, Sort, Monitor, CircleCheck, CircleClose, Odometer, Clock, FullScreen } from '@element-plus/icons-vue';
 import * as echarts from 'echarts';
 
 const route = useRoute();
@@ -279,6 +320,21 @@ const lastFrameTime = ref<string>('');
 const connectionError = ref<string>('');
 let ws: WebSocket | null = null;
 let currentImageUrl: string = '';
+
+// 视频翻转控制
+const flipHorizontal = ref(false);
+const flipVertical = ref(false);
+const imageQuality = ref(80); // 图片质量滑条值（空实现）
+
+// 切换左右翻转
+const toggleHorizontalFlip = () => {
+  flipHorizontal.value = !flipHorizontal.value;
+};
+
+// 切换上下翻转
+const toggleVerticalFlip = () => {
+  flipVertical.value = !flipVertical.value;
+};
 
 // 处理接收到的图片帧数据
 const handleFrameData = async (base64Data: string) => {
@@ -839,6 +895,115 @@ const goToFullscreen = () => {
 
 .data-actions .el-button {
   width: 100%;
+}
+
+/* 优化后的设备数据展示样式 */
+.data-card-content.compact {
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 10px;
+}
+
+.data-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.data-row:last-child {
+  margin-bottom: 0;
+}
+
+.data-row.full {
+  flex-direction: column;
+}
+
+.data-cell {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.data-cell .el-icon {
+  color: #909399;
+  font-size: 14px;
+}
+
+.cell-label {
+  color: #909399;
+  font-size: 12px;
+  min-width: 36px;
+}
+
+.cell-value {
+  color: #303133;
+  font-size: 13px;
+  font-weight: 500;
+  flex: 1;
+  text-align: right;
+}
+
+.cell-value.highlight {
+  color: #409eff;
+  font-size: 14px;
+}
+
+.cell-value.time {
+  font-size: 11px;
+  color: #606266;
+}
+
+/* 视频控制区域样式 */
+.video-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.video-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #303133;
+}
+
+.video-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.quality-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 10px;
+  padding-left: 10px;
+  border-left: 1px solid #e4e7ed;
+}
+
+.quality-label {
+  font-size: 13px;
+  color: #606266;
+  white-space: nowrap;
+}
+
+/* 视频翻转样式 */
+.video-stream.flip-horizontal {
+  transform: scaleX(-1);
+}
+
+.video-stream.flip-vertical {
+  transform: scaleY(-1);
+}
+
+.video-stream.flip-horizontal.flip-vertical {
+  transform: scaleX(-1) scaleY(-1);
 }
 
 .analysis-content {
