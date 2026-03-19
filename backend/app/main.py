@@ -32,7 +32,6 @@ app = FastAPI(
 app.include_router(Stream.router)
 app.include_router(User.router)
 app.include_router(Login.router)
-app.include_router(Login.refresh_router)
 app.include_router(Device.router)
 
 # 挂载静态文件

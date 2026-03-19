@@ -8,12 +8,11 @@ from schema import *
 import Db
 import Security
 
-router = APIRouter(prefix="/login", tags=["Login"])
-refresh_router = APIRouter(prefix="/refresh", tags=["Login"])
+router = APIRouter(tags=["Login"])
 
 
 @router.post(
-    "",
+    "/login",
     description="用户登录, 记录cookie, 并发放短token",
     responses={**R200_LOGIN_SUCCESS, **R400_LOGIN_INCORRECT},
 )
@@ -55,8 +54,8 @@ def login(
         )
 
 
-@refresh_router.post(
-    "", description="通过cookie验证登录状态, 刷新token", responses=R200_LOGIN_SUCCESS
+@router.post(
+    "/refresh", description="通过cookie验证登录状态, 刷新token", responses=R200_LOGIN_SUCCESS
 )
 async def RefreshToken(
     op: Annotated[Db.M_Users, Depends(Security.GetCurrentUserByCookie)],
@@ -64,3 +63,24 @@ async def RefreshToken(
 ):
     token = Security.CreateAccessToken({"username": op.username, "sub": "token"})
     return {"access_token": token, "token_type": "bearer"}
+
+@router.post(
+    "/logout",
+    response_model=CommonOut[Db.UserOut],
+)
+async def logout_user( 
+    response: Response,
+    op: Annotated[Db.M_Users, Depends(Security.GetCurrentUserByCookie)],
+):
+    """
+    # 用户单点退出登录(使本机cookie失效)
+    
+    退出登录成功返回退出的用户信息
+    """
+    
+    response.delete_cookie(key="long_token",
+                value="",
+                secure=True,  # 仅HTTPS传输
+                httponly=True,  # 禁止JS访问
+                )
+    return CommonOut(code=200, msg="Logout.", data=op)
