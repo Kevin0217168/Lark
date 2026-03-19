@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 import uvicorn
 
-from stream import Stream
+from stream import Stream, Viewer
 from userapi import User, Login
 from deviceapi import Device
 

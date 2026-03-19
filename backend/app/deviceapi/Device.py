@@ -17,20 +17,25 @@ from schema import (
 
 router = APIRouter(prefix="/devices", tags=["Devices"])
 
+esp32IdDict = {}
 
 class Esp32:
-    def __init__(self, name=None):
-        pass
+    def __init__(self, device:Db.M_Devices):
+        self.id = device.id
+        self.websocket = None
+        esp32IdDict[self.id] = self
 
     # def __delete__(self, instance):
 
-    def connected(self, websocket: WebSocket):
-        self.status = "online"
+    def connected(self, db:Db.Session, websocket: WebSocket):
+        esp32IdDict[self.id] = self
         self.websocket = websocket
+        Db.UpdateDevice(db, id=self.id, isOnline=True, status="stream")
 
     def disconnected(self):
-        self.status = "offline"
         self.websocket = None
+        esp32IdDict.pop(key=self.id)
+        del self
 
     def subscribe(self, subscriber):
         self.subscribers.append(subscriber)
