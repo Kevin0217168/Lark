@@ -79,7 +79,6 @@ async def logout_user(
     """
     
     response.delete_cookie(key="long_token",
-                value="",
                 secure=True,  # 仅HTTPS传输
                 httponly=True,  # 禁止JS访问
                 )
