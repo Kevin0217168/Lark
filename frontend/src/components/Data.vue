@@ -33,10 +33,10 @@
                   <span class="cell-value">{{ selectedDevice.name }}</span>
                 </div>
                 <div class="data-cell">
-                  <el-icon><CircleCheck v-if="selectedDevice.status === 'online'" /><CircleClose v-else /></el-icon>
+                  <el-icon><CircleCheck v-if="selectedDevice.isOnline" /><CircleClose v-else /></el-icon>
                   <span class="cell-label">状态</span>
-                  <el-tag :type="selectedDevice.status === 'online' ? 'success' : 'danger'" size="small">
-                    {{ selectedDevice.status === 'online' ? '在线' : '离线' }}
+                  <el-tag :type="selectedDevice.isOnline ? 'success' : 'danger'" size="small">
+                    {{ selectedDevice.isOnline ? '在线' : '离线' }}
                   </el-tag>
                 </div>
               </div>
@@ -75,6 +75,15 @@
             <h3>实时监控</h3>
             <div class="video-controls">
               <el-button 
+                type="warning"
+                size="small"
+                @click="reconnectWebSocket"
+                :disabled="!selectedDeviceId || isWebSocketConnected"
+              >
+                <el-icon><Refresh /></el-icon>
+                手动重连
+              </el-button>
+              <el-button 
                 :type="flipHorizontal ? 'primary' : 'default'"
                 size="small"
                 @click="toggleHorizontalFlip"
@@ -101,11 +110,17 @@
               <img 
                 :src="currentFrameImage" 
                 class="video-stream"
-                :class="{ 'flip-horizontal': flipHorizontal, 'flip-vertical': flipVertical }"
+                :class="{ 'flip-horizontal': flipHorizontal, 'flip-vertical': flipVertical, 'disconnected': isStreamDisconnected }"
                 alt="实时监控画面"
               />
               <div class="frame-info">
                 <span>更新时间: {{ lastFrameTime }}</span>
+              </div>
+              <div class="stream-disconnected-overlay" v-if="isStreamDisconnected">
+                <div class="disconnected-content">
+                  <el-icon class="disconnected-icon" :size="48"><Warning /></el-icon>
+                  <div class="disconnected-message">视频流已断联，请重连</div>
+                </div>
               </div>
             </div>
             <div class="video-error" v-else-if="selectedDevice && connectionError">
@@ -114,8 +129,11 @@
                 <div class="error-message">{{ connectionError }}</div>
               </div>
             </div>
+            <div class="video-placeholder" v-else-if="selectedDevice">
+              <el-empty description="未开始实时监控" />
+            </div>
             <div class="video-placeholder" v-else>
-              <el-empty description="请选择设备查看实时监控" />
+              <el-empty description="请选择设备" />
             </div>
           </div>
         </div>
@@ -229,13 +247,18 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useDeviceStore } from '../stores/deviceStore';
-import { ElMessage, ElIcon } from 'element-plus';
+import { ElMessage, ElMessageBox, ElIcon } from 'element-plus';
 import { Warning, Switch, Sort, Monitor, CircleCheck, CircleClose, Odometer, Clock, FullScreen } from '@element-plus/icons-vue';
 import * as echarts from 'echarts';
 
+// 获取登录token
+const getToken = () => {
+  return localStorage.getItem('accessToken');
+};
+
 const route = useRoute();
 const router = useRouter();
-const { getDevices, getDeviceHistoryData, getDeviceAverageData } = useDeviceStore();
+const { getDevices, getDeviceHistoryData, getDeviceAverageData, fetchDevices } = useDeviceStore();
 // 直接获取设备数据
 const devices = getDevices();
 
@@ -249,6 +272,11 @@ const selectedDeviceId = ref<number | null>(null);
 const selectedDevice = computed(() => {
   if (!selectedDeviceId.value) return null;
   return devices.find(device => device.id === selectedDeviceId.value) || null;
+});
+
+// 计算WebSocket是否已连接
+const isWebSocketConnected = computed(() => {
+  return ws !== null && ws.readyState === WebSocket.OPEN;
 });
 
 const handleDeviceChange = () => {
@@ -318,6 +346,9 @@ let averageChart: echarts.ECharts | null = null;
 const currentFrameImage = ref<string>('');
 const lastFrameTime = ref<string>('');
 const connectionError = ref<string>('');
+const isStreamDisconnected = ref<boolean>(false);
+let lastFrameTimestamp = 0;
+let streamCheckInterval: number | null = null;
 let ws: WebSocket | null = null;
 let currentImageUrl: string = '';
 
@@ -337,11 +368,22 @@ const toggleVerticalFlip = () => {
 };
 
 // 处理接收到的图片帧数据
-const handleFrameData = async (base64Data: string) => {
+const handleFrameData = (data: any) => {
   try {
-    // 将base64数据转换为Blob
-    const response = await fetch(`data:image/jpeg;base64,${base64Data}`);
-    const blob = await response.blob();
+    let blob: Blob;
+    if (typeof data === 'string') {
+      // 假设是base64编码的图片数据
+      blob = base64ToBlob(data);
+    } else if (data instanceof Blob) {
+      blob = data;
+    } else if (data instanceof ArrayBuffer) {
+      blob = new Blob([data], { type: 'image/jpeg' });
+    } else if (data instanceof Uint8Array) {
+      // 使用类型断言告诉TypeScript这是一个有效的BlobPart
+      blob = new Blob([data as any], { type: 'image/jpeg' });
+    } else {
+      throw new Error('不支持的数据类型');
+    }
     
     // 释放旧的URL对象
     if (currentImageUrl) {
@@ -352,31 +394,97 @@ const handleFrameData = async (base64Data: string) => {
     currentImageUrl = URL.createObjectURL(blob);
     currentFrameImage.value = currentImageUrl;
     lastFrameTime.value = new Date().toLocaleTimeString('zh-CN');
+    lastFrameTimestamp = Date.now();
+    isStreamDisconnected.value = false;
   } catch (error) {
     console.error('处理图片数据失败:', error);
   }
 };
 
+// 将base64字符串转换为Blob
+const base64ToBlob = (base64: string) => {
+  const parts = base64.split(';base64,');
+  if (parts.length < 2 || !parts[1] || !parts[0]) {
+    throw new Error('Invalid base64 string');
+  }
+  const contentParts = parts[0].split(':');
+  const contentType = contentParts.length > 1 ? contentParts[1] : 'image/jpeg';
+  const raw = window.atob(parts[1]);
+  const rawLength = raw.length;
+  const uInt8Array = new Uint8Array(rawLength);
+  
+  for (let i = 0; i < rawLength; ++i) {
+    uInt8Array[i] = raw.charCodeAt(i);
+  }
+  
+  return new Blob([uInt8Array], { type: contentType });
+};
+
 // 开始实时监控
-const startRealtimeMonitoring = () => {
+const startRealtimeMonitoring = async () => {
   // 关闭旧的连接
   stopRealtimeMonitoring();
   
-  if (!selectedDeviceId.value) return;
+  if (!selectedDeviceId.value) {
+    console.log('没有选择设备，无法启动实时监控');
+    return;
+  }
   
   try {
+    // 先刷新token
+    console.log('开始刷新token');
+    let token = await refreshToken();
+    if (!token) {
+      connectionError.value = '未登录，请先登录';
+      console.log('没有token，无法建立WebSocket连接');
+      return;
+    }
+    
     // 建立WebSocket连接
-    // 自动根据当前协议选择 ws:// 或 wss://
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    ws = new WebSocket(`${protocol}//${host}/api/device/${selectedDeviceId.value}/stream`);
+    console.log('开始建立WebSocket连接');
+    // 使用相对路径，让Vite代理转发到后端
+    const wsUrl = `/api/stream/viewer/ws?token=${token}`;
+    console.log('WebSocket URL:', wsUrl.substring(0, 50) + '...');
+    connectionError.value = '正在开启ws连接';
+    ws = new WebSocket(wsUrl);
+    
+    // 监听连接打开事件
+    ws.onopen = () => {
+      console.log('WebSocket连接已建立');
+      connectionError.value = '';
+      lastFrameTimestamp = Date.now();
+      isStreamDisconnected.value = false;
+      
+      // 启动定时器检查图片流是否更新
+      if (streamCheckInterval) {
+        clearInterval(streamCheckInterval);
+      }
+      streamCheckInterval = window.setInterval(() => {
+        const now = Date.now();
+        if (now - lastFrameTimestamp > 2000 && currentFrameImage.value) {
+          isStreamDisconnected.value = true;
+        }
+      }, 2500);
+      
+      // 连接成功后，发送请求开启设备推流
+      startDeviceStreaming();
+    };
     
     // 监听消息事件
     ws.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
-        if (data.frame) {
-          handleFrameData(data.frame);
+        // 尝试解析JSON数据
+        try {
+          const data = JSON.parse(event.data);
+          if (data.code === 1) {
+            console.log('操作成功:', data.msg);
+          } else {
+            console.error('操作失败:', data.msg);
+          }
+        } catch (jsonError) {
+          // 如果不是JSON数据，可能是二进制图片数据
+          handleFrameData(event.data);
+          console.log('接收到图片数据');
         }
       } catch (error) {
         console.error('解析WebSocket消息失败:', error);
@@ -386,21 +494,14 @@ const startRealtimeMonitoring = () => {
     // 监听错误事件
     ws.onerror = (error) => {
       console.error('WebSocket连接错误:', error);
-      // 显示错误代码
       connectionError.value = 'WSS连接错误';
-      currentFrameImage.value = '';
-      lastFrameTime.value = '';
-    };
-    
-    // 监听连接打开事件
-    ws.onopen = () => {
-      console.log('WebSocket连接已建立');
-      connectionError.value = '';
     };
     
     // 监听连接关闭事件
     ws.onclose = (event) => {
       console.log('WebSocket连接已关闭:', event);
+      console.log('WebSocket关闭代码:', event.code);
+      console.log('WebSocket关闭原因:', event.reason);
       if (!event.wasClean) {
         connectionError.value = 'WSS连接已关闭';
       }
@@ -408,30 +509,172 @@ const startRealtimeMonitoring = () => {
     
   } catch (error) {
     console.error('建立WebSocket连接失败:', error);
-    // 显示错误代码
     connectionError.value = '建立WSS连接失败';
-    currentFrameImage.value = '';
-    lastFrameTime.value = '';
+  }
+};
+
+// 手动重连WebSocket
+const reconnectWebSocket = () => {
+  console.log('手动重连WebSocket');
+  // 检查当前连接状态
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    // 连接正常，询问用户是否确定要重连
+    ElMessageBox.confirm(
+      '当前WebSocket连接正常，确定要重新连接吗？',
+      '确认重连',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+      .then(() => {
+        console.log('用户确认重连，关闭现有连接并重新建立');
+        startRealtimeMonitoring();
+      })
+      .catch(() => {
+        console.log('用户取消重连');
+      });
+  } else {
+    // 连接异常或不存在，直接重连
+    console.log('连接异常或不存在，直接重连');
+    startRealtimeMonitoring();
+  }
+};
+
+// 刷新token
+const refreshToken = async () => {
+  try {
+    const token = getToken();
+    if (!token) {
+      console.log('没有token，无法刷新');
+      return null;
+    }
+    
+    console.log('开始刷新token');
+    const response = await fetch('/api/refresh', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    console.log('刷新token响应状态:', response.status);
+    if (response.ok) {
+      const data = await response.json();
+      console.log('刷新token响应数据:', data);
+      if (data.access_token) {
+        // 保存新token
+        localStorage.setItem('accessToken', data.access_token);
+        console.log('Token刷新成功');
+        return data.access_token;
+      } else {
+        console.log('Token刷新失败，响应数据格式不正确');
+      }
+    } else {
+      console.log('Token刷新失败，HTTP状态码:', response.status);
+    }
+    
+    console.log('使用原token');
+    return token;
+  } catch (error) {
+    console.error('刷新token失败:', error);
+    return getToken();
+  }
+};
+
+// 开启设备推流
+const startDeviceStreaming = async () => {
+  if (!selectedDeviceId.value) return;
+  
+  try {
+    // 获取登录token
+    const token = getToken();
+    if (!token) {
+      connectionError.value = '未登录，请先登录';
+      return;
+    }
+    
+    // 发送POST请求开启设备推流，需要在请求头中包含Authorization字段
+    const response = await fetch(`/api/stream/viewer/following/${selectedDeviceId.value}`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    const data = await response.json();
+    
+    // 延迟3秒再判断返回情况
+    await new Promise(resolve => setTimeout(resolve, 4000));
+    
+    // 判断成功的条件：code为1 或 消息包含成功关键字
+    const isSuccess = response.ok && (data.code === 1 || 
+      (data.msg && (data.msg.includes('OK') || data.msg.includes('success') || data.msg.includes('成功'))));
+    
+    if (isSuccess) {
+      console.log('设备推流开启成功:', data.msg);
+      connectionError.value = '';
+    } else if (data.msg && data.msg.toLowerCase().includes('device has subscribed')) {
+      // 设备已经被订阅，这是正常情况，不需要显示错误
+      console.log('设备已经被订阅');
+      connectionError.value = '';
+    } else if (response.status === 401) {
+      // 认证失败，但WebSocket可能已经成功连接，不显示错误
+      console.log('认证失败，但WebSocket可能已经成功连接');
+      connectionError.value = '';
+    } else {
+      console.error('设备推流开启失败:', data.msg || '未知错误');
+      connectionError.value = '设备推流开启失败';
+    }
+  } catch (error) {
+    console.error('开启设备推流失败:', error);
+    // 延迟3秒再显示错误提示
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    connectionError.value = '开启设备推流失败';
   }
 };
 
 // 停止实时监控
-const stopRealtimeMonitoring = () => {
-  if (ws) {
+const stopRealtimeMonitoring = async () => {
+  // 清除图片流检查定时器
+  if (streamCheckInterval) {
+    clearInterval(streamCheckInterval);
+    streamCheckInterval = null;
+  }
+  
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+    // 如果有选中的设备，先取消订阅
+    if (selectedDeviceId.value) {
+      try {
+        // 获取并打印当前token
+        const token = getToken();
+        console.log('取消订阅时的token:', token);
+        
+        await fetch(`/api/stream/viewer/following/${selectedDeviceId.value}`, {
+          method: 'DELETE',
+          headers: {
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        console.log('取消设备推流成功');
+      } catch (error) {
+        console.error('取消设备推流失败:', error);
+      }
+    }
+    
     ws.close();
     ws = null;
   }
   
-  // 释放URL对象
-  if (currentImageUrl) {
-    URL.revokeObjectURL(currentImageUrl);
-    currentImageUrl = '';
-  }
-  
-  currentFrameImage.value = '';
-  lastFrameTime.value = '';
   connectionError.value = '';
+  isStreamDisconnected.value = false;
 };
+
+
 
 // 从deviceStore获取历史数据
 const generateMockData = (deviceId: number, type: 'temperature' | 'humidity' | 'quality') => {
@@ -670,11 +913,15 @@ const handleResize = () => {
 };
 
 // 组件挂载时初始化
-onMounted(() => {
+onMounted(async () => {
   window.addEventListener('resize', handleResize);
   
   console.log('Component mounted');
   console.log('Initial active tab:', props.activeTab);
+  
+  // 从后端获取设备数据
+  await fetchDevices();
+  
   console.log('Devices available:', devices.length);
   
   // 如果默认有设备，初始化图表
@@ -683,10 +930,10 @@ onMounted(() => {
     selectedDeviceId.value = devices[0]?.id || null;
   }
   
-  // 如果在实时数据标签页，启动实时监控
+  // 如果在实时数据标签页，由watch(selectedDeviceId)处理实时监控的启动
+  // 不直接调用startRealtimeMonitoring()，避免与watch重复调用
   if (props.activeTab === 'realtime' && selectedDeviceId.value) {
-    console.log('Starting realtime monitoring for device:', selectedDeviceId.value);
-    startRealtimeMonitoring();
+    console.log('Device selected, realtime monitoring will be started by watch');
   }
 });
 
@@ -724,22 +971,26 @@ watch(() => props.activeTab, (newTab, oldTab) => {
     // 停止实时监控
     stopRealtimeMonitoring();
   } else if (newTab === 'realtime') {
-    // 切换到实时数据标签时，确保有设备被选择
-    if (devices.length > 0) {
-      // 不管之前是否有选择，都强制选择第一个设备
-      console.log('Forcing selection of first device for realtime tab:', devices[0]?.id);
-      selectedDeviceId.value = devices[0]?.id || null;
-      
-      // 启动实时监控
-      if (selectedDeviceId.value) {
-        console.log('Starting realtime monitoring from activeTab change');
-        startRealtimeMonitoring();
+    // 切换到实时数据标签时，重新获取设备数据
+    fetchDevices().then(() => {
+      // 确保有设备被选择
+      if (devices.length > 0) {
+        // 不管之前是否有选择，都强制选择第一个设备
+        const deviceId = devices[0]?.id || null;
+        selectedDeviceId.value = deviceId;
+        
+        // 直接启动实时监控，不依赖watch
+        if (deviceId) {
+          console.log('Auto-starting realtime monitoring for device:', deviceId);
+          // 使用nextTick确保selectedDeviceId已更新
+          nextTick(() => {
+            startRealtimeMonitoring();
+          });
+        }
       } else {
-        console.log('No device selected, cannot start realtime monitoring');
+        console.log('No devices available, cannot start realtime monitoring');
       }
-    } else {
-      console.log('No devices available, cannot start realtime monitoring');
-    }
+    });
   } else {
     selectedDeviceId.value = null;
     // 停止实时监控
@@ -1068,6 +1319,39 @@ const goToFullscreen = () => {
   font-size: 12px;
   text-align: right;
   z-index: 10;
+}
+
+.video-stream.disconnected {
+  filter: blur(5px);
+}
+
+.stream-disconnected-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+.disconnected-content {
+  text-align: center;
+  color: white;
+}
+
+.disconnected-icon {
+  color: #f56c6c;
+  margin-bottom: 10px;
+}
+
+.disconnected-message {
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .video-placeholder {

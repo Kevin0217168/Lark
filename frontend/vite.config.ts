@@ -26,7 +26,15 @@ export default defineConfig({
         target: 'https://lark.mintlab.top',
         changeOrigin: true,
         secure: false,
-        rewrite: path => path
+        rewrite: path => path,
+        ws: true // 支持WebSocket代理
+      },
+      '/stream': {
+        target: 'https://lark.mintlab.top',
+        changeOrigin: true,
+        secure: false,
+        rewrite: path => path,
+        ws: true // 支持WebSocket代理
       }
     }
   }

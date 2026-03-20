@@ -87,14 +87,15 @@ const router = useRouter();
 const { 
   devices, 
   getDeviceLogs, 
-  getDeviceAverageData
+  getDeviceAverageData,
+  fetchDevices
 } = useDeviceStore();
 
 // 计算设备统计信息
 const deviceStats = computed(() => {
   const total = devices.value.length;
-  const online = devices.value.filter(d => d.status === 'online').length;
-  const offline = devices.value.filter(d => d.status === 'offline').length;
+  const online = devices.value.filter(d => d.isOnline).length;
+  const offline = devices.value.filter(d => !d.isOnline).length;
   const normal = online;
   const abnormal = 0;
   
@@ -130,7 +131,7 @@ const errorPercentage = computed(() => {
 // 计算环境数据平均值
 const avgEnvironmentData = computed(() => {
   // 从设备数据中计算平均值
-  const onlineDevices = devices.value.filter(d => d.status === 'online');
+  const onlineDevices = devices.value.filter(d => d.isOnline);
   
   if (onlineDevices.length === 0) {
     return {
@@ -252,8 +253,10 @@ const goToDeviceLogs = () => {
 };
 
 // 组件挂载时初始化
-onMounted(() => {
+onMounted(async () => {
   window.addEventListener('resize', handleResize);
+  // 从后端获取设备数据
+  await fetchDevices();
   initChart();
 });
 
