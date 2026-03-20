@@ -102,7 +102,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
         viewer = Viewer.Viewer(user)
     else:
         # 已创建就直接取出
-        viewer = Viewer.viewerIdDict[id]
+        viewer = Viewer.viewerIdDict[user.id]
 
     await websocket.accept()
     viewer.connect(websocket)

@@ -155,7 +155,7 @@ void app_main(void)
 
     // 通过id开启ws连接/stream/viewer/ws
     char path_data[128];
-    snprintf(path_data, sizeof(path_data), "/stream/device/ws?secret=%s", secret);
+    snprintf(path_data, sizeof(path_data), "/api/stream/device/ws?secret=%s", secret);
     // 注册回调函数
     Websocket_event_handler_register(NULL, ws_text_handler);
 
@@ -170,6 +170,7 @@ void app_main(void)
     CameraInit();
     sensor_t *s = esp_camera_sensor_get();
     s->set_framesize(s, FRAMESIZE_SVGA);
+    s->set_vflip(s, 1);
 
     static uint8_t ucParameterToPass;
     TaskHandle_t xHandle = NULL;
