@@ -96,13 +96,17 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
     with Db.OpenDb("viewer websocket_endpoint") as db:
         user = Security.VerifyToken(db, token, False)
 
-    # 检查是否创建观看者
-    if user.id not in Viewer.viewerIdDict:
-        # 没有就自动创建
-        viewer = Viewer.Viewer(user)
-    else:
-        # 已创建就直接取出
-        viewer = Viewer.viewerIdDict[user.id]
+    print(Viewer.viewerIdDict)
+    
+    # 移除旧对象（如果存在）
+    old_viewer = Viewer.viewerIdDict.pop(user.id, None)
+    if old_viewer and old_viewer.websocket:
+        # 关闭旧连接
+        await old_viewer.websocket.close()
+        
+    # 自动创建
+    viewer = Viewer.Viewer(user)
+    print(Viewer.viewerIdDict)
 
     await websocket.accept()
     viewer.connect(websocket)
