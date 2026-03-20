@@ -8,6 +8,8 @@ from schema import *
 import Db
 import Security
 
+from Logset import async_log, logger
+
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
@@ -143,7 +145,7 @@ async def update_user(
             ).model_dump(),
         )
 
-
+from Logset import async_log, logger
 @router.delete(
     "/{id}",
     response_model=CommonOut[Db.UserOut],

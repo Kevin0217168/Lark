@@ -7,6 +7,8 @@ from deviceapi import Device
 import Security
 import Db
 
+from Logset import async_log, logger
+
 router = APIRouter(prefix="/stream", tags=["Stream"])
 router.include_router(Viewer.router)
 
@@ -33,15 +35,15 @@ async def websocket_endpoint(
             data = await websocket.receive()
             if "text" in data:
                 # 试图接收esp32返回的控制信息结果
-                print(data["text"])
+                await async_log(logger, "info", data["text"])
                 try:
                     json_data = json.loads(data["text"])
                 except json.JSONDecodeError:
                     # await websocket.send_text("Invalid JSON received")
                     # 直接跳过这次解码环节
-                    print("解码失败")
+                    await async_log(logger, "warning", "解码失败")
                     continue
-                print(json_data)
+                await async_log(logger, "info", json_data)
                 try:
                     if json_data:
                         # 响应成功
@@ -56,7 +58,7 @@ async def websocket_endpoint(
                                 with Db.OpenDb("设备响应, 设置待机状态") as db:
                                     Db.UpdateDevice(db, id=device.id, status="standby")
                 except Exception as e:
-                    print(e)
+                    await async_log(logger, "warning", f"操作响应数据错误: {e}")
                     continue
                 # 给所有订阅者转发消息
                 for subscriber in device.subscribers:
@@ -64,9 +66,9 @@ async def websocket_endpoint(
 
             if "bytes" in data:
                 size = len(data["bytes"])
-                print(f"Received {size} bytes")
+                await async_log(logger, "info", f"Received {size} bytes")
                 if len(device.subscribers) == 0:
-                    print("设备观看者为0")
+                    await async_log(logger, "info", "设备观看者为0")
                     # 发送休眠信息
                     await websocket.send_json(
                             {
@@ -81,10 +83,10 @@ async def websocket_endpoint(
                     for subscriber in device.subscribers:
                         await subscriber.websocket.send_bytes(data["bytes"])
     except (WebSocketDisconnect, RuntimeError) as e:
-        print("设备已断开: ", e)
+        await async_log(logger, "info", "设备已断开: ", e)
         for subscriber in device.subscribers:
             if subscriber.websocket == None:
-                print(f"用户还未连接: {subscriber.id}")
+                await async_log(logger, "info", f"用户还未连接: {subscriber.id}")
                 continue
             await subscriber.websocket.send_text("设备已断开")
         device.disconnected()
@@ -96,17 +98,16 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
     with Db.OpenDb("viewer websocket_endpoint") as db:
         user = Security.VerifyToken(db, token, False)
 
-    print(Viewer.viewerIdDict)
     
     # 移除旧对象（如果存在）
     old_viewer = Viewer.viewerIdDict.pop(user.id, None)
     if old_viewer and old_viewer.websocket:
         # 关闭旧连接
         await old_viewer.websocket.close()
+        await async_log(logger, "warning", "存在已有连接, 关闭旧连接")
         
     # 自动创建
     viewer = Viewer.Viewer(user)
-    print(Viewer.viewerIdDict)
 
     await websocket.accept()
     viewer.connect(websocket)
@@ -120,7 +121,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 except json.JSONDecodeError:
                     await websocket.send_text("Invalid JSON received")
                     continue
-                print(json_data)
+                await async_log(logger, "info", json_data)
     except (WebSocketDisconnect, RuntimeError):
         # 退出连接则自动销毁
         viewer.disconnect()

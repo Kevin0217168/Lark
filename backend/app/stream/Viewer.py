@@ -11,6 +11,7 @@ import Db
 
 router = APIRouter(prefix="/viewer")
 
+from Logset import async_log, logger
 
 viewerIdDict = {}
 
@@ -37,11 +38,11 @@ class Viewer:
         self.websocket = None
 
     async def subscribe(self, device:Device.Esp32):
-        print(device.subscribers)
+        await async_log(logger, "info", device.subscribers)
         # 检查设备状态
         if len(device.subscribers) == 0:
             # 如果之前还没有观看者, 通知上线
-            print(f"通知设备{device.id}上线")
+            await async_log(logger, "info", f"通知设备{device.id}上线")
             await device.websocket.send_json({"code":1, "item":"status", "key": "status", "values":"stream"})
             
         # 用于向观看者转发
