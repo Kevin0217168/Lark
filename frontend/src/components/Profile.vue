@@ -500,7 +500,28 @@ const handleDeleteAccount = async () => {
 };
 
 // 退出登录
-const handleLogout = () => {
+const handleLogout = async () => {
+  try {
+    // 向后端发送退出登录请求
+    const token = localStorage.getItem('accessToken');
+    const response = await fetch('/api/logout', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': token ? `Bearer ${token}` : ''
+      }
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      console.log('退出登录成功:', data);
+    } else {
+      console.error('退出登录请求失败:', response.status);
+    }
+  } catch (error) {
+    console.error('退出登录请求出错:', error);
+  }
+  
   // 清除登录状态和token信息
   localStorage.removeItem('isAuthenticated');
   localStorage.removeItem('username');
