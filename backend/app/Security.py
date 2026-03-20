@@ -6,6 +6,7 @@ import jwt
 from jwt.exceptions import InvalidTokenError
 from datetime import datetime, timedelta, timezone
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from Logset import async_log, logger
 
 import Db
 
@@ -34,13 +35,13 @@ def VerifyToken(db: Db.Session, token: str, isAllowCookie: bool) -> Db.M_Users:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username = payload.get("username")
         sub = payload.get("sub")
-        print(f"解码token: username:{username} sub:{sub}")
+        logger.info(f"解码token: username:{username} sub:{sub}")
         if username is None:
             raise credentials_exception
         if not isAllowCookie and sub == "cookie":
             raise credentials_exception
     except InvalidTokenError as e:
-        print("token解码失败: ", e)
+        logger.warning(f"token解码失败: {e}")
         raise credentials_exception
     users = Db.GetUsers(db, username=username)
     if users is None:
