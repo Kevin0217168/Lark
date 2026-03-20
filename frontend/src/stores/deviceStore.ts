@@ -3,7 +3,8 @@ import { ref, computed } from 'vue';
 export interface Device {
   id: number;
   name: string;
-  status: string;
+  status: string; // standby待机，没有任何观看者；stream推流
+  isOnline: boolean; // 是否在线
   createTime: string;
   temperature?: number; // 温度数据
   humidity?: number; // 湿度数据
@@ -33,26 +34,33 @@ export interface DevicePosition {
   y: number; // 0-100 百分比
 }
 
-const devices = ref<Device[]>([
-  { 
-    id: 1, 
-    name: '设备1', 
-    status: 'online', 
-    createTime: '2026/03/14 01:28:24',
-    temperature: 25.5,
-    humidity: 45.0,
-    videoStreamUrl: 'http://example.com/stream1'
-  },
-  { 
-    id: 2, 
-    name: '设备2', 
-    status: 'offline', 
-    createTime: '2026/03/14 01:28:24',
-    temperature: 22.0,
-    humidity: 50.0,
-    videoStreamUrl: 'http://example.com/stream2'
-  },
-]);
+const devices = ref<Device[]>([]);
+
+// 从后端获取设备数据
+const fetchDevices = async () => {
+  try {
+    const token = localStorage.getItem('token');
+    const response = await fetch('/api/devices', {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data.code === 200 && Array.isArray(data.data)) {
+        devices.value = data.data;
+      }
+    }
+  } catch (error) {
+    console.error('获取设备数据失败:', error);
+  }
+};
+
+// 初始化时获取设备数据
+fetchDevices();
 
 const deviceLogs = ref<DeviceLog[]>([
   { id: 1, deviceId: 1, deviceName: '设备1', level: 'info', message: '设备上线', timestamp: '2026/03/14 08:00:00' },
@@ -133,8 +141,8 @@ export const useDeviceStore = () => {
   const getDeviceStats = () => {
     return computed(() => {
       const total = devices.value.length;
-      const online = devices.value.filter(d => d.status === 'online').length;
-      const offline = devices.value.filter(d => d.status === 'offline').length;
+      const online = devices.value.filter(d => d.isOnline).length;
+      const offline = devices.value.filter(d => !d.isOnline).length;
       const normal = online;
       const abnormal = 0;
       
@@ -299,6 +307,7 @@ export const useDeviceStore = () => {
     clearDevicePositions,
     getDeviceHistoryData,
     getDeviceAverageData,
+    fetchDevices,
     setFullscreen: (value: boolean) => {
       isFullscreen.value = value;
     },

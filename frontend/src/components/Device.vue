@@ -7,13 +7,13 @@
       <h4>设备总览</h4>
       <el-row :gutter="20">
         <el-col :span="8" v-for="device in devices" :key="device.id">
-          <el-card :class="device.status === 'online' ? 'device-online' : 'device-offline'">
+          <el-card :class="device.isOnline ? 'device-online' : 'device-offline'">
             <h5>{{ device.name }}</h5>
             <p>设备ID: {{ device.id }}</p>
             <p>
               状态: 
-              <el-tag :type="device.status === 'online' ? 'success' : 'danger'">
-                {{ device.status === 'online' ? '在线' : '离线' }}
+              <el-tag :type="device.isOnline ? 'success' : 'danger'">
+                {{ device.isOnline ? '在线' : '离线' }}
               </el-tag>
             </p>
           </el-card>
@@ -34,10 +34,10 @@
       <el-table :data="devices" style="width: 100%" border>
         <el-table-column prop="name" label="设备名称" min-width="150" />
         <el-table-column prop="id" label="设备ID" min-width="100" />
-        <el-table-column prop="status" label="在线状态" min-width="120">
+        <el-table-column label="在线状态" min-width="120">
           <template #default="scope">
-            <el-tag :type="scope.row.status === 'online' ? 'success' : 'danger'">
-              {{ scope.row.status === 'online' ? '在线' : '离线' }}
+            <el-tag :type="scope.row.isOnline ? 'success' : 'danger'">
+              {{ scope.row.isOnline ? '在线' : '离线' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -187,7 +187,8 @@ const handleSave = () => {
     const newDevice: Device = {
       id: parseInt(deviceForm.value.id),
       name: deviceForm.value.name,
-      status: 'offline',
+      status: 'standby', // 默认为待机状态
+      isOnline: false, // 默认为离线
       createTime: new Date().toLocaleString('zh-CN')
     };
     addDevice(newDevice);
