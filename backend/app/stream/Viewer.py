@@ -23,11 +23,12 @@ class Viewer:
         self.subscribed_device = []
 
     def unregister(self):
-        viewerIdDict.pop(self.id)
+        # 只有字典中还是自己时才删除
+        if viewerIdDict.get(self.id) is self:
+            viewerIdDict.pop(self.id)
         # 在对应设备上取消订阅
         for i in self.subscribed_device:
             i.subscribers.pop()
-        del self
 
     def connect(self, websocket: WebSocket):
         self.websocket = websocket
