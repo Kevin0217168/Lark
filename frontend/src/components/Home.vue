@@ -7,10 +7,17 @@
         <div class="stats-content">
           <h3 class="stats-title">设备状态</h3>
           <p class="stats-value">{{ deviceStats.online }}/{{ deviceStats.total }}</p>
-          <div class="stats-progress">
-            <div class="progress-bar" :style="{ width: onlinePercentage + '%' }"></div>
+          <div class="device-progress-wrapper">
+            <div class="dual-progress-bar">
+              <div class="online-section" :style="{ width: onlinePercentage + '%' }">
+                <span class="section-label">在线</span>
+              </div>
+              <div class="offline-section" :style="{ width: (100 - onlinePercentage) + '%' }">
+                <span class="section-label">离线</span>
+              </div>
+            </div>
+            <p class="stats-percentage">{{ onlinePercentage }}% 在线</p>
           </div>
-          <p class="stats-percentage">{{ onlinePercentage }}% 在线</p>
           <div class="card-action">
             <el-button class="device-btn" size="small" @click="goToDeviceManagement">
               <el-icon><Monitor /></el-icon>
@@ -46,11 +53,17 @@
         </div>
       </div>
       
-      <div class="stats-card red">
+      <div class="stats-card" :class="errorCount === 0 ? 'green-purple' : 'red'">
         <div class="stats-content">
           <h3 class="stats-title">错误数量</h3>
           <p class="stats-value">{{ errorCount }}</p>
-          <div class="placeholder"></div>
+          <div class="error-logs-preview">
+            <div v-for="(log, index) in recentErrorLogs" :key="index" class="error-log-item">
+              <span class="log-device">{{ log.deviceName }}</span>
+              <span class="log-message" :title="log.message">{{ log.message }}</span>
+            </div>
+            <div v-if="recentErrorLogs.length === 0" class="no-logs">暂无错误日志</div>
+          </div>
           <div class="card-action">
             <el-button class="error-btn" size="small" @click="goToDeviceLogs">
               <el-icon><Warning /></el-icon>
@@ -112,6 +125,13 @@ const deviceStats = computed(() => {
 const errorCount = computed(() => {
   const allLogs = getDeviceLogs();
   return allLogs.filter(log => log.level === 'warning' || log.level === 'error').length;
+});
+
+// 获取最近两条错误日志
+const recentErrorLogs = computed(() => {
+  const allLogs = getDeviceLogs();
+  const errorLogs = allLogs.filter(log => log.level === 'warning' || log.level === 'error');
+  return errorLogs.slice(0, 2);
 });
 
 // 计算在线率
@@ -316,12 +336,19 @@ onUnmounted(() => {
   &.red {
     background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
   }
+  
+  &.green-purple {
+    background: linear-gradient(135deg, #5a9a9a 0%, #7fb3b3 100%);
+  }
 }
 
 .stats-content {
   position: relative;
   z-index: 2;
   color: white;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .stats-title {
@@ -360,19 +387,73 @@ onUnmounted(() => {
   text-align: right;
 }
 
+.device-progress-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin: 10px 0;
+}
+
+.dual-progress-bar {
+  display: flex;
+  width: 100%;
+  height: 32px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.online-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #7fcdbb 0%, #41b6c4 100%);
+  transition: width 0.3s ease;
+  min-width: 0;
+}
+
+.online-section .section-label {
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 8px;
+}
+
+.offline-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  transition: width 0.3s ease;
+  min-width: 0;
+}
+
+.offline-section .section-label {
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 8px;
+}
+
 .env-data {
-  margin: 5px 0 18px ;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  margin: 10px 0;
 }
 
 .env-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
-}
-
-.env-item:last-child {
-  margin-bottom: 0;
 }
 
 .env-label {
@@ -386,7 +467,7 @@ onUnmounted(() => {
 }
 
 .card-action {
-  margin-top: 15px;
+  margin-top: auto;
   text-align: center;
   padding-top: 15px;
   border-top: 1px solid rgba(255, 255, 255, 0.2);
@@ -432,6 +513,52 @@ onUnmounted(() => {
 .placeholder {
   height: 20px;
   margin-bottom: 22px;
+}
+
+.error-logs-preview {
+  min-height: 60px;
+  margin-bottom: 10px;
+}
+
+.error-log-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.error-log-item:last-child {
+  margin-bottom: 0;
+}
+
+.log-device {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: #fff;
+  margin-right: 8px;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.log-message {
+  color: rgba(255, 255, 255, 0.9);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.no-logs {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  padding: 20px 0;
 }
 
 .chart-section {

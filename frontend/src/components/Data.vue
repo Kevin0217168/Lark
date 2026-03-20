@@ -621,6 +621,10 @@ const startDeviceStreaming = async () => {
       // 设备已经被订阅，这是正常情况，不需要显示错误
       console.log('设备已经被订阅');
       connectionError.value = '';
+    } else if (data.msg && data.msg.toLowerCase().includes('viewer has not registerd')) {
+      // Viewer未注册，但WebSocket可能已经成功连接，不显示错误
+      console.log('Viewer未注册，但WebSocket可能已经成功连接');
+      connectionError.value = '';
     } else if (response.status === 401) {
       // 认证失败，但WebSocket可能已经成功连接，不显示错误
       console.log('认证失败，但WebSocket可能已经成功连接');
