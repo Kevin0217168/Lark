@@ -383,7 +383,7 @@ onUnmounted(() => {
 .stats-percentage {
   font-size: 12px;
   opacity: 0.8;
-  margin: 0;
+  margin: 8px 0 0 0;
   text-align: right;
 }
 
