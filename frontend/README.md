@@ -20,11 +20,16 @@ Vue.js + Element Plus + axios
 │   ├── components             子组件文件夹
 │   │   ├── Data.vue           数据总览组件
 │   │   ├── Device.vue         设备总览组件
+│   │   ├── 
 │   │   ├── Header.vue         全局导航栏组件
 │   │   ├── Home.vue           主页面组件
 │   │   ├── Login.vue          登录注册组件
+│   │   ├── Old_Home.vue       旧版主页面组件
+│   │   ├── Profile.vue        用户信息组件
+│   │   ├── Register.vue       注册组件
 │   │   ├── Sider.vue          侧边导航栏组件
-│   │   └── Stream.vue         实时数据流组件
+│   │   ├── Stream.vue         实时数据流组件
+│   │   └── UserManager.vue    用户管理组件
 │   ├── main.ts                Vue入口文件(注册根组件)
 │   ├── router                 路由文件夹
 │   │   └── index.ts

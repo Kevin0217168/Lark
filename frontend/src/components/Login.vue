@@ -100,6 +100,9 @@ const tryAutoLogin = async (): Promise<boolean> => {
     localStorage.removeItem('username');
     localStorage.removeItem('accessToken');
     localStorage.removeItem('tokenType');
+    localStorage.removeItem('avatar');
+    localStorage.removeItem('role');
+    localStorage.removeItem('userId');
     return false;
   } catch (error) {
     console.error('自动登录失败:', error);
@@ -108,6 +111,9 @@ const tryAutoLogin = async (): Promise<boolean> => {
     localStorage.removeItem('username');
     localStorage.removeItem('accessToken');
     localStorage.removeItem('tokenType');
+    localStorage.removeItem('avatar');
+    localStorage.removeItem('role');
+    localStorage.removeItem('userId');
     return false;
   }
 };
@@ -185,6 +191,32 @@ const handleLogin = async () => {
       localStorage.setItem('accessToken', data.access_token);
       localStorage.setItem('tokenType', data.token_type || 'bearer');
       localStorage.setItem('avatar', data.avatar || '');
+      localStorage.setItem('role', data.role || '');
+      
+      // 立即获取用户信息以获取角色（如果登录接口没有返回角色）
+      if (!data.role) {
+        try {
+          const userResponse = await fetch(`${API_BASE_URL}/api/users/me`, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': `Bearer ${data.access_token}`
+            },
+            credentials: 'include'
+          });
+          
+          if (userResponse.ok) {
+            const userData = await userResponse.json();
+            if (userData.code === 200 && userData.data) {
+              localStorage.setItem('role', userData.data.role || '');
+              localStorage.setItem('avatar', userData.data.avatar || '');
+              localStorage.setItem('userId', userData.data.id || '');
+            }
+          }
+        } catch (err) {
+          console.error('获取用户信息失败:', err);
+        }
+      }
       
       // 触发自定义事件，通知其他组件登录状态已变化
       window.dispatchEvent(new CustomEvent('loginStatusChanged'));
@@ -236,7 +268,7 @@ const handleLogin = async () => {
   padding-bottom: 30px;
   width: 400px;
   margin-top: 5%;
-  border-radius: 5%;
+  border-radius: 15px;
 }
 
 /* 增加表单项目之间的间距，确保错误信息完整显示 */

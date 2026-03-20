@@ -48,7 +48,19 @@
             </el-button>
           </router-link>
         </el-col>
-        <el-col :span="2" :offset="isLoggedIn ? 5 : 5">
+        <el-col :span="2" v-if="userRole === 'root'">
+          <router-link to="/UserManage" custom v-slot="{ navigate }">
+            <el-button 
+              @click="navigate" 
+              :style="{ color: isActive('/UserManage') ? '#8bad42' : '#000' }" 
+              :type="isActive('/UserManage') ? 'primary' : 'default'"
+              text
+            > 
+              用户管理 
+            </el-button>
+          </router-link>
+        </el-col>
+        <el-col :span="2" :offset="isLoggedIn ? (userRole === 'root' ? 3 : 5) : 5">
           <router-link v-if="!isLoggedIn" to="/Login" custom v-slot="{ navigate }">
             <el-button @click="navigate" color="#8bad42" plain>登录</el-button>
           </router-link>
@@ -88,12 +100,14 @@ const { isFullscreen, setFullscreen } = useDeviceStore();
 const isLoggedIn = ref(false);
 const username = ref('');
 const avatar = ref('');
+const userRole = ref('');
 
 // 检查是否已登录
 const checkLoginStatus = () => {
   isLoggedIn.value = localStorage.getItem('isAuthenticated') === 'true';
   username.value = localStorage.getItem('username') || '';
   avatar.value = localStorage.getItem('avatar') || '';
+  userRole.value = localStorage.getItem('role') || '';
 };
 
 // 处理登录状态变化事件
@@ -106,19 +120,26 @@ onMounted(() => {
   checkLoginStatus();
   
   // 监听localStorage变化
-  window.addEventListener('storage', (event) => {
-    if (event.key === 'isAuthenticated') {
+  const handleStorageChange = (event: StorageEvent) => {
+    if (event.key === 'isAuthenticated' || event.key === 'role') {
       checkLoginStatus();
     }
-  });
+  };
+  window.addEventListener('storage', handleStorageChange);
   
   // 监听自定义事件，立即响应登录状态变化
   window.addEventListener('loginStatusChanged', handleLoginStatusChanged);
+  
+  // 保存回调函数引用以便移除
+  (window as any).__headerStorageHandler = handleStorageChange;
 });
 
 // 组件卸载时移除事件监听
 onUnmounted(() => {
-  window.removeEventListener('storage', handleLoginStatusChanged);
+  if ((window as any).__headerStorageHandler) {
+    window.removeEventListener('storage', (window as any).__headerStorageHandler);
+    delete (window as any).__headerStorageHandler;
+  }
   window.removeEventListener('loginStatusChanged', handleLoginStatusChanged);
 });
 
@@ -160,6 +181,8 @@ const clearCookies = () => {
   localStorage.removeItem('accessToken');
   localStorage.removeItem('tokenType');
   localStorage.removeItem('avatar');
+  localStorage.removeItem('role');
+  localStorage.removeItem('userId');
   sessionStorage.removeItem('isFromLogout');
 };
 
