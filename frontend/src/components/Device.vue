@@ -9,9 +9,10 @@
         <el-col :span="8" v-for="device in devices" :key="device.id">
           <el-card :class="device.isOnline ? 'device-online' : 'device-offline'">
             <h5>{{ device.name }}</h5>
-            <p>设备ID: {{ device.id }}</p>
+            <p>区域: {{ device.area || '未设置' }}</p>
+            <p>编号: {{ device.number || '-' }}</p>
             <p>
-              状态: 
+              状态:
               <el-tag :type="device.isOnline ? 'success' : 'danger'">
                 {{ device.isOnline ? '在线' : '离线' }}
               </el-tag>
@@ -31,9 +32,47 @@
         <el-button type="primary" @click="showAddDialog">添加设备</el-button>
       </div>
       
-      <el-table :data="devices" style="width: 100%" border>
+      <!-- 筛选查询 -->
+      <div class="filter-section">
+        <el-input 
+          v-model="filterForm.name" 
+          placeholder="设备名称" 
+          style="width: 200px; margin-right: 10px;"
+          clearable
+        />
+        <el-select 
+          v-model="filterForm.area" 
+          placeholder="所属区域" 
+          style="width: 200px; margin-right: 10px;"
+          clearable
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
+        >
+          <el-option 
+            v-for="area in uniqueAreas" 
+            :key="area" 
+            :label="area" 
+            :value="area" 
+          />
+        </el-select>
+        <el-select 
+          v-model="filterForm.isOnline" 
+          placeholder="在线状态" 
+          style="width: 150px; margin-right: 10px;"
+          clearable
+        >
+          <el-option label="在线" :value="true" />
+          <el-option label="离线" :value="false" />
+        </el-select>
+        <el-button @click="resetFilter">重置</el-button>
+      </div>
+      
+      <el-table :data="filteredDevices" style="width: 100%" border>
+        <el-table-column prop="id" label="设备ID" min-width="80" />
         <el-table-column prop="name" label="设备名称" min-width="150" />
-        <el-table-column prop="id" label="设备ID" min-width="100" />
+        <el-table-column prop="area" label="所属区域" min-width="120" />
+        <el-table-column prop="number" label="设备编号" min-width="100" />
         <el-table-column label="在线状态" min-width="120">
           <template #default="scope">
             <el-tag :type="scope.row.isOnline ? 'success' : 'danger'">
@@ -41,7 +80,13 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="createTime" label="添加时间" min-width="180" />
+        <el-table-column label="推流状态" min-width="120">
+          <template #default="scope">
+            <el-tag :type="scope.row.status === 'stream' ? 'success' : 'info'">
+              {{ scope.row.status === 'stream' ? '推流中' : '待机' }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" min-width="300" fixed="right">
           <template #default="scope">
             <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
@@ -51,7 +96,7 @@
         </el-table-column>
       </el-table>
       
-      <div v-if="devices.length === 0" class="no-devices">
+      <div v-if="filteredDevices.length === 0" class="no-devices">
         <p>暂无设备数据</p>
       </div>
     </div>
@@ -60,18 +105,49 @@
     <div v-else-if="activeTab === 'logs'">
       <div class="logs-header">
         <h4>设备日志</h4>
-        <el-select v-model="selectedDeviceId" placeholder="选择设备" style="width: 200px;">
-          <el-option label="全部设备" :value="null" />
-          <el-option 
-            v-for="device in devices" 
-            :key="device.id" 
-            :label="device.name" 
-            :value="device.id" 
-          />
-        </el-select>
       </div>
       
-      <el-table :data="filteredLogs" style="width: 100%" border>
+      <!-- 筛选查询 -->
+      <div class="filter-section">
+        <el-input 
+          v-model="logFilterForm.deviceName" 
+          placeholder="设备名称" 
+          style="width: 200px; margin-right: 10px;"
+          clearable
+        />
+        <el-select 
+          v-model="logFilterForm.area" 
+          placeholder="所属区域" 
+          style="width: 200px; margin-right: 10px;"
+          clearable
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
+        >
+          <el-option 
+            v-for="area in uniqueAreas" 
+            :key="area" 
+            :label="area" 
+            :value="area" 
+          />
+        </el-select>
+        <el-select 
+          v-model="logFilterForm.level" 
+          placeholder="日志级别" 
+          style="width: 150px; margin-right: 10px;"
+          clearable
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
+        >
+          <el-option label="信息" value="info" />
+          <el-option label="警告" value="warning" />
+          <el-option label="错误" value="error" />
+        </el-select>
+        <el-button @click="resetLogFilter">重置</el-button>
+      </div>
+      
+      <el-table :data="filteredLogsByFilter" style="width: 100%" border>
         <el-table-column prop="id" label="日志ID" min-width="80" />
         <el-table-column prop="deviceName" label="设备名称" min-width="120" />
         <el-table-column prop="level" label="级别" min-width="100">
@@ -95,7 +171,7 @@
         <el-table-column prop="timestamp" label="时间" min-width="180" />
       </el-table>
       
-      <div v-if="filteredLogs.length === 0" class="no-logs">
+      <div v-if="filteredLogsByFilter.length === 0" class="no-logs">
         <p>暂无日志数据</p>
       </div>
     </div>
@@ -107,8 +183,14 @@
       <el-form-item label="设备名称">
         <el-input v-model="deviceForm.name" placeholder="请输入设备名称" />
       </el-form-item>
-      <el-form-item label="设备ID">
-        <el-input v-model="deviceForm.id" placeholder="请输入设备ID" :disabled="isEdit" />
+      <el-form-item label="设备密钥" v-if="!isEdit">
+        <el-input v-model="deviceForm.secret" placeholder="请输入设备密钥" />
+      </el-form-item>
+      <el-form-item label="所属区域">
+        <el-input v-model="deviceForm.area" placeholder="请输入所属区域" />
+      </el-form-item>
+      <el-form-item label="设备编号">
+        <el-input-number v-model="deviceForm.number" :min="1" placeholder="请输入设备编号" />
       </el-form-item>
     </el-form>
     <template #footer>
@@ -128,9 +210,50 @@ defineProps<{
   activeTab: string;
 }>();
 
-const { devices, getDeviceLogs, addDevice, updateDevice, deleteDevice } = useDeviceStore();
+const { devices, getDeviceLogs, addDevice, updateDevice, deleteDevice, fetchDevices } = useDeviceStore();
 
 const selectedDeviceId = ref<number | null>(null);
+
+// 日志筛选表单
+const logFilterForm = ref({
+  deviceName: '',
+  area: [] as string[],
+  level: [] as string[]
+});
+
+// 筛选表单
+const filterForm = ref({
+  name: '',
+  area: [] as string[],
+  isOnline: null as boolean | null
+});
+
+// 获取所有不重复的区域
+const uniqueAreas = computed(() => {
+  const areas = devices.value
+    .map(device => device.area)
+    .filter((area): area is string => area !== undefined && area !== null && area !== '');
+  return Array.from(new Set(areas)).sort();
+});
+
+// 筛选后的设备列表
+const filteredDevices = computed(() => {
+  return devices.value.filter(device => {
+    const nameMatch = !filterForm.value.name || device.name.toLowerCase().includes(filterForm.value.name.toLowerCase());
+    const areaMatch = filterForm.value.area.length === 0 || (device.area && filterForm.value.area.includes(device.area));
+    const onlineMatch = filterForm.value.isOnline === null || device.isOnline === filterForm.value.isOnline;
+    return nameMatch && areaMatch && onlineMatch;
+  });
+});
+
+// 重置筛选
+const resetFilter = () => {
+  filterForm.value = {
+    name: '',
+    area: [],
+    isOnline: null
+  };
+};
 
 const filteredLogs = computed<DeviceLog[]>(() => {
   const logs = getDeviceLogs(selectedDeviceId.value || undefined);
@@ -139,11 +262,40 @@ const filteredLogs = computed<DeviceLog[]>(() => {
   });
 });
 
+// 筛选后的日志列表
+const filteredLogsByFilter = computed(() => {
+  return filteredLogs.value.filter(log => {
+    const deviceNameMatch = !logFilterForm.value.deviceName || 
+      log.deviceName.toLowerCase().includes(logFilterForm.value.deviceName.toLowerCase());
+    
+    // 区域筛选：通过设备名称找到对应设备的区域
+    const areaMatch = logFilterForm.value.area.length === 0 || (() => {
+      const device = devices.value.find(d => d.name === log.deviceName);
+      return device && device.area && logFilterForm.value.area.includes(device.area);
+    })();
+    
+    const levelMatch = logFilterForm.value.level.length === 0 || logFilterForm.value.level.includes(log.level);
+    return deviceNameMatch && areaMatch && levelMatch;
+  });
+});
+
+// 重置日志筛选
+const resetLogFilter = () => {
+  logFilterForm.value = {
+    deviceName: '',
+    area: [],
+    level: []
+  };
+};
+
 const dialogVisible = ref(false);
 const isEdit = ref(false);
 const deviceForm = ref({
   id: '',
   name: '',
+  secret: '',
+  area: '',
+  number: 1,
   status: 'offline'
 });
 
@@ -153,6 +305,9 @@ const showAddDialog = () => {
   deviceForm.value = {
     id: '',
     name: '',
+    secret: '',
+    area: '',
+    number: 1,
     status: 'offline'
   };
   dialogVisible.value = true;
@@ -164,41 +319,141 @@ const handleEdit = (device: Device) => {
   deviceForm.value = {
     id: device.id.toString(),
     name: device.name,
+    secret: '',
+    area: device.area || '',
+    number: device.number || 1,
     status: device.status
   };
   dialogVisible.value = true;
 };
 
 // 保存设备
-const handleSave = () => {
-  if (!deviceForm.value.name || !deviceForm.value.id) {
-    ElMessage.warning('请填写完整信息');
+const handleSave = async () => {
+  if (!deviceForm.value.name) {
+    ElMessage.warning('请填写设备名称');
     return;
   }
 
   if (isEdit.value) {
-    // 编辑模式
-    updateDevice(parseInt(deviceForm.value.id), {
-      name: deviceForm.value.name
-    });
-    ElMessage.success('设备更新成功');
+    // 编辑模式 - 调用后端API
+    if (!deviceForm.value.area || !deviceForm.value.number) {
+      ElMessage.warning('请填写完整的设备信息');
+      return;
+    }
+
+    // 检查编号是否与同区域的设备编号重复
+    const deviceId = parseInt(deviceForm.value.id);
+    const duplicateDevice = devices.value.find(d => 
+      d.id !== deviceId && 
+      d.area === deviceForm.value.area && 
+      d.number === deviceForm.value.number
+    );
+
+    if (duplicateDevice) {
+      ElMessage.error(`编号 ${deviceForm.value.number} 在区域 "${deviceForm.value.area}" 中已被设备 "${duplicateDevice.name}" 使用`);
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('accessToken');
+      const deviceId = parseInt(deviceForm.value.id);
+      const response = await fetch(`/api/devices/${deviceId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify({
+          name: deviceForm.value.name,
+          area: deviceForm.value.area,
+          number: deviceForm.value.number,
+          isOnline: false,
+          status: 'none'
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        ElMessage.success('设备更新成功');
+        // 刷新设备列表
+        await fetchDevices();
+        dialogVisible.value = false;
+      } else if (response.status === 404) {
+        const errorData = await response.json();
+        ElMessage.error(errorData.detail || '设备不存在');
+      } else if (response.status === 422) {
+        const errorData = await response.json();
+        ElMessage.error('请求参数错误：' + JSON.stringify(errorData.detail));
+      } else {
+        ElMessage.error('设备更新失败：' + response.statusText);
+      }
+    } catch (error) {
+      console.error('更新设备出错:', error);
+      ElMessage.error('更新设备失败，请检查网络连接');
+    }
   } else {
-    // 添加模式，状态默认为 offline，等待后端更新
-    const newDevice: Device = {
-      id: parseInt(deviceForm.value.id),
-      name: deviceForm.value.name,
-      status: 'standby', // 默认为待机状态
-      isOnline: false, // 默认为离线
-      createTime: new Date().toLocaleString('zh-CN')
-    };
-    addDevice(newDevice);
-    ElMessage.success('设备添加成功');
+    // 添加模式 - 调用后端API
+    if (!deviceForm.value.secret || !deviceForm.value.area || !deviceForm.value.number) {
+      ElMessage.warning('请填写完整的设备信息（密钥、区域、编号）');
+      return;
+    }
+
+    // 检查编号是否与同区域的设备编号重复
+    const duplicateDevice = devices.value.find(d => 
+      d.area === deviceForm.value.area && 
+      d.number === deviceForm.value.number
+    );
+
+    if (duplicateDevice) {
+      ElMessage.error(`编号 ${deviceForm.value.number} 在区域 "${deviceForm.value.area}" 中已被设备 "${duplicateDevice.name}" 使用`);
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch('/api/devices', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify({
+          secret: deviceForm.value.secret,
+          name: deviceForm.value.name,
+          area: deviceForm.value.area,
+          number: deviceForm.value.number,
+          isOnline: false,
+          status: 'none'
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        ElMessage.success('设备添加成功');
+        // 刷新设备列表
+        await fetchDevices();
+        dialogVisible.value = false;
+      } else if (response.status === 400) {
+        const errorData = await response.json();
+        ElMessage.error(errorData.detail || '设备已存在');
+      } else if (response.status === 422) {
+        const errorData = await response.json();
+        ElMessage.error('请求参数错误：' + JSON.stringify(errorData.detail));
+      } else {
+        ElMessage.error('设备添加失败：' + response.statusText);
+      }
+    } catch (error) {
+      console.error('添加设备出错:', error);
+      ElMessage.error('添加设备失败，请检查网络连接');
+    }
   }
-  dialogVisible.value = false;
 };
 
 // 删除设备
-const handleDelete = (device: Device) => {
+const handleDelete = async (device: Device) => {
+  // 第一次确认
   ElMessageBox.confirm(
     `确定要删除设备 "${device.name}" 吗？`,
     '警告',
@@ -208,10 +463,72 @@ const handleDelete = (device: Device) => {
       type: 'warning',
     }
   ).then(() => {
-    deleteDevice(device.id);
-    ElMessage.success('设备删除成功');
+    // 第二次确认 - 二次提醒防止误删除
+    ElMessageBox.confirm(
+      `此操作不可恢复，请再次确认是否删除设备 "${device.name}"（ID: ${device.id}）？`,
+      '二次确认',
+      {
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+        type: 'error',
+        confirmButtonClass: 'el-button--danger',
+      }
+    ).then(async () => {
+      try {
+        // 先刷新token
+        const refreshResponse = await fetch('/api/refresh', {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
+          }
+        });
+
+        if (refreshResponse.ok) {
+          const refreshData = await refreshResponse.json();
+          if (refreshData.access_token) {
+            localStorage.setItem('accessToken', refreshData.access_token);
+          }
+        }
+
+        // 获取最新的token
+        const token = localStorage.getItem('accessToken');
+
+        // 调用删除设备API
+        const response = await fetch(`/api/devices/${device.id}`, {
+          method: 'DELETE',
+          headers: {
+            'Accept': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : ''
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          ElMessage.success('设备删除成功');
+          // 刷新设备列表
+          await fetchDevices();
+        } else if (response.status === 403) {
+          const errorData = await response.json();
+          ElMessage.error(errorData.msg || '权限不足，仅root用户可删除设备');
+        } else if (response.status === 404) {
+          const errorData = await response.json();
+          ElMessage.error(errorData.msg || '设备不存在');
+        } else if (response.status === 422) {
+          const errorData = await response.json();
+          ElMessage.error('请求参数错误：' + JSON.stringify(errorData.detail));
+        } else {
+          ElMessage.error('设备删除失败：' + response.statusText);
+        }
+      } catch (error) {
+        console.error('删除设备出错:', error);
+        ElMessage.error('删除设备失败，请检查网络连接');
+      }
+    }).catch(() => {
+      // 取消第二次确认
+    });
   }).catch(() => {
-    // 取消删除
+    // 取消第一次确认
   });
 };
 
@@ -273,6 +590,15 @@ const handleUpdateFirmware = (device: Device) => {
 
 .management-header h4 {
   margin: 0;
+}
+
+.filter-section {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 15px;
+  background: #f5f7fa;
+  border-radius: 4px;
 }
 
 .logs-header {

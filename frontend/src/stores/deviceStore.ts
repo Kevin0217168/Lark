@@ -6,6 +6,8 @@ export interface Device {
   status: string; // standby待机，没有任何观看者；stream推流
   isOnline: boolean; // 是否在线
   createTime: string;
+  area?: string; // 所属区域
+  number?: number; // 设备编号
   temperature?: number; // 温度数据
   humidity?: number; // 湿度数据
   videoStreamUrl?: string; // 视频流数据
