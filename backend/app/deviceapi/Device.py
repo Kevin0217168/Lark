@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from typing import Annotated, List
 from fastapi import status, Path, Query, Depends, Body, WebSocket
 from fastapi.responses import JSONResponse
+from Logset import async_log, logger
 
 import Db
 import Security
@@ -36,7 +37,9 @@ class Esp32:
 
     def disconnected(self):
         self.websocket = None
-        esp32IdDict.pop(self.id)
+        f = esp32IdDict.pop(self.id, None)
+        if not f:
+            logger.warning(f"设备{self.id} 试图从列表清除自己, 失败")
         with Db.OpenDb("Device Disconnected") as db:
             Db.UpdateDevice(db, id=self.id, isOnline=False, status="none")
         del self
