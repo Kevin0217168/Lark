@@ -64,6 +64,7 @@ async def websocket_endpoint(
                 for subscriber in device.subscribers:
                     await async_log(logger, "info", f"文本信息转发: 设备{device.id} -> 用户{subscriber.id}")
                     await subscriber.websocket.send_json(json_data)
+                await async_log(logger, "info", f"转发结束\n")
 
             if "bytes" in data:
                 size = len(data["bytes"])
@@ -84,6 +85,7 @@ async def websocket_endpoint(
                     for subscriber in device.subscribers:
                         await async_log(logger, "info", f"二进制信息转发: 设备{device.id} -> 用户{subscriber.id}")
                         await subscriber.websocket.send_bytes(data["bytes"])
+                    await async_log(logger, "info", f"转发结束\n")
     except (WebSocketDisconnect, RuntimeError) as e:
         await async_log(logger, "info", "设备已断开: ", e)
         for subscriber in device.subscribers:
@@ -129,6 +131,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     if d.websocket:
                         await async_log(logger, "info", f"信息转发: 用户{viewer.id} -> 转发到设备{d.id}")
                         await d.websocket.send_text(data["text"])
+                await async_log(logger, "info", f"转发结束\n")
     except (WebSocketDisconnect, RuntimeError):
         # 退出连接则自动销毁
         viewer.disconnect()

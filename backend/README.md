@@ -75,15 +75,30 @@ FastAPI + SQLite
 }
 ```
 
+### 从设备接收格式
+```json
+{
+    "code": 0,         // 0失败, 1成功
+    "msg": "OK.",      // 返回信息
+    "key":  "status",  // 返回键
+    "values": "stream"  // 返回值
+}
+```
+
 ### 字段
+所有前端请求只要满足json格式, 会直接被转发到设备端处理, 具体请求和响应格式请参考[嵌入式技术文档](../embedded/README.md)
+
+- `code`
+    - 1 设置
+    - 0 查询
 - `item`
-    - status 修改状态部分
+    - status 状态部分
         - `key`
             - status
                 - `values`
                     - stream 进入推流模式
                     - standby 进入待机模式
-    - camera 修改摄像部分
+    - camera 摄像部分
         - `key`
             - frame_size
                 - `values`
@@ -114,13 +129,3 @@ FastAPI + SQLite
                     - 数字1确认修改
                 
                 
-
-### 从设备接收格式
-```json
-{
-    "code": 0,         // 0失败, 1成功
-    "msg": "OK.",      // 返回信息
-    "key":  "status",  // 返回键
-    "values": "stream"  // 返回值
-}
-```
