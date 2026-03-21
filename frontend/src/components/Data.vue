@@ -59,12 +59,6 @@
                   <span class="cell-value time">{{ selectedDevice.createTime }}</span>
                 </div>
               </div>
-              <div class="data-actions">
-                <el-button type="primary" size="small" @click="goToFullscreen">
-                  <el-icon><FullScreen /></el-icon>
-                  查看大图
-                </el-button>
-              </div>
             </div>
           </div>
         </div>
