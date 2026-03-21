@@ -45,6 +45,9 @@
           placeholder="所属区域" 
           style="width: 200px; margin-right: 10px;"
           clearable
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
         >
           <el-option 
             v-for="area in uniqueAreas" 
@@ -117,6 +120,9 @@
           placeholder="所属区域" 
           style="width: 200px; margin-right: 10px;"
           clearable
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
         >
           <el-option 
             v-for="area in uniqueAreas" 
@@ -130,6 +136,9 @@
           placeholder="日志级别" 
           style="width: 150px; margin-right: 10px;"
           clearable
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
         >
           <el-option label="信息" value="info" />
           <el-option label="警告" value="warning" />
@@ -208,14 +217,14 @@ const selectedDeviceId = ref<number | null>(null);
 // 日志筛选表单
 const logFilterForm = ref({
   deviceName: '',
-  area: '',
-  level: null as string | null
+  area: [] as string[],
+  level: [] as string[]
 });
 
 // 筛选表单
 const filterForm = ref({
   name: '',
-  area: '',
+  area: [] as string[],
   isOnline: null as boolean | null
 });
 
@@ -231,7 +240,7 @@ const uniqueAreas = computed(() => {
 const filteredDevices = computed(() => {
   return devices.value.filter(device => {
     const nameMatch = !filterForm.value.name || device.name.toLowerCase().includes(filterForm.value.name.toLowerCase());
-    const areaMatch = !filterForm.value.area || (device.area && device.area.toLowerCase().includes(filterForm.value.area.toLowerCase()));
+    const areaMatch = filterForm.value.area.length === 0 || (device.area && filterForm.value.area.includes(device.area));
     const onlineMatch = filterForm.value.isOnline === null || device.isOnline === filterForm.value.isOnline;
     return nameMatch && areaMatch && onlineMatch;
   });
@@ -241,7 +250,7 @@ const filteredDevices = computed(() => {
 const resetFilter = () => {
   filterForm.value = {
     name: '',
-    area: '',
+    area: [],
     isOnline: null
   };
 };
@@ -260,12 +269,12 @@ const filteredLogsByFilter = computed(() => {
       log.deviceName.toLowerCase().includes(logFilterForm.value.deviceName.toLowerCase());
     
     // 区域筛选：通过设备名称找到对应设备的区域
-    const areaMatch = !logFilterForm.value.area || (() => {
+    const areaMatch = logFilterForm.value.area.length === 0 || (() => {
       const device = devices.value.find(d => d.name === log.deviceName);
-      return device && device.area === logFilterForm.value.area;
+      return device && device.area && logFilterForm.value.area.includes(device.area);
     })();
     
-    const levelMatch = !logFilterForm.value.level || log.level === logFilterForm.value.level;
+    const levelMatch = logFilterForm.value.level.length === 0 || logFilterForm.value.level.includes(log.level);
     return deviceNameMatch && areaMatch && levelMatch;
   });
 });
@@ -274,8 +283,8 @@ const filteredLogsByFilter = computed(() => {
 const resetLogFilter = () => {
   logFilterForm.value = {
     deviceName: '',
-    area: '',
-    level: null
+    area: [],
+    level: []
   };
 };
 
