@@ -41,7 +41,7 @@ async def websocket_endpoint(
                     # await websocket.send_text("Invalid JSON received")
                     # 直接跳过这次解码环节
                     await async_log(logger, "warning", f"解码失败, 来自设备{device.id}")
-                    await async_log(logger, "warning", f"原始信息: {data["text"]}")
+                    await async_log(logger, "warning", f"原始信息: {data['text']}")
                     continue
                 await async_log(logger, "info", f"收到文本信息, 来自设备{device.id} : {json_data}")
                 try:
