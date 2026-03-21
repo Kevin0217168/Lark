@@ -19,4 +19,6 @@ dependencies:
   # 通过相对路径定义本地依赖项
   Wifista:
     path: ../components/Wifista
+  sht4x:
+    path: ../components/sht4x
   espressif/esp_websocket_client: '*'

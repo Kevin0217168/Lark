@@ -43,11 +43,18 @@ dependencies:
     source:
       type: idf
     version: 5.5.3
+  sht4x:
+    dependencies: []
+    source:
+      path: /home/mint/Documents/contests/Lark/embedded/components/sht4x
+      type: local
+    version: '*'
 direct_dependencies:
 - Wifista
 - espressif/esp32-camera
 - espressif/esp_websocket_client
 - idf
-manifest_hash: 3e92e6c7296118342cd53405a17d893622cd44c3e712597203f36f6efb6c1170
-target: esp32
+- sht4x
+manifest_hash: 6f8b1740106afb6e949af7b5e5d56eea94e57fb59a0032a21a01b3a1fc784e73
+target: esp32s3
 version: 2.0.0
