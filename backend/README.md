@@ -71,15 +71,61 @@ FastAPI + SQLite
     "code": 0,         // 0查询, 1设定
     "item": "status",  // 要操作的块
     "key":  "status",
-    "value": "stream"
+    "values": "stream"
 }
 ```
+
 ### 从设备接收格式
 ```json
 {
     "code": 0,         // 0失败, 1成功
     "msg": "OK.",      // 返回信息
     "key":  "status",  // 返回键
-    "value": "stream"  // 返回值
+    "values": "stream"  // 返回值
 }
 ```
+
+### 字段
+所有前端请求只要满足json格式, 会直接被转发到设备端处理, 具体请求和响应格式请参考[嵌入式技术文档](../embedded/README.md)
+
+- `code`
+    - 1 设置
+    - 0 查询
+- `item`
+    - status 状态部分
+        - `key`
+            - status
+                - `values`
+                    - stream 进入推流模式
+                    - standby 进入待机模式
+    - camera 摄像部分
+        - `key`
+            - frame_size
+                - `values`
+                    - FRAMESIZE_128X128
+                    - FRAMESIZE_240X240
+                    - FRAMESIZE_320X320
+                    - FRAMESIZE_VGA
+                    - FRAMESIZE_SVGA
+                    - FRAMESIZE_HD
+                    - FRAMESIZE_FHD
+                - example
+                    ```json
+                    {
+                        "code": 1,                 // 1设定
+                        "item": "camera",          // 设置camera模块
+                        "key":  "frame_size",      // 设置帧大小
+                        "values": "FRAMESIZE_SVGA" // 帧大小
+                    }
+                    ```
+            - jpeg_quality
+                - `values`
+                    - 数字0-63之间
+            - set_hmirror 设置水平反转 重复设置会再次翻转
+                - `values`
+                    - 数字1确认修改
+            - set_vflip 设置垂直反转 重复设置会再次翻转
+                - `values`
+                    - 数字1确认修改
+                
+                
