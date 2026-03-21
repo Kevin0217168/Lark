@@ -252,7 +252,7 @@ const handleResize = () => {
 const goToDeviceManagement = () => {
   router.push({
     path: '/Device',
-    query: { tab: 'overview' }
+    query: { tab: 'management' }
   });
 };
 

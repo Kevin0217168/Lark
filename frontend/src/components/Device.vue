@@ -102,18 +102,43 @@
     <div v-else-if="activeTab === 'logs'">
       <div class="logs-header">
         <h4>设备日志</h4>
-        <el-select v-model="selectedDeviceId" placeholder="选择设备" style="width: 200px;">
-          <el-option label="全部设备" :value="null" />
-          <el-option 
-            v-for="device in devices" 
-            :key="device.id" 
-            :label="device.name" 
-            :value="device.id" 
-          />
-        </el-select>
       </div>
       
-      <el-table :data="filteredLogs" style="width: 100%" border>
+      <!-- 筛选查询 -->
+      <div class="filter-section">
+        <el-input 
+          v-model="logFilterForm.deviceName" 
+          placeholder="设备名称" 
+          style="width: 200px; margin-right: 10px;"
+          clearable
+        />
+        <el-select 
+          v-model="logFilterForm.area" 
+          placeholder="所属区域" 
+          style="width: 200px; margin-right: 10px;"
+          clearable
+        >
+          <el-option 
+            v-for="area in uniqueAreas" 
+            :key="area" 
+            :label="area" 
+            :value="area" 
+          />
+        </el-select>
+        <el-select 
+          v-model="logFilterForm.level" 
+          placeholder="日志级别" 
+          style="width: 150px; margin-right: 10px;"
+          clearable
+        >
+          <el-option label="信息" value="info" />
+          <el-option label="警告" value="warning" />
+          <el-option label="错误" value="error" />
+        </el-select>
+        <el-button @click="resetLogFilter">重置</el-button>
+      </div>
+      
+      <el-table :data="filteredLogsByFilter" style="width: 100%" border>
         <el-table-column prop="id" label="日志ID" min-width="80" />
         <el-table-column prop="deviceName" label="设备名称" min-width="120" />
         <el-table-column prop="level" label="级别" min-width="100">
@@ -137,7 +162,7 @@
         <el-table-column prop="timestamp" label="时间" min-width="180" />
       </el-table>
       
-      <div v-if="filteredLogs.length === 0" class="no-logs">
+      <div v-if="filteredLogsByFilter.length === 0" class="no-logs">
         <p>暂无日志数据</p>
       </div>
     </div>
@@ -148,9 +173,6 @@
     <el-form :model="deviceForm" label-width="100px">
       <el-form-item label="设备名称">
         <el-input v-model="deviceForm.name" placeholder="请输入设备名称" />
-      </el-form-item>
-      <el-form-item label="设备ID" v-if="!isEdit">
-        <el-input v-model="deviceForm.id" placeholder="请输入设备ID" />
       </el-form-item>
       <el-form-item label="设备密钥" v-if="!isEdit">
         <el-input v-model="deviceForm.secret" placeholder="请输入设备密钥" />
@@ -182,6 +204,13 @@ defineProps<{
 const { devices, getDeviceLogs, addDevice, updateDevice, deleteDevice, fetchDevices } = useDeviceStore();
 
 const selectedDeviceId = ref<number | null>(null);
+
+// 日志筛选表单
+const logFilterForm = ref({
+  deviceName: '',
+  area: '',
+  level: null as string | null
+});
 
 // 筛选表单
 const filterForm = ref({
@@ -224,6 +253,32 @@ const filteredLogs = computed<DeviceLog[]>(() => {
   });
 });
 
+// 筛选后的日志列表
+const filteredLogsByFilter = computed(() => {
+  return filteredLogs.value.filter(log => {
+    const deviceNameMatch = !logFilterForm.value.deviceName || 
+      log.deviceName.toLowerCase().includes(logFilterForm.value.deviceName.toLowerCase());
+    
+    // 区域筛选：通过设备名称找到对应设备的区域
+    const areaMatch = !logFilterForm.value.area || (() => {
+      const device = devices.value.find(d => d.name === log.deviceName);
+      return device && device.area === logFilterForm.value.area;
+    })();
+    
+    const levelMatch = !logFilterForm.value.level || log.level === logFilterForm.value.level;
+    return deviceNameMatch && areaMatch && levelMatch;
+  });
+});
+
+// 重置日志筛选
+const resetLogFilter = () => {
+  logFilterForm.value = {
+    deviceName: '',
+    area: '',
+    level: null
+  };
+};
+
 const dialogVisible = ref(false);
 const isEdit = ref(false);
 const deviceForm = ref({
@@ -265,8 +320,8 @@ const handleEdit = (device: Device) => {
 
 // 保存设备
 const handleSave = async () => {
-  if (!deviceForm.value.name || !deviceForm.value.id) {
-    ElMessage.warning('请填写完整信息');
+  if (!deviceForm.value.name) {
+    ElMessage.warning('请填写设备名称');
     return;
   }
 
@@ -274,6 +329,19 @@ const handleSave = async () => {
     // 编辑模式 - 调用后端API
     if (!deviceForm.value.area || !deviceForm.value.number) {
       ElMessage.warning('请填写完整的设备信息');
+      return;
+    }
+
+    // 检查编号是否与同区域的设备编号重复
+    const deviceId = parseInt(deviceForm.value.id);
+    const duplicateDevice = devices.value.find(d => 
+      d.id !== deviceId && 
+      d.area === deviceForm.value.area && 
+      d.number === deviceForm.value.number
+    );
+
+    if (duplicateDevice) {
+      ElMessage.error(`编号 ${deviceForm.value.number} 在区域 "${deviceForm.value.area}" 中已被设备 "${duplicateDevice.name}" 使用`);
       return;
     }
 
@@ -318,7 +386,18 @@ const handleSave = async () => {
   } else {
     // 添加模式 - 调用后端API
     if (!deviceForm.value.secret || !deviceForm.value.area || !deviceForm.value.number) {
-      ElMessage.warning('请填写完整的设备信息');
+      ElMessage.warning('请填写完整的设备信息（密钥、区域、编号）');
+      return;
+    }
+
+    // 检查编号是否与同区域的设备编号重复
+    const duplicateDevice = devices.value.find(d => 
+      d.area === deviceForm.value.area && 
+      d.number === deviceForm.value.number
+    );
+
+    if (duplicateDevice) {
+      ElMessage.error(`编号 ${deviceForm.value.number} 在区域 "${deviceForm.value.area}" 中已被设备 "${duplicateDevice.name}" 使用`);
       return;
     }
 
