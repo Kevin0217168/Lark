@@ -35,15 +35,15 @@ async def websocket_endpoint(
             data = await websocket.receive()
             if "text" in data:
                 # 试图接收esp32返回的控制信息结果
-                await async_log(logger, "info", data["text"])
                 try:
                     json_data = json.loads(data["text"])
                 except json.JSONDecodeError:
                     # await websocket.send_text("Invalid JSON received")
                     # 直接跳过这次解码环节
-                    await async_log(logger, "warning", "解码失败")
+                    await async_log(logger, "warning", f"解码失败, 来自设备{device.id}")
+                    await async_log(logger, "warning", f"原始信息: {data["text"]}")
                     continue
-                await async_log(logger, "info", json_data)
+                await async_log(logger, "info", f"收到文本信息, 来自设备{device.id} : {json_data}")
                 try:
                     if json_data:
                         # 响应成功
@@ -62,11 +62,12 @@ async def websocket_endpoint(
                     continue
                 # 给所有订阅者转发消息
                 for subscriber in device.subscribers:
+                    await async_log(logger, "info", f"文本信息转发: 设备{device.id} -> 用户{subscriber.id}")
                     await subscriber.websocket.send_json(json_data)
 
             if "bytes" in data:
                 size = len(data["bytes"])
-                await async_log(logger, "info", f"Received {size} bytes")
+                await async_log(logger, "info", f"来自设备{device.id} Received {size} bytes")
                 if len(device.subscribers) == 0:
                     await async_log(logger, "info", "设备观看者为0")
                     # 发送休眠信息
@@ -81,6 +82,7 @@ async def websocket_endpoint(
                 else:
                     # 给所有观看者转发信息
                     for subscriber in device.subscribers:
+                        await async_log(logger, "info", f"二进制信息转发: 设备{device.id} -> 用户{subscriber.id}")
                         await subscriber.websocket.send_bytes(data["bytes"])
     except (WebSocketDisconnect, RuntimeError) as e:
         await async_log(logger, "info", "设备已断开: ", e)
@@ -121,7 +123,12 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 except json.JSONDecodeError:
                     await websocket.send_text("Invalid JSON received")
                     continue
-                await async_log(logger, "info", json_data)
+                await async_log(logger, "info", f"来自用户{viewer.id} 的信息: {json_data}")
+                # 直接转发给设备
+                for d in viewer.subscribed_device:
+                    if d.websocket:
+                        await async_log(logger, "info", f"信息转发: 用户{viewer.id} -> 转发到设备{d.id}")
+                        await d.websocket.send_text(data["text"])
     except (WebSocketDisconnect, RuntimeError):
         # 退出连接则自动销毁
         viewer.disconnect()

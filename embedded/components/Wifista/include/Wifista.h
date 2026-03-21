@@ -46,7 +46,7 @@ esp_err_t WifiSecurityRequest(const char *host, const char *path, uint16_t port,
 void WebsocketStart(const char *host, const char *path, uint16_t port);
 void Websocket_event_handler_register(void (*ws_disconnected_handler)(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data),
                                        void (* ws_text_handler)(void *handler_args, int len, const char *data_ptr));
-
+void ws_text_handler(void *handler_args, int len, const char *data_ptr);
 bool WebsocketIsConnected();
 bool WebsocketSendbytes(uint8_t *data, int len);
 bool WebsocketSendText(uint8_t *data, int len);

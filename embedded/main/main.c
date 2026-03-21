@@ -61,65 +61,6 @@ void PhotoTransmit(camera_fb_t *fb)
     WebsocketSendbytes(fb->buf, fb->len);
 }
 
-void ws_text_handler(void *handler_args, int len, const char *data_ptr)
-{
-    cJSON *json = cJSON_ParseWithLength(data_ptr, len);
-    if (json != NULL)
-    {
-        char *string = cJSON_Print(json);
-        ESP_LOGI(TAG, "收到 JSON 数据, 解析成功: \n%s\n", string);
-        cJSON_free(string);
-
-        // 根据实际返回字段名修改
-        cJSON *code_item = cJSON_GetObjectItemCaseSensitive(json, "code");
-        cJSON *item_item = cJSON_GetObjectItemCaseSensitive(json, "item");
-        cJSON *key_item = cJSON_GetObjectItemCaseSensitive(json, "key");
-        cJSON *values_item = cJSON_GetObjectItemCaseSensitive(json, "values");
-        
-        if (cJSON_IsNumber(code_item) && cJSON_IsString(item_item) && cJSON_IsString(key_item) && cJSON_IsString(values_item))
-        {
-            // 注意：需要拷贝字符串，因为 json 即将被释放
-            if (code_item->valueint){
-                // code: 1 修改操作
-                if (strcasecmp(item_item->valuestring, "status") == 0){
-                    // 修改状态
-                    if (strcasecmp(values_item->valuestring, "stream") == 0){
-                        ESP_LOGI(TAG, "进入推流模式");
-                        device.status = DEVICE_ON_STREAM;
-                        char return_data[128] = "{\"code\":1,\"msg\":\"进入推流模式.\",\"key\":\"status\",\"values\":\"stream\"}";
-                        WebsocketSendText(return_data, strlen(return_data));
-                    }else if (strcasecmp(values_item->valuestring, "standby") == 0){
-                        ESP_LOGI(TAG, "进入待机模式");
-                        device.status = DEVICE_STANDBY;
-                        char return_data[128] = "{\"code\":1,\"msg\":\"进入待机模式.\",\"key\":\"status\",\"values\":\"standby\"}";
-                        WebsocketSendText(return_data, strlen(return_data));
-                    }                    
-                }
-            }else{
-                // code: 0 读取操作
-            }
-            
-        }
-        else
-        {
-            ESP_LOGE(TAG, "返回的 JSON 缺少必要字段或类型错误");
-            // 反馈状态
-            char return_data[128] = "{\"code\":0,\"msg\":\"返回的 JSON 缺少必要字段或类型错误\",\"key\":\"\",\"values\":\"\"}";
-            WebsocketSendText(return_data, strlen(return_data));
-        }
-
-        cJSON_Delete(json);
-    }
-    else
-    {
-        ESP_LOGI(TAG, "收到 JSON 数据, 解析失败");
-        // 反馈状态
-        // uint8_t return_data[128];
-        // snprintf(return_data, sizeof(return_data), "{\"code\":0,\"msg\":\"JSON 数据解析失败\",\"key\":\"\",\"values\":\"%s\"}", data_ptr);
-        char return_data[128] = "{\"code\":0,\"msg\":\"JSON 数据解析失败\",\"key\":\"\",\"values\":\"\"}";
-        WebsocketSendText(return_data, strlen(return_data));
-    }
-}
 
 void camera_transmit_task();
 
@@ -138,20 +79,6 @@ void app_main(void)
 
     // 创建任务执行 HTTPS 请求
     WifiSecurityClientInit();
-    // WifiSecurityRequest("https://file.mintlab.top", "/", 443, WS_CLINENT_METHOD_GET, NULL);
-
-    // WifiSecurityRequest("http://192.168.216.109", "/?name=ESP-32", 8080, WS_CLINENT_METHOD_GET, NULL, NULL);
-
-    // // 注册设备, 获得id
-    // char post_data[64];
-    // snprintf(post_data, sizeof(post_data), "{\"secret\":\"%s\"}", secret);
-    // WifiSecurityRequest("http://192.168.216.109", "/device/register", 8080,
-    //      WS_CLINENT_METHOD_POST, post_data, register_handler);
-
-    // // 通过id开启ws连接
-    // char path_data[128];
-    // snprintf(path_data, sizeof(path_data), "/stream/device/ws?id=%s", device.uuid);
-    // WebsocketStart("ws://192.168.216.109", path_data, 8080);
 
     // 通过id开启ws连接/stream/viewer/ws
     char path_data[128];
@@ -159,7 +86,8 @@ void app_main(void)
     // 注册回调函数
     Websocket_event_handler_register(NULL, ws_text_handler);
 
-    WebsocketStart("wss://lark.mintlab.top", path_data, 443);
+    // WebsocketStart("wss://lark.mintlab.top", path_data, 443);
+    WebsocketStart("ws://192.168.1.199", path_data, 8080);
 
     // 等待ws连接成功
     while (!WebsocketIsConnected())
