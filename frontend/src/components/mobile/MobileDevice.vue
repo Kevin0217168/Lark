@@ -1,53 +1,66 @@
 <template>
-  <el-card class="device-card">
-    <h3 class="title">设备管理</h3>
-    
+  <div class="mobile-device">
     <!-- 总览视图 -->
-    <div v-if="activeTab === 'overview'">
-      <h4>设备总览</h4>
-      <el-row :gutter="20">
-        <el-col :span="8" v-for="device in devices" :key="device.id">
-          <el-card :class="device.isOnline ? 'device-online' : 'device-offline'">
-            <h5>{{ device.name }}</h5>
-            <p>区域: {{ device.area || '未设置' }}</p>
-            <p>编号: {{ device.number || '-' }}</p>
-            <p>
-              状态:
-              <el-tag :type="device.isOnline ? 'success' : 'danger'">
-                {{ device.isOnline ? '在线' : '离线' }}
-              </el-tag>
-            </p>
-          </el-card>
-        </el-col>
-      </el-row>
-      <div v-if="devices.length === 0" class="no-devices">
-        <p>暂无设备数据</p>
+    <div v-if="activeTab === 'overview'" class="overview-container">
+      <div class="overview-header">
+        <h3>设备总览</h3>
+      </div>
+      <div class="device-list">
+        <div 
+          v-for="device in devices" 
+          :key="device.id" 
+          class="device-card"
+          :class="device.isOnline ? 'online' : 'offline'"
+        >
+          <div class="device-header">
+            <h4>{{ device.name }}</h4>
+            <el-tag :type="device.isOnline ? 'success' : 'danger'" size="small">
+              {{ device.isOnline ? '在线' : '离线' }}
+            </el-tag>
+          </div>
+          <div class="device-info">
+            <div class="info-row">
+              <span class="label">区域</span>
+              <span class="value">{{ device.area || '未设置' }}</span>
+            </div>
+            <div class="info-row">
+              <span class="label">编号</span>
+              <span class="value">{{ device.number || '-' }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-if="devices.length === 0" class="empty-state">
+        <el-empty description="暂无设备数据" />
       </div>
     </div>
     
     <!-- 管理视图 -->
-    <div v-else-if="activeTab === 'management'">
+    <div v-else-if="activeTab === 'management'" class="management-container">
       <div class="management-header">
-        <h4>设备管理</h4>
-        <el-button type="primary" @click="showAddDialog">添加设备</el-button>
+        <h3>设备管理</h3>
+        <el-button type="primary" size="small" @click="showAddDialog">
+          <el-icon><Plus /></el-icon>
+          添加
+        </el-button>
       </div>
       
-      <!-- 筛选查询 -->
+      <!-- 筛选 -->
       <div class="filter-section">
         <el-input 
           v-model="filterForm.name" 
           placeholder="设备名称" 
-          style="width: 200px; margin-right: 10px;"
           clearable
+          class="filter-input"
         />
         <el-select 
           v-model="filterForm.area" 
           placeholder="所属区域" 
-          style="width: 200px; margin-right: 10px;"
           clearable
           multiple
           collapse-tags
           collapse-tags-tooltip
+          class="filter-select"
         >
           <el-option 
             v-for="area in uniqueAreas" 
@@ -59,70 +72,82 @@
         <el-select 
           v-model="filterForm.isOnline" 
           placeholder="在线状态" 
-          style="width: 150px; margin-right: 10px;"
           clearable
+          class="filter-select"
         >
           <el-option label="在线" :value="true" />
           <el-option label="离线" :value="false" />
         </el-select>
-        <el-button @click="resetFilter">重置</el-button>
+        <el-button size="small" @click="resetFilter">重置</el-button>
       </div>
       
-      <el-table :data="filteredDevices" style="width: 100%" border>
-        <el-table-column prop="id" label="设备ID" min-width="80" />
-        <el-table-column prop="name" label="设备名称" min-width="150" />
-        <el-table-column prop="area" label="所属区域" min-width="120" />
-        <el-table-column prop="number" label="设备编号" min-width="100" />
-        <el-table-column label="在线状态" min-width="120">
-          <template #default="scope">
-            <el-tag :type="scope.row.isOnline ? 'success' : 'danger'">
-              {{ scope.row.isOnline ? '在线' : '离线' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="推流状态" min-width="120">
-          <template #default="scope">
-            <el-tag :type="scope.row.status === 'stream' ? 'success' : 'info'">
-              {{ scope.row.status === 'stream' ? '推流中' : '待机' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" min-width="300" fixed="right">
-          <template #default="scope">
-            <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
-            <el-button size="small" type="success" @click="handleUpdateFirmware(scope.row)">更新固件</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      
-      <div v-if="filteredDevices.length === 0" class="no-devices">
-        <p>暂无设备数据</p>
+      <!-- 设备列表 -->
+      <div class="device-list">
+        <div 
+          v-for="device in filteredDevices" 
+          :key="device.id" 
+          class="device-card"
+          :class="device.isOnline ? 'online' : 'offline'"
+        >
+          <div class="device-header">
+            <h4>{{ device.name }}</h4>
+            <div class="device-status">
+              <el-tag :type="device.isOnline ? 'success' : 'danger'" size="small">
+                {{ device.isOnline ? '在线' : '离线' }}
+              </el-tag>
+              <el-tag :type="device.status === 'stream' ? 'success' : 'info'" size="small">
+                {{ device.status === 'stream' ? '推流中' : '待机' }}
+              </el-tag>
+            </div>
+          </div>
+          <div class="device-info">
+            <div class="info-row">
+              <span class="label">设备ID</span>
+              <span class="value">{{ device.id }}</span>
+            </div>
+            <div class="info-row">
+              <span class="label">区域</span>
+              <span class="value">{{ device.area || '未设置' }}</span>
+            </div>
+            <div class="info-row">
+              <span class="label">编号</span>
+              <span class="value">{{ device.number || '-' }}</span>
+            </div>
+          </div>
+          <div class="device-actions">
+            <el-button size="small" @click="handleEdit(device)">编辑</el-button>
+            <el-button size="small" type="success" @click="handleUpdateFirmware(device)">更新固件</el-button>
+            <el-button size="small" type="danger" @click="handleDelete(device)">删除</el-button>
+          </div>
+        </div>
+      </div>
+      <div v-if="filteredDevices.length === 0" class="empty-state">
+        <el-empty description="暂无设备数据" />
       </div>
     </div>
     
     <!-- 日志视图 -->
-    <div v-else-if="activeTab === 'logs'">
+    <div v-else-if="activeTab === 'logs'" class="logs-container">
       <div class="logs-header">
-        <h4>设备日志</h4>
+        <h3>设备日志</h3>
       </div>
       
-      <!-- 筛选查询 -->
+      <!-- 筛选 -->
       <div class="filter-section">
         <el-input 
           v-model="logFilterForm.deviceName" 
           placeholder="设备名称" 
-          style="width: 200px; margin-right: 10px;"
           clearable
+          class="filter-input"
         />
         <el-select 
           v-model="logFilterForm.area" 
           placeholder="所属区域" 
-          style="width: 200px; margin-right: 10px;"
           clearable
           multiple
           collapse-tags
           collapse-tags-tooltip
+          class="filter-select"
         >
           <el-option 
             v-for="area in uniqueAreas" 
@@ -134,83 +159,90 @@
         <el-select 
           v-model="logFilterForm.level" 
           placeholder="日志级别" 
-          style="width: 150px; margin-right: 10px;"
           clearable
           multiple
           collapse-tags
           collapse-tags-tooltip
+          class="filter-select"
         >
           <el-option label="信息" value="info" />
           <el-option label="警告" value="warning" />
           <el-option label="错误" value="error" />
         </el-select>
-        <el-button @click="resetLogFilter">重置</el-button>
+        <el-button size="small" @click="resetLogFilter">重置</el-button>
       </div>
       
-      <el-table :data="filteredLogsByFilter" style="width: 100%" border>
-        <el-table-column prop="id" label="日志ID" min-width="80" />
-        <el-table-column prop="deviceName" label="设备名称" min-width="120" />
-        <el-table-column prop="level" label="级别" min-width="100">
-          <template #default="scope">
+      <!-- 日志列表 -->
+      <div class="log-list">
+        <div 
+          v-for="log in filteredLogsByFilter" 
+          :key="log.id" 
+          class="log-card"
+          :class="log.level"
+        >
+          <div class="log-header">
+            <span class="log-device">{{ log.deviceName }}</span>
             <el-tag 
               :type="{
                 'info': 'info',
                 'warning': 'warning',
                 'error': 'danger'
-              }[scope.row.level as 'info' | 'warning' | 'error']"
+              }[log.level]"
+              size="small"
             >
               {{ {
                 'info': '信息',
                 'warning': '警告',
                 'error': '错误'
-              }[scope.row.level as 'info' | 'warning' | 'error'] }}
+              }[log.level] }}
             </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="message" label="日志内容" min-width="300" />
-        <el-table-column prop="timestamp" label="时间" min-width="180" />
-      </el-table>
-      
-      <div v-if="filteredLogsByFilter.length === 0" class="no-logs">
-        <p>暂无日志数据</p>
+          </div>
+          <div class="log-content">{{ log.message }}</div>
+          <div class="log-time">{{ log.timestamp }}</div>
+        </div>
+      </div>
+      <div v-if="filteredLogsByFilter.length === 0" class="empty-state">
+        <el-empty description="暂无日志数据" />
       </div>
     </div>
-  </el-card>
-  
-  <!-- 添加/编辑设备对话框 -->
-  <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑设备' : '添加设备'" width="500px">
-    <el-form :model="deviceForm" label-width="100px">
-      <el-form-item label="设备名称">
-        <el-input v-model="deviceForm.name" placeholder="请输入设备名称" />
-      </el-form-item>
-      <el-form-item label="设备密钥" v-if="!isEdit">
-        <el-input v-model="deviceForm.secret" placeholder="请输入设备密钥" />
-      </el-form-item>
-      <el-form-item label="所属区域">
-        <el-input v-model="deviceForm.area" placeholder="请输入所属区域" />
-      </el-form-item>
-      <el-form-item label="设备编号">
-        <el-input-number v-model="deviceForm.number" :min="1" placeholder="请输入设备编号" />
-      </el-form-item>
-    </el-form>
-    <template #footer>
-      <el-button @click="dialogVisible = false">取消</el-button>
-      <el-button type="primary" @click="handleSave">确定</el-button>
-    </template>
-  </el-dialog>
+    
+    <!-- 添加/编辑设备对话框 -->
+    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑设备' : '添加设备'" width="90%">
+      <el-form :model="deviceForm" label-width="100px">
+        <el-form-item label="设备名称">
+          <el-input v-model="deviceForm.name" placeholder="请输入设备名称" />
+        </el-form-item>
+        <el-form-item label="设备密钥" v-if="!isEdit">
+          <el-input v-model="deviceForm.secret" placeholder="请输入设备密钥" />
+        </el-form-item>
+        <el-form-item label="所属区域">
+          <el-input v-model="deviceForm.area" placeholder="请输入所属区域" />
+        </el-form-item>
+        <el-form-item label="设备编号">
+          <el-input-number v-model="deviceForm.number" :min="1" placeholder="请输入设备编号" style="width: 100%;" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleSave">确定</el-button>
+      </template>
+    </el-dialog>
+  </div>
 </template>
 
-<script lang="ts" setup>
+<script setup lang="ts">
 import { ref, computed } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { useDeviceStore, type Device, type DeviceLog } from '../stores/deviceStore';
+import { Plus } from '@element-plus/icons-vue';
+import { useDeviceStore, type Device, type DeviceLog } from '../../stores/deviceStore';
 
-// 接收从父组件传递的 activeTab 属性
-defineProps<{
-  activeTab: string;
+const props = defineProps<{
+  activeTab?: string;
 }>();
 
-const { devices, getDeviceLogs, addDevice, updateDevice, deleteDevice, fetchDevices } = useDeviceStore();
+const activeTab = computed(() => props.activeTab || 'overview');
+
+const { devices, getDeviceLogs, fetchDevices } = useDeviceStore();
 
 const selectedDeviceId = ref<number | null>(null);
 
@@ -268,7 +300,6 @@ const filteredLogsByFilter = computed(() => {
     const deviceNameMatch = !logFilterForm.value.deviceName || 
       log.deviceName.toLowerCase().includes(logFilterForm.value.deviceName.toLowerCase());
     
-    // 区域筛选：通过设备名称找到对应设备的区域
     const areaMatch = logFilterForm.value.area.length === 0 || (() => {
       const device = devices.value.find(d => d.name === log.deviceName);
       return device && device.area && logFilterForm.value.area.includes(device.area);
@@ -379,7 +410,6 @@ const handleSave = async () => {
       if (response.ok) {
         const data = await response.json();
         ElMessage.success('设备更新成功');
-        // 刷新设备列表
         await fetchDevices();
         dialogVisible.value = false;
       } else if (response.status === 404) {
@@ -435,7 +465,6 @@ const handleSave = async () => {
       if (response.ok) {
         const data = await response.json();
         ElMessage.success('设备添加成功');
-        // 刷新设备列表
         await fetchDevices();
         dialogVisible.value = false;
       } else if (response.status === 400) {
@@ -509,7 +538,6 @@ const handleDelete = async (device: Device) => {
         if (response.ok) {
           const data = await response.json();
           ElMessage.success('设备删除成功');
-          // 刷新设备列表
           await fetchDevices();
         } else if (response.status === 403) {
           const errorData = await response.json();
@@ -546,78 +574,186 @@ const handleUpdateFirmware = (device: Device) => {
       type: 'info',
     }
   ).then(() => {
-    // 模拟固件更新
-      ElMessage.success(`设备 "${device.name}" 固件更新成功`);
-
+    ElMessage.success(`设备 "${device.name}" 固件更新成功`);
   }).catch(() => {
     // 取消更新
   });
 };
 </script>
 
-<style lang="scss" scoped>
-.device-card {
-  z-index: 1;
-  width: 75%;
-  margin-top: 1%;
-  border-radius: 15px;
-  padding: 20px;
+<style scoped>
+.mobile-device {
+  min-height: 100vh;
+  background: #f5f7fa;
 }
 
-.device-online {
-  border-left: 4px solid #67c23a;
+/* 总览视图 */
+.overview-container,
+.management-container,
+.logs-container {
+  padding: 0;
 }
 
-.device-offline {
-  border-left: 4px solid #f56c6c;
-  opacity: 0.8;
+.overview-header,
+.management-header,
+.logs-header {
+  margin-bottom: 16px;
 }
 
-.title {
-  text-align: center;
-  margin-bottom: 20px;
-}
-
-.no-devices {
-  text-align: center;
-  padding: 40px 0;
-  color: #999;
+.overview-header h3,
+.management-header h3,
+.logs-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
 }
 
 .management-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
 }
 
-.management-header h4 {
-  margin: 0;
-}
-
-.filter-section {
+/* 设备列表 */
+.device-list {
   display: flex;
-  align-items: center;
-  margin-bottom: 20px;
-  padding: 15px;
-  background: #f5f7fa;
-  border-radius: 4px;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.logs-header {
+.device-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border-left: 4px solid #67c23a;
+}
+
+.device-card.offline {
+  border-left-color: #f56c6c;
+  opacity: 0.8;
+}
+
+.device-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
-.logs-header h4 {
+.device-header h4 {
   margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
 }
 
-.no-logs {
-  text-align: center;
+.device-status {
+  display: flex;
+  gap: 8px;
+}
+
+.device-info {
+  margin-bottom: 12px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.info-row:last-child {
+  border-bottom: none;
+}
+
+.info-row .label {
+  font-size: 14px;
+  color: #909399;
+}
+
+.info-row .value {
+  font-size: 14px;
+  font-weight: 500;
+  color: #303133;
+}
+
+.device-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #f0f0f0;
+}
+
+/* 筛选 */
+.filter-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 16px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.filter-input,
+.filter-select {
+  width: 100% !important;
+}
+
+/* 日志列表 */
+.log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.log-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border-left: 4px solid #909399;
+}
+
+.log-card.warning {
+  border-left-color: #e6a23c;
+}
+
+.log-card.error {
+  border-left-color: #f56c6c;
+}
+
+.log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.log-device {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.log-content {
+  font-size: 14px;
+  color: #606266;
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.log-time {
+  font-size: 12px;
+  color: #909399;
+}
+
+/* 空状态 */
+.empty-state {
   padding: 40px 0;
-  color: #999;
 }
 </style>

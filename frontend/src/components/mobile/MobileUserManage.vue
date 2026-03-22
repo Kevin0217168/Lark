@@ -1,227 +1,204 @@
 <template>
-  <el-card class="user-manage-card">
+  <div class="mobile-user-manage">
+    <!-- 头部 -->
     <div class="header-section">
-      <div class="header-left">
-        <el-button type="primary" @click="openAddUserDialog">
-          <el-icon><Plus /></el-icon>
-          新增用户
-        </el-button>
-      </div>
-      <h3 class="title">用户管理</h3>
-      <div class="header-right"></div>
+      <h3>用户管理</h3>
+      <el-button type="primary" size="small" @click="openAddUserDialog">
+        <el-icon><Plus /></el-icon>
+        新增
+      </el-button>
     </div>
 
+    <!-- 筛选 -->
     <div class="filter-section">
-      <div class="filter-left">
-        <el-select
-          v-model="filterRole"
-          placeholder="筛选角色"
-          clearable
-          style="width: 150px"
-          @change="handleFilterChange"
-        >
-          <el-option label="全部角色" value="" />
-          <el-option label="管理员" value="root" />
-          <el-option label="普通用户" value="user" />
-        </el-select>
-        <el-button 
-          type="danger" 
-          :disabled="selectedUsers.length === 0"
-          @click="handleBatchDelete"
-        >
-          <el-icon><Delete /></el-icon>
-          批量删除 ({{ selectedUsers.length }})
-        </el-button>
-      </div>
-      <div class="filter-right">
-        <el-input
-          v-model="searchUsername"
-          placeholder="搜索用户名/昵称/邮箱"
-          clearable
-          style="width: 250px"
-          @input="handleSearchChange"
-        >
-          <template #prefix>
-            <el-icon><Search /></el-icon>
-          </template>
-        </el-input>
-      </div>
+      <el-select
+        v-model="filterRole"
+        placeholder="筛选角色"
+        clearable
+        class="filter-select"
+        @change="handleFilterChange"
+      >
+        <el-option label="全部角色" value="" />
+        <el-option label="管理员" value="root" />
+        <el-option label="普通用户" value="user" />
+      </el-select>
+      <el-input
+        v-model="searchUsername"
+        placeholder="搜索用户名/昵称/邮箱"
+        clearable
+        class="filter-input"
+        @input="handleSearchChange"
+      >
+        <template #prefix>
+          <el-icon><Search /></el-icon>
+        </template>
+      </el-input>
+      <el-button 
+        type="danger" 
+        size="small"
+        :disabled="selectedUsers.length === 0"
+        @click="handleBatchDelete"
+      >
+        <el-icon><Delete /></el-icon>
+        批量删除 ({{ selectedUsers.length }})
+      </el-button>
     </div>
 
+    <!-- 加载状态 -->
     <div v-if="loading" class="loading-container">
       <el-icon class="is-loading"><Loading /></el-icon>
       <span>加载中...</span>
     </div>
 
+    <!-- 错误状态 -->
     <div v-else-if="error" class="error-container">
       <el-icon><Warning /></el-icon>
       <span>{{ error }}</span>
-      <el-button type="primary" @click="fetchUsers">重新加载</el-button>
+      <el-button type="primary" size="small" @click="fetchUsers">重新加载</el-button>
     </div>
 
-    <div v-else>
-      <el-table 
-        :data="filteredUsers" 
-        style="width: 100%" 
-        v-loading="tableLoading"
-        @selection-change="handleSelectionChange"
+    <!-- 用户列表 -->
+    <div v-else class="user-list">
+      <div 
+        v-for="user in filteredUsers" 
+        :key="user.id" 
+        class="user-card"
+        :class="{ 'selected': selectedUsers.some(u => u.id === user.id) }"
+        @click="toggleUserSelection(user)"
       >
-        <el-table-column type="selection" width="55" align="center" />
-        <el-table-column prop="id" label="ID" width="60" align="center" />
-        <el-table-column prop="avatar" label="头像" width="80" align="center">
-          <template #default="scope">
-            <el-avatar v-if="scope.row.avatar" :src="scope.row.avatar" :size="40" />
-            <el-avatar v-else :size="40">{{ scope.row.nickname ? scope.row.nickname.charAt(0) : '?' }}</el-avatar>
-          </template>
-        </el-table-column>
-        <el-table-column prop="username" label="用户名" min-width="100" />
-        <el-table-column prop="nickname" label="昵称" min-width="100" />
-        <el-table-column prop="role" label="角色" width="100" align="center">
-          <template #default="scope">
-            <el-tag :type="scope.row.role === 'root' ? 'danger' : 'info'">
-              {{ scope.row.role === 'root' ? '管理员' : '普通用户' }}
+        <div class="user-header">
+          <div class="user-avatar">
+            <el-avatar v-if="user.avatar" :src="user.avatar" :size="40" />
+            <el-avatar v-else :size="40">{{ user.nickname ? user.nickname.charAt(0) : '?' }}</el-avatar>
+          </div>
+          <div class="user-info">
+            <h4>{{ user.nickname || user.username }}</h4>
+            <el-tag :type="user.role === 'root' ? 'danger' : 'info'" size="small">
+              {{ user.role === 'root' ? '管理员' : '普通用户' }}
             </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="email" label="邮箱" min-width="180" show-overflow-tooltip>
-          <template #default="scope">
-            {{ scope.row.email || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="160" align="center" fixed="right">
-          <template #default="scope">
-            <el-button 
-              type="primary" 
-              size="small" 
-              @click="handleEditUser(scope.row)"
-            >
-              编辑
-            </el-button>
-            <el-button 
-              type="danger" 
-              size="small" 
-              @click="handleDeleteUser(scope.row)"
-              :disabled="scope.row.id === currentUserId"
-            >
-              删除
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+          </div>
+          <div class="user-checkbox">
+            <el-checkbox 
+              :model-value="selectedUsers.some(u => u.id === user.id)"
+              @click.stop
+              @change="(val: boolean) => handleCheckboxChange(user, val)"
+            />
+          </div>
+        </div>
+        <div class="user-details">
+          <div class="detail-row">
+            <span class="label">ID</span>
+            <span class="value">{{ user.id }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">用户名</span>
+            <span class="value">{{ user.username }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">邮箱</span>
+            <span class="value">{{ user.email || '-' }}</span>
+          </div>
+        </div>
+        <div class="user-actions">
+          <el-button 
+            type="primary" 
+            size="small" 
+            @click.stop="handleEditUser(user)"
+          >
+            编辑
+          </el-button>
+          <el-button 
+            type="danger" 
+            size="small" 
+            @click.stop="handleDeleteUser(user)"
+            :disabled="user.id === currentUserId"
+          >
+            删除
+          </el-button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 空状态 -->
+    <div v-if="filteredUsers.length === 0 && !loading && !error" class="empty-state">
+      <el-empty description="暂无用户数据" />
     </div>
 
     <!-- 编辑用户对话框 -->
-    <el-dialog
-      v-model="editDialogVisible"
-      title="编辑用户"
-      width="500px"
-    >
-      <el-form
-        :model="editForm"
-        ref="editFormRef"
-        :rules="editRules"
-        label-width="100px"
-      >
+    <el-dialog v-model="editDialogVisible" title="编辑用户" width="90%">
+      <el-form :model="editForm" ref="editFormRef" :rules="editRules" label-width="100px">
         <el-form-item label="用户名" prop="username">
           <el-input v-model="editForm.username" />
         </el-form-item>
-
         <el-form-item label="昵称" prop="nickname">
           <el-input v-model="editForm.nickname" />
         </el-form-item>
-
         <el-form-item label="角色" prop="role">
-          <el-select v-model="editForm.role" placeholder="请选择角色" :disabled="editForm.id === currentUserId">
+          <el-select v-model="editForm.role" placeholder="请选择角色" :disabled="editForm.id === currentUserId" style="width: 100%">
             <el-option label="管理员" value="root" />
             <el-option label="普通用户" value="user" />
           </el-select>
-          <span v-if="editForm.id === currentUserId" class="role-hint">不能修改自己的角色</span>
+          <div v-if="editForm.id === currentUserId" class="role-hint">不能修改自己的角色</div>
         </el-form-item>
-
         <el-form-item label="邮箱" prop="email">
           <el-input v-model="editForm.email" placeholder="请输入邮箱" />
         </el-form-item>
-
         <el-form-item label="头像URL" prop="avatar">
           <el-input v-model="editForm.avatar" placeholder="请输入头像图片URL" />
         </el-form-item>
-
         <el-form-item>
           <el-checkbox v-model="editForm.changePassword">修改密码</el-checkbox>
         </el-form-item>
-
         <el-form-item v-if="editForm.changePassword" label="新密码" prop="newPassword">
           <el-input v-model="editForm.newPassword" type="password" placeholder="请输入新密码" />
         </el-form-item>
-
         <el-form-item v-if="editForm.changePassword" label="确认密码" prop="confirmPassword">
           <el-input v-model="editForm.confirmPassword" type="password" placeholder="请确认新密码" />
         </el-form-item>
       </el-form>
-
       <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="editDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="saveUserChanges" :loading="saving">保存</el-button>
-        </span>
+        <el-button @click="editDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveUserChanges" :loading="saving">保存</el-button>
       </template>
     </el-dialog>
 
     <!-- 新增用户对话框 -->
-    <el-dialog
-      v-model="addDialogVisible"
-      title="新增用户"
-      width="500px"
-    >
-      <el-form
-        :model="addForm"
-        ref="addFormRef"
-        :rules="addRules"
-        label-width="100px"
-      >
+    <el-dialog v-model="addDialogVisible" title="新增用户" width="90%">
+      <el-form :model="addForm" ref="addFormRef" :rules="addRules" label-width="100px">
         <el-form-item label="用户名" prop="username">
           <el-input v-model="addForm.username" placeholder="请输入用户名" />
         </el-form-item>
-
         <el-form-item label="密码" prop="password">
           <el-input v-model="addForm.password" type="password" placeholder="请输入密码" show-password />
         </el-form-item>
-
         <el-form-item label="确认密码" prop="confirmPassword">
           <el-input v-model="addForm.confirmPassword" type="password" placeholder="请再次输入密码" show-password />
         </el-form-item>
-
         <el-form-item label="昵称" prop="nickname">
           <el-input v-model="addForm.nickname" placeholder="请输入昵称" />
         </el-form-item>
-
         <el-form-item label="角色" prop="role">
-          <el-select v-model="addForm.role" placeholder="请选择角色">
+          <el-select v-model="addForm.role" placeholder="请选择角色" style="width: 100%">
             <el-option label="管理员" value="root" />
             <el-option label="普通用户" value="user" />
           </el-select>
         </el-form-item>
-
         <el-form-item label="邮箱" prop="email">
           <el-input v-model="addForm.email" placeholder="请输入邮箱（可选）" />
         </el-form-item>
-
         <el-form-item label="头像URL" prop="avatar">
           <el-input v-model="addForm.avatar" placeholder="请输入头像URL（可选）" />
         </el-form-item>
       </el-form>
-
       <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="addDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="handleAddUser" :loading="adding">创建</el-button>
-        </span>
+        <el-button @click="addDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleAddUser" :loading="adding">创建</el-button>
       </template>
     </el-dialog>
-  </el-card>
+  </div>
 </template>
 
-<script lang="ts" setup>
+<script setup lang="ts">
 import { ref, onMounted, computed } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Loading, Warning, Plus, Search, Delete } from "@element-plus/icons-vue";
@@ -229,7 +206,6 @@ import { Loading, Warning, Plus, Search, Delete } from "@element-plus/icons-vue"
 const API_BASE_URL = '';
 
 const loading = ref(false);
-const tableLoading = ref(false);
 const error = ref('');
 const users = ref<any[]>([]);
 const currentUserId = ref(0);
@@ -274,9 +250,25 @@ const handleSearchChange = () => {
   // 搜索变化时，computed会自动更新
 };
 
-// 处理表格选择变化
-const handleSelectionChange = (selection: any[]) => {
-  selectedUsers.value = selection;
+// 处理复选框变化
+const handleCheckboxChange = (user: any, checked: boolean) => {
+  if (checked) {
+    if (!selectedUsers.value.some(u => u.id === user.id)) {
+      selectedUsers.value.push(user);
+    }
+  } else {
+    selectedUsers.value = selectedUsers.value.filter(u => u.id !== user.id);
+  }
+};
+
+// 点击卡片切换选择
+const toggleUserSelection = (user: any) => {
+  const index = selectedUsers.value.findIndex(u => u.id === user.id);
+  if (index > -1) {
+    selectedUsers.value.splice(index, 1);
+  } else {
+    selectedUsers.value.push(user);
+  }
 };
 
 // 批量删除用户
@@ -307,8 +299,6 @@ const handleBatchDelete = async () => {
     );
 
     const accessToken = localStorage.getItem('accessToken');
-    console.log('批量删除 - accessToken检查:', accessToken ? '存在' : '不存在');
-    
     if (!accessToken) {
       throw new Error('未登录，请先登录');
     }
@@ -319,48 +309,27 @@ const handleBatchDelete = async () => {
 
     for (const user of selectedUsers.value) {
       try {
-        // 每次请求前重新获取token
         const currentToken = localStorage.getItem('accessToken');
-        console.log('批量删除用户 - 发送请求:', {
-          url: `${API_BASE_URL}/api/users/${user.id}`,
-          method: 'DELETE',
-          userId: user.id,
-          username: user.username,
-          hasToken: !!currentToken,
-          tokenPrefix: currentToken ? currentToken.substring(0, 20) + '...' : 'null'
-        });
-
         if (!currentToken) {
           throw new Error('登录已过期，请重新登录');
         }
 
-        const requestHeaders = {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${currentToken}`
-        };
-        console.log('请求头:', requestHeaders);
-
-        const requestUrl = `${API_BASE_URL}/api/users/${user.id}`;
-        console.log('实际请求URL:', requestUrl);
-
-        const response = await fetch(requestUrl, {
+        const response = await fetch(`${API_BASE_URL}/api/users/${user.id}`, {
           method: 'DELETE',
-          headers: requestHeaders,
+          headers: {
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${currentToken}`
+          },
           credentials: 'include'
         });
 
-        console.log(`删除用户 ${user.username} (ID: ${user.id}) 响应状态:`, response.status);
-
         if (response.ok) {
           successCount++;
-          console.log(`删除用户 ${user.username} (ID: ${user.id}) 成功`);
         } else {
           failCount++;
-          console.error(`删除用户 ${user.username} (ID: ${user.id}) 失败:`, response.status);
         }
       } catch (err) {
         failCount++;
-        console.error(`删除用户 ${user.username} (ID: ${user.id}) 异常:`, err);
       }
     }
     
@@ -531,15 +500,11 @@ const fetchUsers = async () => {
     error.value = '';
 
     const accessToken = localStorage.getItem('accessToken');
-    console.log('获取用户列表 - accessToken检查:', accessToken ? '存在' : '不存在');
     if (!accessToken) {
       throw new Error('未登录，请先登录');
     }
 
-    const getUrl = `${API_BASE_URL}/api/users`;
-    console.log('获取用户列表 - 请求URL:', getUrl);
-
-    const response = await fetch(getUrl, {
+    const response = await fetch(`${API_BASE_URL}/api/users`, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
@@ -547,8 +512,6 @@ const fetchUsers = async () => {
       },
       credentials: 'include'
     });
-
-    console.log('获取用户列表 - 响应状态:', response.status);
 
     if (!response.ok) {
       throw new Error('获取用户列表失败');
@@ -569,7 +532,6 @@ const fetchUsers = async () => {
 
 // 编辑用户
 const handleEditUser = (user: any) => {
-  // 保存原始用户数据
   originalUserData.value = { ...user };
   
   editForm.value = {
@@ -627,12 +589,10 @@ const saveUserChanges = async () => {
       requestData["email"] = editForm.value.email || "";
     }
     
-    // 只有当头像URL有实际值且发生变化时才发送
     if (editForm.value.avatar && editForm.value.avatar !== originalUserData.value.avatar) {
       requestData["avatar"] = editForm.value.avatar;
     }
     
-    // 如果用户选择修改密码，才包含password字段（不需要验证当前密码）
     if (editForm.value.changePassword) {
       requestData["password"] = editForm.value.newPassword || "";
     }
@@ -644,11 +604,6 @@ const saveUserChanges = async () => {
       return;
     }
 
-    // 显示发送到后端的数据格式
-    console.log('用户管理 - 向后端发送的数据:', JSON.stringify(requestData, null, 2));
-    console.log('用户管理 - 请求数据对象:', requestData);
-
-    // 发送请求
     const response = await fetch(`${API_BASE_URL}/api/users/${editForm.value.id}`, {
       method: 'PUT',
       headers: {
@@ -665,23 +620,18 @@ const saveUserChanges = async () => {
     if (response.ok && responseData.code === 200) {
       ElMessage.success('用户更新成功');
       editDialogVisible.value = false;
-      // 重新加载用户列表
       await fetchUsers();
     } else {
-      // 处理422错误，显示详细错误信息
       if (response.status === 422 && responseData.detail && Array.isArray(responseData.detail) && responseData.detail.length > 0) {
-        // 处理 [{ loc: [...], msg: "...", type: "..." }] 格式的错误
         const errorMessages = responseData.detail
           .map((err: any) => {
             const msg = err.msg || '';
-            // 移除 "Value error, " 前缀
             return msg.replace(/^Value error,\s*/, '');
           })
           .filter((msg: string) => msg.length > 0)
           .join('\n');
         throw new Error(errorMessages || '更新用户失败');
       } else if (response.status === 422 && responseData.errors) {
-        // 提取错误信息并显示
         const errorMessages = Object.values(responseData.errors).flat().join('\n');
         throw new Error(errorMessages || '更新用户失败');
       } else {
@@ -691,9 +641,8 @@ const saveUserChanges = async () => {
   } catch (err: any) {
     const errorMessage = err.message;
     
-    // 根据错误类型显示不同的错误信息
     if (errorMessage === '表单验证失败') {
-      // 表单验证失败已经在validate回调中处理过，这里不需要重复显示
+      // 表单验证失败已经在validate回调中处理过
     } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
       ElMessage.error('网络连接失败，请检查网络设置');
     } else {
@@ -718,22 +667,11 @@ const handleDeleteUser = async (user: any) => {
     );
 
     const accessToken = localStorage.getItem('accessToken');
-    const currentRole = localStorage.getItem('role');
-    console.log('单个删除 - accessToken检查:', accessToken ? '存在' : '不存在');
-    console.log('单个删除 - 当前用户角色:', currentRole);
-    console.log('单个删除 - 目标用户角色:', user.role);
     if (!accessToken) {
       throw new Error('未登录，请先登录');
     }
 
-    const deleteUrl = `${API_BASE_URL}/api/users/${user.id}`;
-    console.log('单个删除 - 请求URL:', deleteUrl);
-    console.log('单个删除 - 完整请求头:', {
-      'Accept': 'application/json',
-      'Authorization': `Bearer ${accessToken ? accessToken.substring(0, 30) + '...' : 'null'}`
-    });
-
-    const response = await fetch(deleteUrl, {
+    const response = await fetch(`${API_BASE_URL}/api/users/${user.id}`, {
       method: 'DELETE',
       headers: {
         'Accept': 'application/json',
@@ -742,8 +680,6 @@ const handleDeleteUser = async (user: any) => {
       credentials: 'include'
     });
 
-    console.log('单个删除 - 响应状态:', response.status);
-
     if (!response.ok) {
       throw new Error('删除用户失败');
     }
@@ -751,7 +687,6 @@ const handleDeleteUser = async (user: any) => {
     const data = await response.json();
     if (data.code === 200) {
       ElMessage.success('用户删除成功');
-      // 重新加载用户列表
       await fetchUsers();
     } else {
       throw new Error(data.msg || '删除用户失败');
@@ -815,7 +750,6 @@ const handleAddUser = async () => {
       requestData.avatar = addForm.value.avatar;
     }
 
-    // 发送请求
     const response = await fetch(`${API_BASE_URL}/api/users`, {
       method: 'POST',
       headers: {
@@ -832,14 +766,11 @@ const handleAddUser = async () => {
     if (response.ok && responseData.code === 200) {
       ElMessage.success('用户创建成功');
       addDialogVisible.value = false;
-      // 重新加载用户列表
       await fetchUsers();
     } else {
-      // 处理错误响应
       if (response.status === 400) {
         throw new Error(responseData.detail || '用户名已存在');
       } else if (response.status === 422 && responseData.detail && Array.isArray(responseData.detail) && responseData.detail.length > 0) {
-        // 处理 [{ loc: [...], msg: "...", type: "..." }] 格式的错误
         const errorMessages = responseData.detail
           .map((err: any) => {
             const msg = err.msg || '';
@@ -877,79 +808,158 @@ onMounted(() => {
 });
 </script>
 
-<style lang="scss" scoped>
-.user-manage-card {
-  z-index: 1;
-  width: 75%;
-  margin: 5% auto;
-  border-radius: 15px;
-  background-color: #fff;
-  padding: 30px;
-  min-height: 80vh;
+<style scoped>
+.mobile-user-manage {
+  min-height: 100vh;
+  background: #f5f7fa;
+  padding: 0;
 }
 
+/* 头部 */
 .header-section {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
+.header-section h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+}
+
+/* 筛选 */
 .filter-section {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  padding: 15px 0;
-  border-bottom: 1px solid #ebeef5;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 16px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
-.filter-left,
-.filter-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.filter-select,
+.filter-input {
+  width: 100% !important;
 }
 
-.header-left,
-.header-right {
-  flex: 1;
-}
-
-.header-left {
-  text-align: left;
-}
-
-.header-right {
-  text-align: right;
-}
-
-.title {
-  margin: 0;
-  color: #303133;
-  text-align: center;
-  flex: 1;
-}
-
+/* 加载和错误状态 */
 .loading-container,
 .error-container {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px 0;
-  gap: 16px;
+  padding: 40px 16px;
+  color: #909399;
 }
 
-.dialog-footer {
+.loading-container .el-icon,
+.error-container .el-icon {
+  font-size: 32px;
+  margin-bottom: 12px;
+}
+
+.error-container {
+  color: #f56c6c;
+}
+
+/* 用户列表 */
+.user-list {
   display: flex;
-  justify-content: flex-end;
-  gap: 10px;
+  flex-direction: column;
+  gap: 12px;
 }
 
+.user-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.user-card.selected {
+  border: 2px solid #8bad42;
+  background: #f0f9eb;
+}
+
+.user-card:active {
+  transform: scale(0.98);
+}
+
+.user-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.user-avatar {
+  margin-right: 12px;
+}
+
+.user-info {
+  flex: 1;
+}
+
+.user-info h4 {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.user-checkbox {
+  margin-left: auto;
+}
+
+.user-details {
+  margin-bottom: 12px;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.detail-row:last-child {
+  border-bottom: none;
+}
+
+.detail-row .label {
+  font-size: 14px;
+  color: #909399;
+}
+
+.detail-row .value {
+  font-size: 14px;
+  font-weight: 500;
+  color: #303133;
+}
+
+.user-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #f0f0f0;
+}
+
+/* 空状态 */
+.empty-state {
+  padding: 40px 0;
+}
+
+/* 角色提示 */
 .role-hint {
   font-size: 12px;
   color: #909399;
-  margin-left: 8px;
+  margin-top: 4px;
 }
 </style>
