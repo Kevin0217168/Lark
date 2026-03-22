@@ -19,6 +19,10 @@
             {{ username ? username.charAt(0) : '?' }}
           </div>
         </div>
+        <div v-else class="auth-buttons">
+          <el-button type="primary" size="small" @click="goToLogin">登录</el-button>
+          <el-button size="small" @click="goToRegister">注册</el-button>
+        </div>
       </div>
     </div>
 
@@ -183,6 +187,16 @@ const checkLoginStatus = () => {
   userRole.value = localStorage.getItem('role') || '';
 };
 
+// 跳转到登录页
+const goToLogin = () => {
+  router.push('/Login');
+};
+
+// 跳转到注册页
+const goToRegister = () => {
+  router.push('/Register');
+};
+
 // 处理登录状态变化事件
 const handleLoginStatusChanged = () => {
   checkLoginStatus();
@@ -323,6 +337,11 @@ const navigateToProfile = () => {
   color: white;
   font-size: 14px;
   font-weight: bold;
+}
+
+.auth-buttons {
+  display: flex;
+  gap: 8px;
 }
 
 /* 移动端顶部菜单 */

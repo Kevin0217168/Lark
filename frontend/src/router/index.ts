@@ -1,8 +1,8 @@
 // 创建一个路由器
 
 import { createRouter, createWebHistory } from "vue-router";
-import Login from "@/components/Login.vue";
-import Register from "@/components/Register.vue";
+import LoginView from "@/views/LoginView.vue";
+import RegisterView from "@/views/RegisterView.vue";
 import Home from "@/components/Home.vue";
 import Stream from "@/components/Stream.vue";
 import Device from "@/components/Device.vue";
@@ -15,11 +15,11 @@ const router = createRouter({
   routes: [
     {
       path: "/Login",
-      component: Login,
+      component: LoginView,
     },
     {
       path: "/Register",
-      component: Register,
+      component: RegisterView,
     },
     {
       path: "/Home",
