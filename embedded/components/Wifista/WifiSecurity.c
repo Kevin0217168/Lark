@@ -7,32 +7,54 @@ esp_http_client_config_t config;
 
 void obtain_time(void)
 {
+    // 设置时区（中国标准时间 UTC+8）
+    setenv("TZ", "CST-8", 1);
+    tzset();
+
     // 初始化 SNTP
     esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
     esp_sntp_setservername(0, "pool.ntp.org");
     esp_sntp_init();
 
-    // 等待时间同步
-    time_t now = 0;
-    struct tm timeinfo = {0};
+    // 等待系统时间有效（超过 2020-01-01 00:00:00 的时间戳）
     int retry = 0;
-    const int retry_count = 10;
-    while (timeinfo.tm_year < (2026 - 1900) && ++retry < retry_count)
-    {
+    const int max_retry = 20;   // 最多等待 40 秒
+    bool synced = false;
+    while (retry < max_retry) {
         vTaskDelay(2000 / portTICK_PERIOD_MS);
-        time(&now);
-        setenv("TZ", "CST-8", 1);
-        localtime_r(&now, &timeinfo);
+        time_t now = time(NULL);
+        // 如果时间大于 2020-01-01 的 Unix 时间戳，视为有效
+        if (now > 1577836800) {
+            synced = true;
+            break;
+        }
+        retry++;
+        ESP_LOGD("obtain_time", "等待 SNTP 同步... 重试次数: %d", retry);
     }
+
+    if (synced) {
+        ESP_LOGI("obtain_time", "SNTP 同步成功");
+    } else {
+        ESP_LOGW("obtain_time", "SNTP 同步超时，可能无法获取正确时间");
+    }
+
+    // 停止 SNTP 服务（可选，如果后续不再需要可停止以节省资源）
     esp_sntp_stop();
 
-    time(&now);
-    setenv("TZ", "CST-8", 1);
+    // 获取最终时间并打印
+    time_t now = time(NULL);
+    struct tm timeinfo;
     localtime_r(&now, &timeinfo);
-    ESP_LOGI(WS_TAG, "当前时间: %04d-%02d-%02d %02d:%02d:%02d",
-             timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
-             timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+
+    if (now > 0) {
+        ESP_LOGI("obtain_time", "当前时间: %04d-%02d-%02d %02d:%02d:%02d",
+                 timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+                 timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+    } else {
+        ESP_LOGE("obtain_time", "获取系统时间失败，时间为 1970-01-01");
+    }
 }
+
 
 static esp_err_t http_event_handler(esp_http_client_event_t *evt)
 {
@@ -54,11 +76,11 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt)
             // 确保缓冲区足够大
             size_t new_size = ctx->buffer_size + evt->data_len;
             ESP_LOGI(WS_TAG, "数据缓冲区总大小: %d bytes, 已使用: %d bytes, 本次接收数据长度: %d bytes",
-                ctx->buffer_capacity, ctx->buffer_size, evt->data_len);
+                     ctx->buffer_capacity, ctx->buffer_size, evt->data_len);
             if (new_size > ctx->buffer_capacity)
             {
                 // 多预留空间
-                size_t new_cap = new_size + (new_size - ctx->buffer_capacity) + 128; 
+                size_t new_cap = new_size + (new_size - ctx->buffer_capacity) + 128;
                 ESP_LOGW(WS_TAG, "数据缓冲区空间不足, 重新分配大小为: %d bytes", new_cap);
 
                 char *new_buf = realloc(ctx->buffer, new_cap);
@@ -184,12 +206,25 @@ esp_err_t WifiSecurityRequest(const char *host, const char *path, uint16_t port,
     {
         ResponseUserHandler(&req_ctx);
     }
-
-    // 释放上下文资源
-    if (req_ctx.is_json)
+    else
     {
-        cJSON_Delete(req_ctx.json);
+        // 释放 JSON 对象（如果有）
+        if (req_ctx.is_json && req_ctx.json != NULL)
+        {
+            cJSON_Delete(req_ctx.json);
+        }
     }
+    // 释放动态分配的接收缓冲区
+    if (req_ctx.buffer != NULL)
+    {
+        free(req_ctx.buffer);
+    }
+
+    // 关键：关闭当前连接，下次请求会重新建立
+    esp_http_client_close(WifiSecurityClient);
+
+    // 清除 user_data，避免残留指针
+    esp_http_client_set_user_data(WifiSecurityClient, NULL);
 
     // esp_http_client_cleanup(WifiSecurityClient);
     return err;

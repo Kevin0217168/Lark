@@ -63,6 +63,7 @@ void PhotoTransmit(camera_fb_t *fb)
 }
 
 void camera_transmit_task();
+void sensor_data_transmit_task();
 
 extern void i2c_scan(void);
 
@@ -82,30 +83,20 @@ void app_main(void)
     // 创建任务执行 HTTPS 请求
     WifiSecurityClientInit();
 
-    // // 通过id开启ws连接/stream/viewer/ws
-    // char path_data[128];
-    // snprintf(path_data, sizeof(path_data), "/api/stream/device/ws?secret=%s", secret);
-    // // 注册回调函数
-    // Websocket_event_handler_register(NULL, ws_text_handler);
+    // 通过id开启ws连接/stream/viewer/ws
+    char path_data[128];
+    snprintf(path_data, sizeof(path_data), "/api/stream/device/ws?secret=%s", secret);
+    // 注册回调函数
+    Websocket_event_handler_register(NULL, ws_text_handler);
 
     // WebsocketStart("wss://lark.mintlab.top", path_data, 443);
-    // WebsocketStart("ws://192.168.1.199", path_data, 8080);
+    WebsocketStart("ws://192.168.1.199", path_data, 8080);
 
     // 等待ws连接成功
-    // while (!WebsocketIsConnected())
-    // {
-    //     vTaskDelay(500 / portTICK_PERIOD_MS);
-    // }
-
-    // CameraInit();
-    // sensor_t *s = esp_camera_sensor_get();
-    // s->set_framesize(s, FRAMESIZE_SVGA);
-    // s->set_vflip(s, 1);
-
-    // static uint8_t ucParameterToPass;
-    // TaskHandle_t xHandle = NULL;
-    // xTaskCreate(camera_transmit_task, "camera_transmit_task", 4096, &ucParameterToPass, 1, &xHandle);
-    // configASSERT(xHandle);
+    while (!WebsocketIsConnected())
+    {
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+    }
 
     i2c_scan();
 
@@ -122,25 +113,68 @@ void app_main(void)
     }
     printf("SHT sensor probing successful\n");
 
+    CameraInit();
+    sensor_t *s = esp_camera_sensor_get();
+    s->set_framesize(s, FRAMESIZE_SVGA);
+    s->set_vflip(s, 1);
+
+    static uint8_t ucParameterToPass;
+    TaskHandle_t xHandle = NULL;
+    xTaskCreate(camera_transmit_task, "camera_transmit_task", 4096, &ucParameterToPass, 1, &xHandle);
+    configASSERT(xHandle);
+
+    static uint8_t ucParameterToPass;
+    TaskHandle_t xHandle = NULL;
+    xTaskCreate(sensor_data_transmit_task, "sensor_data_transmit_task", 4096, &ucParameterToPass, 1, &xHandle);
+    configASSERT(xHandle);
+}
+
+void sensor_data_transmit_task()
+{
+    time_t now = 0;
+    struct tm timeinfo = {0};
     while (1)
     {
         int32_t temperature, humidity;
-        /* Measure temperature and relative humidity and store into variables
-         * temperature, humidity (each output multiplied by 1000).
-         */
         int8_t ret = sht4x_measure_blocking_read(&temperature, &humidity);
         if (ret == STATUS_OK)
         {
-            printf("measured temperature: %0.2f degreeCelsius, "
-                   "measured humidity: %0.2f percentRH\n",
-                   temperature / 1000.0f, humidity / 1000.0f);
+            float temp_c = temperature / 1000.0f;
+            float hum_pct = humidity / 1000.0f;
+            ESP_LOGI(TAG, "measured temperature: %0.2f degreeCelsius, "
+                          "measured humidity: %0.2f percentRH\n",
+                     temp_c, hum_pct);
+
+            time(&now);
+            setenv("TZ", "CST-8", 1);
+            localtime_r(&now, &timeinfo);
+            ESP_LOGI(TAG, "当前时间: %04d-%02d-%02d %02d:%02d:%02d+08:00",
+                     timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+                     timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+
+            // 构建 ISO 8601 格式时间戳（可选，不传则后端使用当前时间）
+            char timestamp_str[32];
+            strftime(timestamp_str, sizeof(timestamp_str), "%Y-%m-%dT%H:%M:%S+08:00", &timeinfo);
+
+            char post_data[256];
+            snprintf(post_data, sizeof(post_data),
+                     "{\"secret\":\"%s\",\"temperature\":%.2f,\"humidity\":%.2f,\"timestamp\":\"%s\"}",
+                     secret, temp_c, hum_pct, timestamp_str);
+
+            // 发送 POST 请求到后端
+            int ret_code = WifiSecurityRequest("http://192.168.1.199", "/sensors", 8080,
+                                               WS_CLINENT_METHOD_POST, post_data, NULL);
+            if (ret_code != ESP_OK)
+            {
+                ESP_LOGE(TAG, "Failed to send sensor data, error=%d", ret_code);
+            }
         }
         else
         {
-            printf("error reading measurement\n");
+            ESP_LOGE(TAG, "error reading measurement\n");
         }
 
-        vTaskDelay(1000 / portTICK_PERIOD_MS); /* sleep 1s */
+        vTaskDelay(10000 / portTICK_PERIOD_MS); /* sleep 10s */
     }
 }
 
