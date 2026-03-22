@@ -3,6 +3,7 @@ from sqlalchemy.orm import sessionmaker, Session, declarative_base
 
 from datacontrol.UserDb import *
 from datacontrol.DeviceDb import *
+from datacontrol.SensorDb import *
 
 from Logset import async_log, logger
 
@@ -18,6 +19,7 @@ SessionLocal = sessionmaker(
 
 UserBase.metadata.create_all(bind=engine)
 DeviceBase.metadata.create_all(bind=engine)
+SensorDataBase.metadata.create_all(bind=engine)
 
 class OpenDb:
   def __init__(self, logtag):

@@ -1,6 +1,7 @@
 import re
 from typing import Annotated, List, Optional, Literal, Generic, TypeVar
 from pydantic import BaseModel, Field, field_validator
+from datetime import datetime
 
 T = TypeVar("T")
 
@@ -315,6 +316,80 @@ R400_DEVICE_ALREADY_EXIST = {
         "content": {
             "application/json": {
                 "example": {"code": 400, "msg": "Device already exist.", "data": None}
+            }
+        },
+    }
+}
+
+
+# ==================== 传感器数据模型 ====================
+class SensorDataItem(BaseModel):
+    """单条传感器数据"""
+    id: int
+    timestamp: datetime
+    temperature: float
+    humidity: float
+
+    class Config:
+        from_attributes = True
+
+
+class DeviceSensorData(BaseModel):
+    """设备分组传感器数据"""
+    device_id: int
+    data: List[SensorDataItem]
+
+
+class SensorDataFilter(BaseModel):
+    """传感器数据查询过滤条件"""
+    model_config = {"extra": "forbid"}
+    start_time: Optional[datetime] = Field(
+        default=None, title="起始时间", description="查询起始时间（包含）"
+    )
+    end_time: Optional[datetime] = Field(
+        default=None, title="结束时间", description="查询结束时间（包含）"
+    )
+    skip: int = Field(default=0, ge=0, title="跳过记录数")
+    limit: int = Field(default=100, ge=1, le=1000, title="返回记录数")
+
+
+class SensorDataCreate(BaseModel):
+    """设备上报传感器数据"""
+    secret: str = Field(..., title="设备密钥")
+    temperature: float = Field(..., title="温度")
+    humidity: float = Field(..., title="湿度")
+    timestamp: Optional[datetime] = Field(
+        default=None, title="数据时间戳", description="若不传则使用服务器当前时间"
+    )
+
+
+class SensorDataDelete(BaseModel):
+    """删除传感器数据的条件"""
+    device_id: int = Field(..., title="设备ID")
+    start_time: Optional[datetime] = Field(None, title="起始时间")
+    end_time: Optional[datetime] = Field(None, title="结束时间")
+
+
+# ==================== 传感器错误响应 ====================
+R404_SENSOR_NOT_FOUND = {
+    404: {
+        "model": CommonOut[None],
+        "description": "Sensor data not found",
+        "content": {
+            "application/json": {
+                "example": {"code": 404, "msg": "Sensor data not found", "data": None}
+            }
+        },
+    }
+}
+
+R404_DEVICE_NOT_FOUND_BY_SECRET = {
+    404: {
+        "model": CommonOut[None],
+        "description": "Device not found by secret",
+        "content": {
+            "application/json": {
+                "example": {"code": 404, "msg": "Device not found", "data": None}
             }
         },
     }
