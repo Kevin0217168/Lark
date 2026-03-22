@@ -2,6 +2,7 @@ import uuid
 from fastapi import WebSocket, APIRouter, WebSocketException, Response
 from fastapi import status, Path, Query, Depends, Body
 from typing import Annotated
+from starlette.websockets import WebSocketState
 
 from deviceapi import Device
 from schema import CommonOut
@@ -43,6 +44,8 @@ class Viewer:
         if len(device.subscribers) == 0:
             # 如果之前还没有观看者, 通知上线
             await async_log(logger, "info", f"通知设备{device.id}上线")
+            if not device.websocket or device.websocket.client_state != WebSocketState.CONNECTED:
+                return -1    
             await device.websocket.send_json({"code":1, "item":"status", "key": "status", "values":"stream"})
             
         # 用于向观看者转发
@@ -120,7 +123,9 @@ async def subscribe_to_device(
         response.status_code = 400
         return CommonOut(code=400, msg="Device has subscribed.")
     
-    await viewer.subscribe(device)
+    
+    if await viewer.subscribe(device) == -1:
+        return CommonOut(code=400, msg="Device has not connected.")
     return CommonOut(code=200, msg="device subscribe OK.")
 
 @router.delete("/following/{device_id}", response_model=CommonOut[None])
