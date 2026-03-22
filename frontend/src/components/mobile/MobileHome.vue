@@ -82,6 +82,9 @@
         <div ref="averageChartRef" class="chart"></div>
       </div>
     </div>
+
+    <!-- 备案信息 -->
+    <MobileBeian />
   </div>
 </template>
 
@@ -91,6 +94,7 @@ import { useRouter } from 'vue-router';
 import { Monitor, DataAnalysis, Warning, ArrowRight } from '@element-plus/icons-vue';
 import { useDeviceStore } from '../../stores/deviceStore';
 import * as echarts from 'echarts';
+import MobileBeian from './MobileBeian.vue';
 
 const router = useRouter();
 const { 
@@ -273,6 +277,9 @@ onUnmounted(() => {
 <style scoped>
 .mobile-home {
   padding: 16px;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 180px);
 }
 
 /* 统计卡片 */

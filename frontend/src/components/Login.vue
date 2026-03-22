@@ -1,6 +1,6 @@
 <template>
   <el-card class="login-card">
-    <h3 class="title">用户登录</h3>
+    <h3 class="title">鸟厂后台管理 - 登录</h3>
 
     <el-form :model="form" ref="formRef" :rules="rules">
       <el-form-item label="用户名" prop="username">

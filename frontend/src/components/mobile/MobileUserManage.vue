@@ -195,6 +195,9 @@
         <el-button type="primary" @click="handleAddUser" :loading="adding">创建</el-button>
       </template>
     </el-dialog>
+
+    <!-- 备案信息 -->
+    <MobileBeian />
   </div>
 </template>
 
@@ -202,6 +205,7 @@
 import { ref, onMounted, computed } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Loading, Warning, Plus, Search, Delete } from "@element-plus/icons-vue";
+import MobileBeian from './MobileBeian.vue';
 
 const API_BASE_URL = '';
 
@@ -810,9 +814,11 @@ onMounted(() => {
 
 <style scoped>
 .mobile-user-manage {
-  min-height: 100vh;
+  min-height: calc(100vh - 120px);
   background: #f5f7fa;
   padding: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 头部 */

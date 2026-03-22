@@ -118,6 +118,9 @@
         <el-button type="primary" @click="saveChanges" :loading="saving">保存修改</el-button>
       </template>
     </el-dialog>
+
+    <!-- 备案信息 -->
+    <MobileBeian />
   </div>
 </template>
 
@@ -126,6 +129,7 @@ import { ref, onMounted, computed } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { Edit, SwitchButton, Delete, Loading, Warning, User } from '@element-plus/icons-vue';
+import MobileBeian from './MobileBeian.vue';
 
 const router = useRouter();
 const loading = ref(false);
@@ -636,9 +640,11 @@ onMounted(() => {
 
 <style scoped>
 .mobile-profile {
-  min-height: 100vh;
+  min-height: calc(100vh - 120px);
   background: #f5f7fa;
   padding: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 头像区域 */
@@ -665,8 +671,6 @@ onMounted(() => {
 }
 
 .default-avatar {
-  width: 100%;
-  height: 100%;
   background: linear-gradient(135deg, #8bad42 0%, #6a9a35 100%);
   display: flex;
   justify-content: center;
