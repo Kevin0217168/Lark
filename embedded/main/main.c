@@ -89,8 +89,8 @@ void app_main(void)
     // 注册回调函数
     Websocket_event_handler_register(NULL, ws_text_handler);
 
-    // WebsocketStart("wss://lark.mintlab.top", path_data, 443);
-    WebsocketStart("ws://192.168.1.199", path_data, 8080);
+    WebsocketStart("wss://lark.mintlab.top", path_data, 443);
+    // WebsocketStart("ws://192.168.1.199", path_data, 8080);
 
     // 等待ws连接成功
     while (!WebsocketIsConnected())
@@ -123,9 +123,9 @@ void app_main(void)
     xTaskCreate(camera_transmit_task, "camera_transmit_task", 4096, &ucParameterToPass, 1, &xHandle);
     configASSERT(xHandle);
 
-    static uint8_t ucParameterToPass;
-    TaskHandle_t xHandle = NULL;
-    xTaskCreate(sensor_data_transmit_task, "sensor_data_transmit_task", 4096, &ucParameterToPass, 1, &xHandle);
+    static uint8_t sensor_data_transmit_task_Handle_ParameterToPass;
+    TaskHandle_t sensor_data_transmit_task_Handle = NULL;
+    xTaskCreate(sensor_data_transmit_task, "sensor_data_transmit_task", 4096, &sensor_data_transmit_task_Handle_ParameterToPass, 1, &sensor_data_transmit_task_Handle);
     configASSERT(xHandle);
 }
 
@@ -162,7 +162,9 @@ void sensor_data_transmit_task()
                      secret, temp_c, hum_pct, timestamp_str);
 
             // 发送 POST 请求到后端
-            int ret_code = WifiSecurityRequest("http://192.168.1.199", "/sensors", 8080,
+            // int ret_code = WifiSecurityRequest("http://192.168.1.199", "/sensors", 8080,
+            //                                    WS_CLINENT_METHOD_POST, post_data, NULL);
+            int ret_code = WifiSecurityRequest("https://lark.mintlab.top", "/api/sensors", 443,
                                                WS_CLINENT_METHOD_POST, post_data, NULL);
             if (ret_code != ESP_OK)
             {
@@ -174,7 +176,7 @@ void sensor_data_transmit_task()
             ESP_LOGE(TAG, "error reading measurement\n");
         }
 
-        vTaskDelay(10000 / portTICK_PERIOD_MS); /* sleep 10s */
+        vTaskDelay(60000 / portTICK_PERIOD_MS); /* sleep 10s */
     }
 }
 

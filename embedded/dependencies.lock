@@ -56,5 +56,5 @@ direct_dependencies:
 - idf
 - sht4x
 manifest_hash: 6f8b1740106afb6e949af7b5e5d56eea94e57fb59a0032a21a01b3a1fc784e73
-target: esp32s3
+target: esp32
 version: 2.0.0
