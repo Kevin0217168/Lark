@@ -41,7 +41,7 @@ const devices = ref<Device[]>([]);
 // 从后端获取设备数据
 const fetchDevices = async () => {
   try {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('accessToken');
     const response = await fetch('/api/devices', {
       method: 'GET',
       headers: {

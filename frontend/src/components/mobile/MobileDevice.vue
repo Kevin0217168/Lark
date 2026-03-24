@@ -227,6 +227,9 @@
         <el-button type="primary" @click="handleSave">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 备案信息 -->
+    <MobileBeian />
   </div>
 </template>
 
@@ -235,6 +238,7 @@ import { ref, computed } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus } from '@element-plus/icons-vue';
 import { useDeviceStore, type Device, type DeviceLog } from '../../stores/deviceStore';
+import MobileBeian from './MobileBeian.vue';
 
 const props = defineProps<{
   activeTab?: string;
@@ -583,8 +587,10 @@ const handleUpdateFirmware = (device: Device) => {
 
 <style scoped>
 .mobile-device {
-  min-height: 100vh;
+  min-height: calc(100vh - 120px);
   background: #f5f7fa;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 总览视图 */

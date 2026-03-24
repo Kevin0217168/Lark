@@ -30,7 +30,26 @@
           <component :is="Component" :activeTab="activeTab" />
         </RouterView>
       </el-main>
-      <el-footer> © 2026 </el-footer>
+      <el-footer> 
+        <div class="footer-content">
+          <div class="copyright">© 2026 Lark. All Rights Reserved.</div>
+          <div class="copyright">Powered by Vue.js & FastAPI</div>
+          <div class="beian">
+            <div class="beian-item">
+              <img src="https://www.beian.gov.cn/img/ghs.png" class="beian-icon"> 
+              <a class="beian-link" href="https://beian.mps.gov.cn/#/query/webSearch?code=41010502007493" rel="noreferrer" target="_blank">豫公网安备41010502007493号</a>
+            </div>
+            <div class="beian-item">
+              <span class="beian-placeholder"></span>
+              <a class="beian-link" href="https://beian.miit.gov.cn/" target="_blank">豫ICP备2026008104号</a>
+            </div>
+            <div class="beian-item">
+              <img src="https://icp.gov.moe/images/ico64.png" class="beian-icon moe-icon">
+              <a class="beian-link" target="_blank" href="https://icp.gov.moe/?keyword=20261324">萌ICP备20261324号</a>
+            </div>
+          </div>
+        </div>
+      </el-footer>
     </el-container>
   </div>
 </template>
@@ -102,6 +121,66 @@ footer {
   justify-content: center;
   align-items: center;
   text-align: center;
+}
+
+footer {
+  flex-direction: column;
+  padding: 20px;
+  background: transparent;
+}
+
+.footer-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.copyright {
+  font-size: 14px;
+  color: #909399;
+}
+
+.beian {
+  font-size: 12px;
+  color: #909399;
+}
+
+.beian-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  line-height: 1.6;
+}
+
+.beian-icon {
+  width: 15px;
+  height: 15px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.beian-icon.moe-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.beian-placeholder {
+  width: 15px;
+  height: 15px;
+  display: inline-block;
+}
+
+.beian-link {
+  color: #909399;
+  text-decoration: none;
+  transition: color 0.3s;
+  vertical-align: middle;
+}
+
+.beian-link:hover {
+  color: #8bad42;
 }
 
 header {

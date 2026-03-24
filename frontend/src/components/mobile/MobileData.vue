@@ -191,6 +191,9 @@
         <el-empty description="请选择设备查看历史数据" />
       </div>
     </div>
+
+    <!-- 备案信息 -->
+    <MobileBeian />
   </div>
 </template>
 
@@ -200,6 +203,7 @@ import { useDeviceStore } from '../../stores/deviceStore';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Warning, Switch, Sort, Refresh } from '@element-plus/icons-vue';
 import * as echarts from 'echarts';
+import MobileBeian from './MobileBeian.vue';
 
 const getToken = () => {
   return localStorage.getItem('accessToken');
@@ -819,8 +823,10 @@ onUnmounted(() => {
 
 <style scoped>
 .mobile-data {
-  min-height: 100vh;
+  min-height: calc(100vh - 120px);
   background: #f5f7fa;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 设备选择 */

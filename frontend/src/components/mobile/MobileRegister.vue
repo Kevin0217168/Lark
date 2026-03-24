@@ -1,8 +1,8 @@
 <template>
   <div class="mobile-register">
     <div class="register-header">
-      <h1>创建账号</h1>
-      <p>请填写注册信息</p>
+      <h1>鸟厂后台管理</h1>
+      <p>创建账号，请填写注册信息</p>
     </div>
 
     <div class="register-form-container">
@@ -70,6 +70,18 @@
       <div class="login-link">
         <span>已有账号？</span>
         <router-link to="/Login">去登录</router-link>
+      </div>
+
+      <!-- 底部备案信息 -->
+      <div class="mobile-footer">
+        <div class="copyright">© 2026</div>
+        <div class="beian">
+          <img src="https://www.beian.gov.cn/img/ghs.png" style="width: 15px; height: 15px;display: inline-block;margin-bottom: 4px;"> 
+          <a class="beian-link" href="https://beian.mps.gov.cn/#/query/webSearch?code=41010502007493" rel="noreferrer" target="_blank">豫公网安备41010502007493号</a><br> 
+          <a class="beian-link" href="https://beian.miit.gov.cn/" target="_blank">豫ICP备2026008104号</a><br>
+          <img src="https://icp.gov.moe/images/ico64.png" style="width: 16px; height: 16px;display: inline-block;margin-bottom: 2px;">
+          <a class="beian-link" target="_blank" href="https://icp.gov.moe/?keyword=20261324">萌ICP备20261324号</a>
+        </div>
       </div>
     </div>
   </div>
@@ -280,5 +292,31 @@ const handleRegister = async () => {
 
 .login-link a:active {
   opacity: 0.8;
+}
+
+.mobile-footer {
+  margin-top: 30px;
+  text-align: center;
+}
+
+.mobile-footer .copyright {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 8px;
+}
+
+.mobile-footer .beian {
+  font-size: 11px;
+  color: #c0c4cc;
+  line-height: 1.8;
+}
+
+.mobile-footer .beian-link {
+  color: #c0c4cc;
+  text-decoration: none;
+}
+
+.mobile-footer .beian-link:active {
+  color: #8bad42;
 }
 </style>

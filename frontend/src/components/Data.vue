@@ -1053,7 +1053,7 @@ const goToFullscreen = () => {
   border-radius: 15px;
   background-color: #fff;
   padding: 30px;
-  min-height: 80vh;
+  min-height: auto;
 }
 
 .title {
@@ -1280,8 +1280,7 @@ const goToFullscreen = () => {
 
 .video-card {
   border-radius: 15px;
-  min-height: 0;
-  height: 100%;
+  min-height: 400px;
   display: flex;
   flex-direction: column;
 }
@@ -1295,14 +1294,16 @@ const goToFullscreen = () => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 0;
+  min-height: 400px;
   position: relative;
 }
 
 .video-stream {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
   flex: 1;
 }
 
