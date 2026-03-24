@@ -19,15 +19,16 @@
       <span>加载中...</span>
     </div>
 
-    <div v-else-if="error" class="error-container">
-      <el-icon><warning /></el-icon>
-      <span>{{ error }}</span>
-      <el-button type="primary" size="small" @click="fetchUserInfo">重新加载</el-button>
-    </div>
-
     <div v-else class="info-section">
+      <!-- 错误信息 -->
+      <div v-if="error" class="error-container">
+        <el-icon><warning /></el-icon>
+        <span>{{ error }}</span>
+        <el-button type="primary" size="small" @click="fetchUserInfo">重新加载</el-button>
+      </div>
+
       <!-- 用户信息卡片 -->
-      <div class="info-card">
+      <div v-if="!error" class="info-card">
         <div class="info-item">
           <span class="label">用户名</span>
           <span class="value">{{ userInfo.username }}</span>
@@ -44,21 +45,21 @@
 
       <!-- 操作按钮 -->
       <div class="action-section">
-        <el-button type="primary" @click="openEditDialog" class="action-btn">
+        <el-button v-if="!error" type="primary" @click="openEditDialog" class="action-btn">
           <el-icon><edit /></el-icon>
           修改账号信息
         </el-button>
-        <el-button v-if="isAdmin" type="warning" @click="goToUserManage" class="action-btn">
+        <el-button v-if="!error && isAdmin" type="warning" @click="goToUserManage" class="action-btn">
           <el-icon><user /></el-icon>
           用户管理
+        </el-button>
+        <el-button v-if="!error" type="danger" plain @click="openDeleteAccountDialog" class="action-btn">
+          <el-icon><delete /></el-icon>
+          注销账号
         </el-button>
         <el-button type="danger" @click="handleLogout" class="action-btn">
           <el-icon><switch-button /></el-icon>
           退出登录
-        </el-button>
-        <el-button type="danger" plain @click="openDeleteAccountDialog" class="action-btn">
-          <el-icon><delete /></el-icon>
-          注销账号
         </el-button>
       </div>
     </div>
@@ -706,6 +707,11 @@ onMounted(() => {
 
 .error-container {
   color: #f56c6c;
+  margin-bottom: 16px;
+  padding: 16px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 /* 信息区域 */

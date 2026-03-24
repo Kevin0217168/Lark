@@ -1,6 +1,7 @@
 <template>
   <div class="mobile-beian">
-    <div class="copyright">© 2026</div>
+    <div class="copyright">© 2026 Lark. All Rights Reserved.</div>
+    <div class="copyright">Powered by Vue.js & FastAPI</div>
     <div class="beian">
       <div class="beian-item">
         <img src="https://www.beian.gov.cn/img/ghs.png" class="beian-icon">
@@ -24,10 +25,9 @@
 
 <style scoped>
 .mobile-beian {
-  background: white;
+  background: transparent;
   padding: 16px;
   text-align: center;
-  border-top: 1px solid #f0f0f0;
   margin-top: auto;
 }
 
@@ -39,7 +39,7 @@
 
 .beian {
   font-size: 11px;
-  color: #c0c4cc;
+  color: #909399;
 }
 
 .beian-item {
@@ -69,7 +69,7 @@
 }
 
 .beian-link {
-  color: #c0c4cc;
+  color: #909399;
   text-decoration: none;
   vertical-align: middle;
 }
