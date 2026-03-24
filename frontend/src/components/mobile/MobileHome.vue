@@ -33,19 +33,15 @@
           <el-icon><DataAnalysis /></el-icon>
         </div>
         <div class="env-data">
-          <div class="env-item">
-            <span class="env-label">温度</span>
-            <span class="env-value">{{ avgEnvironmentData.temperature }}°C</span>
+            <div class="env-item">
+              <span class="env-label">温度</span>
+              <span class="env-value">{{ avgEnvironmentData.temperature }}°C</span>
+            </div>
+            <div class="env-item">
+              <span class="env-label">湿度</span>
+              <span class="env-value">{{ avgEnvironmentData.humidity }}%</span>
+            </div>
           </div>
-          <div class="env-item">
-            <span class="env-label">湿度</span>
-            <span class="env-value">{{ avgEnvironmentData.humidity }}%</span>
-          </div>
-          <div class="env-item">
-            <span class="env-label">空气质量</span>
-            <span class="env-value">{{ avgEnvironmentData.quality }}</span>
-          </div>
-        </div>
         <div class="card-action">
           <span class="action-text">数据分析</span>
           <el-icon><ArrowRight /></el-icon>
@@ -140,21 +136,16 @@ const avgEnvironmentData = computed(() => {
   if (onlineDevices.length === 0) {
     return {
       temperature: 0,
-      humidity: 0,
-      quality: 0
+      humidity: 0
     };
   }
   
   const totalTemperature = onlineDevices.reduce((sum, device) => sum + (device.temperature || 0), 0);
   const totalHumidity = onlineDevices.reduce((sum, device) => sum + (device.humidity || 0), 0);
   
-  const historyData = getDeviceAverageData();
-  const latestQuality = historyData.qualityValues.length > 0 ? historyData.qualityValues[historyData.qualityValues.length - 1] : 0;
-  
   return {
     temperature: Number((totalTemperature / onlineDevices.length).toFixed(1)),
-    humidity: Number((totalHumidity / onlineDevices.length).toFixed(1)),
-    quality: latestQuality
+    humidity: Number((totalHumidity / onlineDevices.length).toFixed(1))
   };
 });
 
@@ -177,7 +168,7 @@ const initChart = () => {
         trigger: 'axis'
       },
       legend: {
-        data: ['平均温度', '平均湿度', '平均质量指数'],
+        data: ['平均温度', '平均湿度'],
         top: 10,
         textStyle: {
           fontSize: 12
@@ -217,15 +208,6 @@ const initChart = () => {
           smooth: true,
           itemStyle: {
             color: '#69c0ff'
-          }
-        },
-        {
-          name: '平均质量指数',
-          data: avgData.qualityValues.slice(-12),
-          type: 'line',
-          smooth: true,
-          itemStyle: {
-            color: '#73d13d'
           }
         }
       ]

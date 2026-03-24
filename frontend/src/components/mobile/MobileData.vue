@@ -128,10 +128,7 @@
           <h3>湿度数据</h3>
           <div ref="humidityChartRef" class="chart"></div>
         </div>
-        <div class="chart-card">
-          <h3>环境质量</h3>
-          <div ref="qualityChartRef" class="chart"></div>
-        </div>
+       
       </div>
     </div>
     
@@ -176,12 +173,7 @@
                 <span class="label">湿度</span>
                 <span class="value">{{ item.humidity }}%</span>
               </div>
-              <div class="data-point">
-                <span class="label">质量</span>
-                <el-tag :type="getQualityType(item.quality)" size="small">
-                  {{ getQualityText(item.quality) }}
-                </el-tag>
-              </div>
+
             </div>
           </div>
         </div>
@@ -263,27 +255,16 @@ const handleHistoryDeviceChange = () => {
   }
 };
 
-const getQualityType = (quality: number) => {
-  if (quality >= 80) return 'success';
-  if (quality >= 60) return 'warning';
-  return 'danger';
-};
 
-const getQualityText = (quality: number) => {
-  if (quality >= 80) return '优秀';
-  if (quality >= 60) return '良好';
-  return '较差';
-};
 
 // 图表容器引用
 const temperatureChartRef = ref<HTMLElement | null>(null);
 const humidityChartRef = ref<HTMLElement | null>(null);
-const qualityChartRef = ref<HTMLElement | null>(null);
 const averageChartRef = ref<HTMLElement | null>(null);
 
+// 图表实例
 let temperatureChart: echarts.ECharts | null = null;
 let humidityChart: echarts.ECharts | null = null;
-let qualityChart: echarts.ECharts | null = null;
 let averageChart: echarts.ECharts | null = null;
 
 // 实时监控图片帧
@@ -584,10 +565,9 @@ const stopRealtimeMonitoring = async () => {
 
 // 初始化图表
 const initCharts = () => {
-  // 销毁旧图表
+  // 销毁旧图表实例
   temperatureChart?.dispose();
   humidityChart?.dispose();
-  qualityChart?.dispose();
   averageChart?.dispose();
   
   // 初始化平均图表
@@ -600,7 +580,7 @@ const initCharts = () => {
         trigger: 'axis'
       },
       legend: {
-        data: ['平均温度', '平均湿度', '平均质量指数'],
+        data: ['平均温度', '平均湿度'],
         top: 10,
         textStyle: { fontSize: 12 },
         itemGap: 10
@@ -634,14 +614,9 @@ const initCharts = () => {
           data: avgData.humidityValues.slice(-12),
           type: 'line',
           smooth: true,
-          itemStyle: { color: '#69c0ff' }
-        },
-        {
-          name: '平均质量指数',
-          data: avgData.qualityValues.slice(-12),
-          type: 'line',
-          smooth: true,
-          itemStyle: { color: '#73d13d' }
+          itemStyle: {
+            color: '#69c0ff'
+          }
         }
       ]
     });
@@ -713,45 +688,13 @@ const initCharts = () => {
     });
   }
   
-  // 初始化质量图表
-  if (qualityChartRef.value && selectedDeviceId.value) {
-    qualityChart = echarts.init(qualityChartRef.value);
-    const historyData = getDeviceHistoryData(selectedDeviceId.value);
-    
-    qualityChart.setOption({
-      tooltip: { trigger: 'axis' },
-      grid: {
-        left: '3%',
-        right: '4%',
-        bottom: '3%',
-        top: '30',
-        containLabel: true
-      },
-      xAxis: {
-        type: 'category',
-        data: historyData.map(d => d.timestamp).slice(-12),
-        axisLabel: { fontSize: 10, rotate: 45 }
-      },
-      yAxis: {
-        type: 'value',
-        name: '质量指数',
-        axisLabel: { fontSize: 10 }
-      },
-      series: [{
-        data: historyData.map(d => d.quality).slice(-12),
-        type: 'line',
-        smooth: true,
-        itemStyle: { color: '#73d13d' }
-      }]
-    });
-  }
+
 };
 
 // 窗口大小变化时调整图表
 const handleResize = () => {
   temperatureChart?.resize();
   humidityChart?.resize();
-  qualityChart?.resize();
   averageChart?.resize();
 };
 
@@ -816,7 +759,6 @@ onUnmounted(() => {
   window.removeEventListener('resize', handleResize);
   temperatureChart?.dispose();
   humidityChart?.dispose();
-  qualityChart?.dispose();
   averageChart?.dispose();
 });
 </script>

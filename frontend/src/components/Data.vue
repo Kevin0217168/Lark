@@ -164,10 +164,7 @@
             <h3>湿度数据</h3>
             <div ref="humidityChartRef" class="chart"></div>
           </div>
-          <div class="chart-container">
-            <h3>环境质量</h3>
-            <div ref="qualityChartRef" class="chart"></div>
-          </div>
+
         </div>
       </div>
       
@@ -202,12 +199,6 @@
                   <span class="info-label">设备ID:</span>
                   <span class="info-value">{{ selectedHistoryDevice?.id }}</span>
                 </div>
-                <div class="info-item">
-                  <span class="info-label">设备状态:</span>
-                  <span class="info-value" :class="selectedHistoryDevice?.status">
-                    {{ selectedHistoryDevice?.status === 'online' ? '在线' : '离线' }}
-                  </span>
-                </div>
               </div>
             </div>
           </div>
@@ -215,17 +206,11 @@
           <div class="history-table">
             <h3>历史数据记录</h3>
             <el-table :data="historyDataList" stripe style="width: 100%;" max-height="400" border>
+              <el-table-column prop="deviceName" label="设备名称" min-width="150" align="left" />
+              <el-table-column prop="deviceId" label="设备ID" min-width="100" align="center" />
               <el-table-column prop="timestamp" label="时间" min-width="180" align="left" />
               <el-table-column prop="temperature" label="温度 (℃)" min-width="120" align="center" />
               <el-table-column prop="humidity" label="湿度 (%)" min-width="120" align="center" />
-              <el-table-column prop="quality" label="环境质量指数" min-width="150" align="center" />
-              <el-table-column label="状态" min-width="100" align="center">
-                <template #default="{ row }">
-                  <el-tag :type="getQualityType(row.quality)">
-                    {{ getQualityText(row.quality) }}
-                  </el-tag>
-                </template>
-              </el-table-column>
             </el-table>
           </div>
         </div>
@@ -252,7 +237,7 @@ const getToken = () => {
 
 const route = useRoute();
 const router = useRouter();
-const { getDevices, getDeviceHistoryData, getDeviceAverageData, fetchDevices } = useDeviceStore();
+const { getDevices, getDeviceHistoryData, getDeviceAverageData, fetchDevices, updateDevice, fetchDeviceHistoryData, getOrUpdateDeviceHistoryData, fetchSensorData } = useDeviceStore();
 // 直接获取设备数据
 const devices = getDevices();
 
@@ -265,7 +250,13 @@ const selectedDeviceId = ref<number | null>(null);
 
 const selectedDevice = computed(() => {
   if (!selectedDeviceId.value) return null;
-  return devices.find(device => device.id === selectedDeviceId.value) || null;
+  // 每次计算时重新获取最新的设备列表
+  const latestDevices = getDevices();
+  const device = latestDevices.find((device: any) => device.id === selectedDeviceId.value) || null;
+  console.log('Selected device:', device);
+  console.log('Device temperature:', device?.temperature);
+  console.log('Device humidity:', device?.humidity);
+  return device;
 });
 
 // 计算WebSocket是否已连接
@@ -277,8 +268,8 @@ const handleDeviceChange = () => {
   if (selectedDevice.value) {
     ElMessage.success(`已切换到设备: ${selectedDevice.value.name}`);
     // 切换设备后更新图表
-    nextTick(() => {
-      initCharts();
+    nextTick(async () => {
+      await initCharts();
     });
     // 重新开始实时监控
     startRealtimeMonitoring();
@@ -290,50 +281,43 @@ const historyDeviceId = ref<number | null>(null);
 
 const selectedHistoryDevice = computed(() => {
   if (!historyDeviceId.value) return null;
-  return devices.find(device => device.id === historyDeviceId.value) || null;
+  // 每次计算时重新获取最新的设备列表
+  const latestDevices = getDevices();
+  return latestDevices.find((device: any) => device.id === historyDeviceId.value) || null;
 });
 
 const historyDataList = computed(() => {
   if (!historyDeviceId.value) return [];
   const historyData = getDeviceHistoryData(historyDeviceId.value);
+  const device = selectedHistoryDevice.value;
+  const deviceName = device?.name || '';
   return historyData
     .map(data => ({
       ...data,
+      deviceName: deviceName,
       timestamp: data.timestamp
     }))
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 });
 
-const handleHistoryDeviceChange = () => {
-  if (selectedHistoryDevice.value) {
+const handleHistoryDeviceChange = async () => {
+  if (selectedHistoryDevice.value && historyDeviceId.value) {
     ElMessage.success(`已切换到设备: ${selectedHistoryDevice.value.name}`);
+    // 获取该设备的历史数据
+    console.log('Fetching history data for device:', historyDeviceId.value);
+    await getOrUpdateDeviceHistoryData(historyDeviceId.value);
+    console.log('History data fetched');
   }
-};
-
-// 获取质量状态类型
-const getQualityType = (quality: number) => {
-  if (quality >= 80) return 'success';
-  if (quality >= 60) return 'warning';
-  return 'danger';
-};
-
-// 获取质量状态文本
-const getQualityText = (quality: number) => {
-  if (quality >= 80) return '优秀';
-  if (quality >= 60) return '良好';
-  return '较差';
 };
 
 // 图表容器引用
 const temperatureChartRef = ref<HTMLElement | null>(null);
 const humidityChartRef = ref<HTMLElement | null>(null);
-const qualityChartRef = ref<HTMLElement | null>(null);
 const averageChartRef = ref<HTMLElement | null>(null);
 
 // 图表实例
 let temperatureChart: echarts.ECharts | null = null;
 let humidityChart: echarts.ECharts | null = null;
-let qualityChart: echarts.ECharts | null = null;
 let averageChart: echarts.ECharts | null = null;
 
 // 实时监控图片帧
@@ -674,52 +658,14 @@ const stopRealtimeMonitoring = async () => {
 
 
 
-// 从deviceStore获取历史数据
-const generateMockData = (deviceId: number, type: 'temperature' | 'humidity' | 'quality') => {
-  const times: string[] = [];
-  const values: number[] = [];
-  
-  // 从store获取设备历史数据
-  const historyData = getDeviceHistoryData(deviceId);
-  
-  // 处理历史数据，只取最近24小时
-  const filteredData = historyData.slice(-24);
-  
-  // 处理历史数据
-  filteredData.forEach(data => {
-    const date = new Date(data.timestamp);
-    times.push(`${date.getHours().toString().padStart(2, '0')}:00`);
-    
-    switch (type) {
-      case 'temperature':
-        values.push(data.temperature);
-        break;
-      case 'humidity':
-        values.push(data.humidity);
-        break;
-      case 'quality':
-        values.push(data.quality);
-        break;
-    }
-  });
-  
-  // 如果没有历史数据，返回空数组
-  if (times.length === 0) {
-    // 生成最近24小时的时间
-    for (let i = 23; i >= 0; i--) {
-      const date = new Date();
-      date.setHours(date.getHours() - i);
-      times.push(`${date.getHours().toString().padStart(2, '0')}:00`);
-      values.push(0);
-    }
-  }
-  
-  return { times, values };
-};
+
 
 // 初始化图表
-const initCharts = () => {
+const initCharts = async () => {
   if (!selectedDeviceId.value) return;
+  
+  // 获取传感器数据
+  const sensorData = await fetchSensorData(selectedDeviceId.value);
   
   // 温度图表
   if (temperatureChartRef.value) {
@@ -727,21 +673,33 @@ const initCharts = () => {
       temperatureChart.dispose();
     }
     temperatureChart = echarts.init(temperatureChartRef.value);
-    const tempData = generateMockData(selectedDeviceId.value, 'temperature');
+    // 计算温度数据的最小值和最大值
+    const tempMin = Math.min(...sensorData.temperatureValues);
+    const tempMax = Math.max(...sensorData.temperatureValues);
+    // 调整纵轴范围，使数据更直观
+    const tempRange = tempMax - tempMin;
+    let tempYMin = tempMin;
+    let tempYMax = tempMax;
+    if (tempRange < 5) {
+      tempYMin = Math.floor(tempMin - 1);
+      tempYMax = Math.ceil(tempMax + 1);
+    }
     temperatureChart.setOption({
       tooltip: {
         trigger: 'axis'
       },
       xAxis: {
         type: 'category',
-        data: tempData.times
+        data: sensorData.times
       },
       yAxis: {
         type: 'value',
-        name: '温度 (℃)'
+        name: '温度 (℃)',
+        min: tempYMin,
+        max: tempYMax
       },
       series: [{
-        data: tempData.values,
+        data: sensorData.temperatureValues,
         type: 'line',
         smooth: true,
         itemStyle: {
@@ -768,21 +726,33 @@ const initCharts = () => {
       humidityChart.dispose();
     }
     humidityChart = echarts.init(humidityChartRef.value);
-    const humidityData = generateMockData(selectedDeviceId.value, 'humidity');
+    // 计算湿度数据的最小值和最大值
+    const humidityMin = Math.min(...sensorData.humidityValues);
+    const humidityMax = Math.max(...sensorData.humidityValues);
+    // 调整纵轴范围，使数据更直观
+    const humidityRange = humidityMax - humidityMin;
+    let humidityYMin = humidityMin;
+    let humidityYMax = humidityMax;
+    if (humidityRange < 5) {
+      humidityYMin = Math.floor(humidityMin - 1);
+      humidityYMax = Math.ceil(humidityMax + 1);
+    }
     humidityChart.setOption({
       tooltip: {
         trigger: 'axis'
       },
       xAxis: {
         type: 'category',
-        data: humidityData.times
+        data: sensorData.times
       },
       yAxis: {
         type: 'value',
-        name: '湿度 (%)'
+        name: '湿度 (%)',
+        min: humidityYMin,
+        max: humidityYMax
       },
       series: [{
-        data: humidityData.values,
+        data: sensorData.humidityValues,
         type: 'line',
         smooth: true,
         itemStyle: {
@@ -803,46 +773,7 @@ const initCharts = () => {
     });
   }
   
-  // 环境质量图表
-  if (qualityChartRef.value) {
-    if (qualityChart) {
-      qualityChart.dispose();
-    }
-    qualityChart = echarts.init(qualityChartRef.value);
-    const qualityData = generateMockData(selectedDeviceId.value, 'quality');
-    qualityChart.setOption({
-      tooltip: {
-        trigger: 'axis'
-      },
-      xAxis: {
-        type: 'category',
-        data: qualityData.times
-      },
-      yAxis: {
-        type: 'value',
-        name: '质量指数'
-      },
-      series: [{
-        data: qualityData.values,
-        type: 'line',
-        smooth: true,
-        itemStyle: {
-          color: '#73d13d'
-        },
-        areaStyle: {
-          color: {
-            type: 'linear',
-            x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [{
-              offset: 0, color: 'rgba(115, 209, 61, 0.3)'
-            }, {
-              offset: 1, color: 'rgba(115, 209, 61, 0.1)'
-            }]
-          }
-        }
-      }]
-    });
-  }
+
   
   // 所有设备平均值图表
   if (averageChartRef.value) {
@@ -859,7 +790,7 @@ const initCharts = () => {
         trigger: 'axis'
       },
       legend: {
-        data: ['平均温度', '平均湿度', '平均质量指数']
+        data: ['平均温度', '平均湿度']
       },
       xAxis: {
         type: 'category',
@@ -887,15 +818,6 @@ const initCharts = () => {
           itemStyle: {
             color: '#69c0ff'
           }
-        },
-        {
-          name: '平均质量指数',
-          data: avgData.qualityValues,
-          type: 'line',
-          smooth: true,
-          itemStyle: {
-            color: '#73d13d'
-          }
         }
       ]
     });
@@ -906,7 +828,6 @@ const initCharts = () => {
 const handleResize = () => {
   temperatureChart?.resize();
   humidityChart?.resize();
-  qualityChart?.resize();
   averageChart?.resize();
 };
 
@@ -920,18 +841,41 @@ onMounted(async () => {
   // 从后端获取设备数据
   await fetchDevices();
   
-  console.log('Devices available:', devices.length);
+  const latestDevices = getDevices();
+  console.log('Devices available:', latestDevices.length);
   
   // 如果默认有设备，初始化图表
-  if (devices.length > 0 && !selectedDeviceId.value) {
-    console.log('Setting default device:', devices[0]?.id);
-    selectedDeviceId.value = devices[0]?.id || null;
+  if (latestDevices.length > 0 && !selectedDeviceId.value) {
+    console.log('Setting default device:', latestDevices[0]?.id);
+    selectedDeviceId.value = latestDevices[0]?.id || null;
   }
   
   // 如果在实时数据标签页，由watch(selectedDeviceId)处理实时监控的启动
   // 不直接调用startRealtimeMonitoring()，避免与watch重复调用
   if (props.activeTab === 'realtime' && selectedDeviceId.value) {
     console.log('Device selected, realtime monitoring will be started by watch');
+  } else if (props.activeTab === 'history' && latestDevices.length > 0) {
+    // 如果在历史数据标签页，自动选择第一个设备并获取历史数据
+    const deviceId = latestDevices[0]?.id || null;
+    historyDeviceId.value = deviceId;
+    if (deviceId) {
+      console.log('Auto-selecting device for history on mount:', deviceId);
+      await fetchDeviceHistoryData(deviceId);
+      console.log('History data fetched for device:', deviceId);
+    }
+  }
+  
+  // 进入数据界面时获取最新的温度湿度数据
+  if (selectedDeviceId.value) {
+    console.log('Fetching latest sensor data for device:', selectedDeviceId.value);
+    const sensorData = await fetchSensorData(selectedDeviceId.value);
+    // 将最新的温度湿度数据存储到deviceStore中
+    if (sensorData.temperatureValues.length > 0 && sensorData.humidityValues.length > 0) {
+      const latestTemp = sensorData.temperatureValues[sensorData.temperatureValues.length - 1];
+      const latestHumidity = sensorData.humidityValues[sensorData.humidityValues.length - 1];
+      updateDevice(selectedDeviceId.value, { temperature: latestTemp, humidity: latestHumidity });
+      console.log('Latest sensor data stored to deviceStore:', { temperature: latestTemp, humidity: latestHumidity });
+    }
   }
 });
 
@@ -941,7 +885,6 @@ onUnmounted(() => {
   stopRealtimeMonitoring();
   temperatureChart?.dispose();
   humidityChart?.dispose();
-  qualityChart?.dispose();
   averageChart?.dispose();
 });
 
@@ -956,25 +899,44 @@ watch(() => props.activeTab, (newTab, oldTab) => {
     if (devices.length > 0 && !selectedDeviceId.value) {
       selectedDeviceId.value = devices[0]?.id || null;
     }
-    nextTick(() => {
-      initCharts();
+    nextTick(async () => {
+      await initCharts();
     });
     // 停止实时监控
     stopRealtimeMonitoring();
   } else if (newTab === 'history') {
-    // 切换到历史数据标签时，如果有设备，自动选择第一个设备
-    if (devices.length > 0 && !historyDeviceId.value) {
-      historyDeviceId.value = devices[0]?.id || null;
-    }
+    // 切换到历史数据标签时，重新获取设备数据
+    fetchDevices().then(() => {
+      // 确保有设备被选择
+      const latestDevices = getDevices();
+      if (latestDevices.length > 0) {
+        // 不管之前是否有选择，都强制选择第一个设备
+        const deviceId = latestDevices[0]?.id || null;
+        historyDeviceId.value = deviceId;
+        
+        // 获取该设备的历史数据
+        if (deviceId) {
+          console.log('Auto-selecting device for history:', deviceId);
+          // 使用nextTick确保historyDeviceId已更新
+          nextTick(async () => {
+            await fetchDeviceHistoryData(deviceId);
+            console.log('History data fetched for device:', deviceId);
+          });
+        }
+      } else {
+        console.log('No devices available, cannot load history data');
+      }
+    });
     // 停止实时监控
     stopRealtimeMonitoring();
   } else if (newTab === 'realtime') {
     // 切换到实时数据标签时，重新获取设备数据
     fetchDevices().then(() => {
       // 确保有设备被选择
-      if (devices.length > 0) {
+      const latestDevices = getDevices();
+      if (latestDevices.length > 0) {
         // 不管之前是否有选择，都强制选择第一个设备
-        const deviceId = devices[0]?.id || null;
+        const deviceId = latestDevices[0]?.id || null;
         selectedDeviceId.value = deviceId;
         
         // 直接启动实时监控，不依赖watch
@@ -989,12 +951,56 @@ watch(() => props.activeTab, (newTab, oldTab) => {
         console.log('No devices available, cannot start realtime monitoring');
       }
     });
+  } else if (newTab === 'history') {
+    // 切换到历史数据标签时，重新获取设备数据
+    fetchDevices().then(() => {
+      // 确保有设备被选择
+      const latestDevices = getDevices();
+      if (latestDevices.length > 0) {
+        // 不管之前是否有选择，都强制选择第一个设备
+        const deviceId = latestDevices[0]?.id || null;
+        historyDeviceId.value = deviceId;
+        
+        // 获取该设备的历史数据
+        if (deviceId) {
+          console.log('Auto-selecting device for history:', deviceId);
+          // 使用nextTick确保historyDeviceId已更新
+          nextTick(async () => {
+            await fetchDeviceHistoryData(deviceId);
+            console.log('History data fetched for device:', deviceId);
+          });
+        }
+      } else {
+        console.log('No devices available, cannot load history data');
+      }
+    });
   } else {
     selectedDeviceId.value = null;
+    historyDeviceId.value = null;
     // 停止实时监控
     stopRealtimeMonitoring();
   }
 }, { immediate: true });
+
+// 监听selectedDeviceId变化，更新设备数据
+watch(() => selectedDeviceId.value, async (newDeviceId, oldDeviceId) => {
+  console.log('Selected device ID changed:', newDeviceId, 'Old device ID:', oldDeviceId);
+  if (newDeviceId && props.activeTab === 'realtime') {
+    // 切换设备时，更新设备数据
+    console.log('Updating device data for new device:', newDeviceId);
+    // 从后端获取最新的设备数据
+    await fetchDevices();
+    // 获取最新的温度湿度数据
+    const sensorData = await fetchSensorData(newDeviceId);
+    if (sensorData.temperatureValues.length > 0 && sensorData.humidityValues.length > 0) {
+      const latestTemp = sensorData.temperatureValues[sensorData.temperatureValues.length - 1];
+      const latestHumidity = sensorData.humidityValues[sensorData.humidityValues.length - 1];
+      updateDevice(newDeviceId, { temperature: latestTemp, humidity: latestHumidity });
+      console.log('Latest sensor data stored to deviceStore:', { temperature: latestTemp, humidity: latestHumidity });
+    }
+    console.log('Device data updated for new device');
+  }
+});
 
 // 监听路由参数变化，自动选择设备
 watch(() => route.query.deviceId, (newDeviceId) => {
@@ -1011,9 +1017,10 @@ watch(() => route.path, (newPath) => {
   console.log('Route path changed:', newPath);
   if (newPath === '/Data' || newPath === '/Stream') {
     console.log('Navigated to data page, checking device selection');
-    if (devices.length > 0 && !selectedDeviceId.value) {
-      console.log('Auto-selecting first device:', devices[0]?.id);
-      selectedDeviceId.value = devices[0]?.id || null;
+    const latestDevices = getDevices();
+    if (latestDevices.length > 0 && !selectedDeviceId.value) {
+      console.log('Auto-selecting first device:', latestDevices[0]?.id);
+      selectedDeviceId.value = latestDevices[0]?.id || null;
     }
   }
 });
