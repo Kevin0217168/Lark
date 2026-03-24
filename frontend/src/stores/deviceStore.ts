@@ -171,12 +171,20 @@ const getOrUpdateDevices = async () => {
             start_time: startISO,
             end_time: endISO,
             skip: '0',
-            limit: '100'
+            limit: '1000'
           });
           
           // 发送请求到后端接口
           const token = localStorage.getItem('accessToken');
-          if (token) {
+          if (true) {
+            console.log('向后端发送的请求信息:', {
+              url: `/api/sensors/${device.id}?${params.toString()}`,
+              method: 'GET',
+              headers: {
+                'Accept': 'application/json',
+                'Authorization': `Bearer ${token}`
+              }
+            });
             const response = await fetch(`/api/sensors/${device.id}?${params.toString()}`, {
               method: 'GET',
               headers: {

@@ -95,7 +95,19 @@
               </el-button>
               <div class="quality-control">
                 <span class="quality-label">视频质量</span>
-                <el-slider v-model="imageQuality" :min="1" :max="100" :disabled="true" style="width: 120px" />
+                <el-slider v-model="imageQuality" :min="0" :max="63" :step="1" style="width: 120px" />
+              </div>
+              <div class="quality-control">
+                <span class="quality-label">视频尺寸</span>
+                <el-select v-model="frameSize" style="width: 120px" size="small">
+                  <el-option label="128x128" value="FRAMESIZE_128X128" />
+                  <el-option label="240x240" value="FRAMESIZE_240X240" />
+                  <el-option label="320x320" value="FRAMESIZE_320X320" />
+                  <el-option label="VGA" value="FRAMESIZE_VGA" />
+                  <el-option label="SVGA" value="FRAMESIZE_SVGA" />
+                  <el-option label="HD" value="FRAMESIZE_HD" />
+                  <el-option label="FHD" value="FRAMESIZE_FHD" />
+                </el-select>
               </div>
             </div>
           </div>
@@ -109,6 +121,7 @@
               />
               <div class="frame-info">
                 <span>更新时间: {{ lastFrameTime }}</span>
+                <span class="fps-info">帧率: {{ currentFps }} FPS</span>
               </div>
               <div class="stream-disconnected-overlay" v-if="isStreamDisconnected">
                 <div class="disconnected-content">
@@ -325,7 +338,9 @@ const currentFrameImage = ref<string>('');
 const lastFrameTime = ref<string>('');
 const connectionError = ref<string>('');
 const isStreamDisconnected = ref<boolean>(false);
+const currentFps = ref<number>(0);
 let lastFrameTimestamp = 0;
+let previousFrameTimestamp = 0;
 let streamCheckInterval: number | null = null;
 let ws: WebSocket | null = null;
 let currentImageUrl: string = '';
@@ -333,7 +348,66 @@ let currentImageUrl: string = '';
 // 视频翻转控制
 const flipHorizontal = ref(false);
 const flipVertical = ref(false);
-const imageQuality = ref(80); // 图片质量滑条值（空实现）
+const imageQuality = ref(32); // 默认画质为32
+const frameSize = ref('FRAMESIZE_VGA'); // 默认视频尺寸
+
+// 发送画质设置到WebSocket连接
+const sendStreamQuality = async (quality: number) => {
+  // 使用当前已建立的WebSocket连接发送画质设置
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    console.warn('WebSocket连接未建立，无法发送画质设置');
+    return;
+  }
+  
+  const message = JSON.stringify({
+    code: 1,
+    item: 'camera',
+    key: 'jpeg_quality',
+    values: quality.toString()
+  });
+  
+  console.log('向ws连接发送画质设置:', message);
+  
+  try {
+    ws.send(message);
+  } catch (error) {
+    console.error('发送画质设置失败:', error);
+  }
+};
+
+// 发送视频尺寸设置到WebSocket连接
+const sendFrameSize = async (size: string) => {
+  // 使用当前已建立的WebSocket连接发送视频尺寸设置
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    console.warn('WebSocket连接未建立，无法发送视频尺寸设置');
+    return;
+  }
+  
+  const message = JSON.stringify({
+    code: 1,
+    item: 'camera',
+    key: 'frame_size',
+    values: size
+  });
+  
+  console.log('向ws连接发送视频尺寸设置:', message);
+  
+  try {
+    ws.send(message);
+  } catch (error) {
+    console.error('发送视频尺寸设置失败:', error);
+  }
+};
+  
+// 监听滑块变化
+watch(imageQuality, (newQuality) => {
+  sendStreamQuality(newQuality);
+});
+
+// 监听视频尺寸变化
+watch(frameSize, (newSize) => {
+  sendFrameSize(newSize);
+});
 
 // 切换左右翻转
 const toggleHorizontalFlip = () => {
@@ -372,7 +446,16 @@ const handleFrameData = (data: any) => {
     currentImageUrl = URL.createObjectURL(blob);
     currentFrameImage.value = currentImageUrl;
     lastFrameTime.value = new Date().toLocaleTimeString('zh-CN');
-    lastFrameTimestamp = Date.now();
+    
+    // 计算帧率
+    const now = Date.now();
+    if (previousFrameTimestamp > 0) {
+      const frameInterval = now - previousFrameTimestamp;
+      currentFps.value = Math.round(1000 / frameInterval);
+    }
+    previousFrameTimestamp = now;
+    
+    lastFrameTimestamp = now;
     isStreamDisconnected.value = false;
   } catch (error) {
     console.error('处理图片数据失败:', error);
@@ -454,7 +537,12 @@ const startRealtimeMonitoring = async () => {
         // 尝试解析JSON数据
         try {
           const data = JSON.parse(event.data);
-          if (data.code === 1) {
+          // 检查是否是画质设置响应
+          if (data.code === 1 && data.key === 'jpeg_quality') {
+            console.log('画质设置成功:', data);
+          } else if (data.code === 1 && data.key === 'frame_size') {
+            console.log('视频尺寸设置成功:', data);
+          } else if (data.code === 1) {
             console.log('操作成功:', data.msg);
           } else {
             console.error('操作失败:', data.msg);
@@ -1325,6 +1413,14 @@ const goToFullscreen = () => {
   font-size: 12px;
   text-align: right;
   z-index: 10;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.fps-info {
+  font-weight: bold;
+  color: #409EFF;
 }
 
 .video-stream.disconnected {
