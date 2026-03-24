@@ -22,7 +22,7 @@
           <div class="stats-content">
             <p><strong>厂区平均温度:</strong> {{ averageData.temperature }}°C</p>
             <p><strong>厂区平均湿度:</strong> {{ averageData.humidity }}%</p>
-            <p><strong>厂区平均空气质量:</strong> {{ getQualityText(averageData.quality) }}</p>
+
             <div class="extreme-values">
               <h5>极值数据</h5>
               <p class="extreme-hint">（最近24小时内）</p>
@@ -38,12 +38,7 @@
                 <span class="extreme-divider">/</span>
                 <span class="extreme-low">最低 {{ humidityExtreme.min }}%</span>
               </div>
-              <div class="extreme-item">
-                <span class="extreme-label">空气质量极值:</span>
-                <span class="extreme-high">最高 {{ qualityExtreme.max }}</span>
-                <span class="extreme-divider">/</span>
-                <span class="extreme-low">最低 {{ qualityExtreme.min }}</span>
-              </div>
+              
             </div>
             <hr>
             <div class="system-status-section">
@@ -101,17 +96,9 @@ const averageData = computed(() => {
   const latestIndex = data.times.length - 1;
   return {
     temperature: data.temperatureValues[latestIndex] || 0,
-    humidity: data.humidityValues[latestIndex] || 0,
-    quality: data.qualityValues[latestIndex] || 0
+    humidity: data.humidityValues[latestIndex] || 0
   };
 });
-
-// 获取质量状态文本
-const getQualityText = (quality: number) => {
-  if (quality >= 80) return '优秀';
-  if (quality >= 60) return '良好';
-  return '一般';
-};
 
 // 获取24小时前的时间
 const get24HoursAgo = () => {
@@ -154,22 +141,7 @@ const humidityExtreme = computed(() => {
   };
 });
 
-// 计算空气质量极值（24小时内）
-const qualityExtreme = computed(() => {
-  const twentyFourHoursAgo = get24HoursAgo();
-  
-  const qualities = deviceHistoryData.value
-    .filter(d => {
-      const dataTime = new Date(d.timestamp);
-      return dataTime >= twentyFourHoursAgo;
-    })
-    .map(d => d.quality);
-  
-  return {
-    max: qualities.length > 0 ? Math.max(...qualities) : 0,
-    min: qualities.length > 0 ? Math.min(...qualities) : 0
-  };
-});
+
 
 const goToDeviceLogs = () => {
   router.push({

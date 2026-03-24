@@ -33,15 +33,17 @@
           <div class="env-data">
             <div class="env-item">
               <span class="env-label">温度</span>
-              <span class="env-value">{{ avgEnvironmentData.temperature }}°C</span>
+              <div class="env-values">
+                <span class="env-max">最高 {{ extremaEnvironmentData.temperature.max }}°C</span>
+                <span class="env-min">最低 {{ extremaEnvironmentData.temperature.min }}°C</span>
+              </div>
             </div>
             <div class="env-item">
               <span class="env-label">湿度</span>
-              <span class="env-value">{{ avgEnvironmentData.humidity }}%</span>
-            </div>
-            <div class="env-item">
-              <span class="env-label">空气质量</span>
-              <span class="env-value">{{ avgEnvironmentData.quality }}</span>
+              <div class="env-values">
+                <span class="env-max">最高 {{ extremaEnvironmentData.humidity.max }}%</span>
+                <span class="env-min">最低 {{ extremaEnvironmentData.humidity.min }}%</span>
+              </div>
             </div>
           </div>
           <div class="card-action">
@@ -99,9 +101,12 @@ import * as echarts from 'echarts';
 const router = useRouter();
 const { 
   devices, 
+  deviceHistoryData,
   getDeviceLogs, 
   getDeviceAverageData,
-  fetchDevices
+  getDeviceExtremaData,
+  fetchDevices,
+  getOrUpdateDevices
 } = useDeviceStore();
 
 // 计算设备统计信息
@@ -164,15 +169,15 @@ const avgEnvironmentData = computed(() => {
   const totalTemperature = onlineDevices.reduce((sum, device) => sum + (device.temperature || 0), 0);
   const totalHumidity = onlineDevices.reduce((sum, device) => sum + (device.humidity || 0), 0);
   
-  // 从历史数据中获取质量指数的平均值
-  const historyData = getDeviceAverageData();
-  const latestQuality = historyData.qualityValues.length > 0 ? historyData.qualityValues[historyData.qualityValues.length - 1] : 0;
-  
   return {
     temperature: Number((totalTemperature / onlineDevices.length).toFixed(1)),
-    humidity: Number((totalHumidity / onlineDevices.length).toFixed(1)),
-    quality: latestQuality
+    humidity: Number((totalHumidity / onlineDevices.length).toFixed(1))
   };
+});
+
+// 计算24小时内所有设备的温度湿度的最高最低值
+const extremaEnvironmentData = computed(() => {
+  return getDeviceExtremaData();
 });
 
 
@@ -199,7 +204,7 @@ const initChart = () => {
         trigger: 'axis'
       },
       legend: {
-        data: ['平均温度', '平均湿度', '平均质量指数'],
+        data: ['平均温度', '平均湿度'],
         top: 30
       },
       xAxis: {
@@ -227,15 +232,6 @@ const initChart = () => {
           smooth: true,
           itemStyle: {
             color: '#69c0ff'
-          }
-        },
-        {
-          name: '平均质量指数',
-          data: avgData.qualityValues,
-          type: 'line',
-          smooth: true,
-          itemStyle: {
-            color: '#73d13d'
           }
         }
       ]
@@ -276,9 +272,16 @@ const goToDeviceLogs = () => {
 onMounted(async () => {
   window.addEventListener('resize', handleResize);
   // 从后端获取设备数据
-  await fetchDevices();
+  await getOrUpdateDevices();
+  // 初始化图表
   initChart();
 });
+
+// 监听设备数据变化
+watch(devices, () => {
+  // 设备数据变化时重新初始化图表
+  initChart();
+}, { deep: true });
 
 // 组件卸载时清理
 onUnmounted(() => {
@@ -461,9 +464,25 @@ onUnmounted(() => {
   opacity: 0.9;
 }
 
-.env-value {
+.env-values {
+  display: flex;
+  gap: 10px;
+  width: 230px;
+  justify-content: space-between;
+}
+
+.env-max {
   font-size: 16px;
   font-weight: 600;
+  color: #ff6b6b;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.env-min {
+  font-size: 16px;
+  font-weight: 600;
+  color: #69c0ff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
 .card-action {
