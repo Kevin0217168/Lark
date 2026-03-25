@@ -33,15 +33,21 @@
           <el-icon><DataAnalysis /></el-icon>
         </div>
         <div class="env-data">
-            <div class="env-item">
-              <span class="env-label">温度</span>
-              <span class="env-value">{{ avgEnvironmentData.temperature }}°C</span>
-            </div>
-            <div class="env-item">
-              <span class="env-label">湿度</span>
-              <span class="env-value">{{ avgEnvironmentData.humidity }}%</span>
+          <div class="env-item">
+            <span class="env-label">温度</span>
+            <div class="env-values">
+              <span class="env-max">最高 {{ extremaEnvironmentData.temperature.max }}°C</span>
+              <span class="env-min">最低 {{ extremaEnvironmentData.temperature.min }}°C</span>
             </div>
           </div>
+          <div class="env-item">
+            <span class="env-label">湿度</span>
+            <div class="env-values">
+              <span class="env-max">最高 {{ extremaEnvironmentData.humidity.max }}%</span>
+              <span class="env-min">最低 {{ extremaEnvironmentData.humidity.min }}%</span>
+            </div>
+          </div>
+        </div>
         <div class="card-action">
           <span class="action-text">数据分析</span>
           <el-icon><ArrowRight /></el-icon>
@@ -97,7 +103,9 @@ const {
   devices, 
   getDeviceLogs, 
   getDeviceAverageData,
-  fetchDevices
+  getDeviceExtremaData,
+  fetchDevices,
+  getOrUpdateDeviceHistoryData
 } = useDeviceStore();
 
 // 计算设备统计信息
@@ -129,24 +137,9 @@ const onlinePercentage = computed(() => {
   return Math.round((deviceStats.value.online / deviceStats.value.total) * 100);
 });
 
-// 计算环境数据平均值
-const avgEnvironmentData = computed(() => {
-  const onlineDevices = devices.value.filter(d => d.isOnline);
-  
-  if (onlineDevices.length === 0) {
-    return {
-      temperature: 0,
-      humidity: 0
-    };
-  }
-  
-  const totalTemperature = onlineDevices.reduce((sum, device) => sum + (device.temperature || 0), 0);
-  const totalHumidity = onlineDevices.reduce((sum, device) => sum + (device.humidity || 0), 0);
-  
-  return {
-    temperature: Number((totalTemperature / onlineDevices.length).toFixed(1)),
-    humidity: Number((totalHumidity / onlineDevices.length).toFixed(1))
-  };
+// 计算24小时内所有设备的温度湿度的最高最低值
+const extremaEnvironmentData = computed(() => {
+  return getDeviceExtremaData();
 });
 
 // 图表容器引用
@@ -246,6 +239,12 @@ const goToDeviceLogs = () => {
 
 onMounted(async () => {
   await fetchDevices();
+  // 获取所有设备的历史数据，用于环境数据和平均值图表显示
+  if (devices.value.length > 0) {
+    for (const device of devices.value) {
+      await getOrUpdateDeviceHistoryData(device.id);
+    }
+  }
   initChart();
   window.addEventListener('resize', handleResize);
 });
@@ -394,10 +393,7 @@ onUnmounted(() => {
 }
 
 .env-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .env-item:last-child {
@@ -407,11 +403,33 @@ onUnmounted(() => {
 .env-label {
   font-size: 14px;
   opacity: 0.9;
+  display: block;
+  margin-bottom: 4px;
 }
 
-.env-value {
-  font-size: 16px;
-  font-weight: 600;
+.env-values {
+  display: flex;
+  gap: 12px;
+}
+
+.env-max, .env-min {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.env-max {
+  color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.15);
+}
+
+.env-min {
+  color: #7077ff;
+  background: rgba(77, 171, 247, 0.15);
 }
 
 /* 错误日志 */

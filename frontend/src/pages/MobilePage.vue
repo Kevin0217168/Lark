@@ -206,7 +206,13 @@ const handleLoginStatusChanged = () => {
 // 监听路由变化，重置默认激活项
 const handleRouteChange = (newPath: string) => {
   if (newPath === '/Stream' || newPath === '/Data') {
-    activeTab.value = 'realtime';
+    // 检查是否有 activeTab 查询参数
+    const activeTabParam = route.query.activeTab as string;
+    if (activeTabParam && ['realtime', 'analysis', 'history'].includes(activeTabParam)) {
+      activeTab.value = activeTabParam;
+    } else {
+      activeTab.value = 'realtime';
+    }
   } else if (newPath === '/Device') {
     // 检查是否有 tab 查询参数
     const tabParam = route.query.tab as string;
@@ -225,6 +231,17 @@ const handleQueryChange = (newTab: any) => {
     const tabParam = newTab as string;
     if (['overview', 'management', 'logs'].includes(tabParam)) {
       activeTab.value = tabParam;
+      emit('tabChange', activeTab.value);
+    }
+  }
+};
+
+// 监听 activeTab 查询参数变化
+const handleActiveTabQueryChange = (newActiveTab: any) => {
+  if ((route.path === '/Stream' || route.path === '/Data') && newActiveTab) {
+    const activeTabParam = newActiveTab as string;
+    if (['realtime', 'analysis', 'history'].includes(activeTabParam)) {
+      activeTab.value = activeTabParam;
       emit('tabChange', activeTab.value);
     }
   }
@@ -250,6 +267,9 @@ onMounted(() => {
   
   // 监听查询参数变化
   watch(() => route.query.tab, handleQueryChange);
+  
+  // 监听 activeTab 查询参数变化
+  watch(() => route.query.activeTab, handleActiveTabQueryChange);
   
   // 保存回调函数引用以便移除
   (window as any).__mobileStorageHandler = handleStorageChange;

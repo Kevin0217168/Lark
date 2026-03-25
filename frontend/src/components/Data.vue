@@ -95,7 +95,7 @@
               </el-button>
               <div class="quality-control">
                 <span class="quality-label">视频质量</span>
-                <el-slider v-model="imageQuality" :min="0" :max="63" :step="1" style="width: 120px" />
+                <el-slider v-model="imageQuality" :min="1" :max="63" :step="1" :show-tooltip="false" style="width: 120px" />
               </div>
               <div class="quality-control">
                 <span class="quality-label">视频尺寸</span>
@@ -218,13 +218,32 @@
           
           <div class="history-table">
             <h3>历史数据记录</h3>
-            <el-table :data="historyDataList" stripe style="width: 100%;" max-height="400" border>
+            <el-table :data="paginatedHistoryData" stripe style="width: 100%;" max-height="400" border>
               <el-table-column prop="deviceName" label="设备名称" min-width="150" align="left" />
               <el-table-column prop="deviceId" label="设备ID" min-width="100" align="center" />
               <el-table-column prop="timestamp" label="时间" min-width="180" align="left" />
               <el-table-column prop="temperature" label="温度 (℃)" min-width="120" align="center" />
               <el-table-column prop="humidity" label="湿度 (%)" min-width="120" align="center" />
             </el-table>
+            <div class="pagination-container">
+              <el-pagination
+                v-model:current-page="currentPage"
+                v-model:page-size="pageSize"
+                :page-sizes="[10, 20, 50, 100]"
+                :total="historyDataList.length"
+                layout="total, sizes, prev, pager, next, jumper"
+                background
+                :prev-text="'上一页'"
+                :next-text="'下一页'"
+                :total-text="'共 {total} 条'"
+                :page-size-text="'条/页'"
+                :jumper-text="'前往'"
+                :jumper-prepend-text="''"
+                :jumper-append-text="'页'"
+                @size-change="handleSizeChange"
+                @current-change="handleCurrentChange"
+              />
+            </div>
           </div>
         </div>
         <div class="history-placeholder" v-else>
@@ -255,9 +274,11 @@ const { getDevices, getDeviceHistoryData, getDeviceAverageData, fetchDevices, up
 const devices = getDevices();
 
 // 接收父组件传递的activeTab
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   activeTab: string
-}>();
+}>(), {
+  activeTab: 'realtime'
+});
 
 const selectedDeviceId = ref<number | null>(null);
 
@@ -277,9 +298,13 @@ const isWebSocketConnected = computed(() => {
   return ws !== null && ws.readyState === WebSocket.OPEN;
 });
 
-const handleDeviceChange = () => {
+const handleDeviceChange = async () => {
   if (selectedDevice.value) {
     ElMessage.success(`已切换到设备: ${selectedDevice.value.name}`);
+    // 如果在分析界面，需要先获取历史数据再初始化图表
+    if (props.activeTab === 'analysis' && selectedDeviceId.value) {
+      await fetchDeviceHistoryData(selectedDeviceId.value);
+    }
     // 切换设备后更新图表
     nextTick(async () => {
       await initCharts();
@@ -312,6 +337,28 @@ const historyDataList = computed(() => {
     }))
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 });
+
+// 分页相关
+const currentPage = ref(1);
+const pageSize = ref(10);
+
+// 分页后的历史数据
+const paginatedHistoryData = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  const end = start + pageSize.value;
+  return historyDataList.value.slice(start, end);
+});
+
+// 处理每页条数变化
+const handleSizeChange = (val: number) => {
+  pageSize.value = val;
+  currentPage.value = 1;
+};
+
+// 处理页码变化
+const handleCurrentChange = (val: number) => {
+  currentPage.value = val;
+};
 
 const handleHistoryDeviceChange = async () => {
   if (selectedHistoryDevice.value && historyDeviceId.value) {
@@ -399,9 +446,10 @@ const sendFrameSize = async (size: string) => {
   }
 };
   
-// 监听滑块变化
+// 监听滑块变化，将值反转后发送给后端（0-63 -> 63-0）
 watch(imageQuality, (newQuality) => {
-  sendStreamQuality(newQuality);
+  const invertedQuality = 63 - newQuality;
+  sendStreamQuality(invertedQuality);
 });
 
 // 监听视频尺寸变化
@@ -942,6 +990,13 @@ onMounted(async () => {
   // 不直接调用startRealtimeMonitoring()，避免与watch重复调用
   if (props.activeTab === 'realtime' && selectedDeviceId.value) {
     console.log('Device selected, realtime monitoring will be started by watch');
+  } else if (props.activeTab === 'analysis' && selectedDeviceId.value) {
+    // 如果在分析标签页，获取历史数据并初始化图表
+    console.log('Initializing charts for analysis tab on mount');
+    await fetchDeviceHistoryData(selectedDeviceId.value);
+    nextTick(async () => {
+      await initCharts();
+    });
   } else if (props.activeTab === 'history' && latestDevices.length > 0) {
     // 如果在历史数据标签页，自动选择第一个设备并获取历史数据
     const deviceId = latestDevices[0]?.id || null;
@@ -986,6 +1041,10 @@ watch(() => props.activeTab, (newTab, oldTab) => {
     // 切换到分析标签时，如果有设备，初始化图表
     if (devices.length > 0 && !selectedDeviceId.value) {
       selectedDeviceId.value = devices[0]?.id || null;
+    }
+    // 分析界面需要获取历史数据来显示图表
+    if (selectedDeviceId.value) {
+      fetchDeviceHistoryData(selectedDeviceId.value);
     }
     nextTick(async () => {
       await initCharts();
@@ -1605,6 +1664,12 @@ const goToFullscreen = () => {
   margin: 0 0 10px 0;
   font-size: 16px;
   color: #303133;
+}
+
+.pagination-container {
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
 }
 
 .history-placeholder {

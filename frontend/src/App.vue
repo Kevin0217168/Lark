@@ -90,6 +90,13 @@ watch(() => route.query.tab, (newTab) => {
   }
 }, { immediate: true });
 
+// 监听路由变化，从query参数中读取activeTab值
+watch(() => route.query.activeTab, (newActiveTab) => {
+  if (newActiveTab && typeof newActiveTab === 'string') {
+    activeTab.value = newActiveTab;
+  }
+}, { immediate: true });
+
 // 监听路由变化，滚动到页面顶部
 watch(() => route.path, () => {
   window.scrollTo({ top: 0, behavior: 'smooth' });

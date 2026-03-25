@@ -43,6 +43,21 @@ const DATA_UPDATE_INTERVAL = 5 * 60 * 1000;
 // 数据最后更新时间
 const lastUpdateTime = ref<Date | null>(null);
 
+// 历史数据最后更新时间（按设备ID记录）
+const lastHistoryUpdateTime = ref<Map<number, Date>>(new Map());
+
+// 将本地时间格式化为ISO8601格式（保持本地时区，后端使用UTC+8）
+const formatLocalISO = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  const ms = String(date.getMilliseconds()).padStart(3, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${ms}`;
+};
+
 // 从后端获取设备数据
 const fetchDevices = async () => {
   try {
@@ -91,9 +106,9 @@ const fetchAllSensorsData = async () => {
         const startTime = new Date();
         startTime.setHours(startTime.getHours() - 24);
         
-        // 格式化为ISO8601格式
-        const startISO = startTime.toISOString();
-        const endISO = endTime.toISOString();
+        // 格式化为ISO8601格式（本地时区）
+        const startISO = formatLocalISO(startTime);
+        const endISO = formatLocalISO(endTime);
         
         // 构建查询参数
         const params = new URLSearchParams({
@@ -162,9 +177,9 @@ const getOrUpdateDevices = async () => {
           const startTime = new Date();
           startTime.setHours(startTime.getHours() - 24);
           
-          // 格式化为ISO8601格式
-          const startISO = startTime.toISOString();
-          const endISO = endTime.toISOString();
+          // 格式化为ISO8601格式（本地时区）
+          const startISO = formatLocalISO(startTime);
+          const endISO = formatLocalISO(endTime);
           
           // 构建查询参数
           const params = new URLSearchParams({
@@ -386,16 +401,18 @@ const fetchDeviceHistoryData = async (deviceId: number) => {
     const startTime = new Date();
     startTime.setHours(startTime.getHours() - 24);
     
-    // 格式化为ISO8601格式
-    const startISO = startTime.toISOString();
-    const endISO = endTime.toISOString();
+    // 格式化为ISO8601格式（本地时区）
+    const startISO = formatLocalISO(startTime);
+    const endISO = formatLocalISO(endTime);
+    
+    console.log(`[fetchDeviceHistoryData] 设备 ${deviceId} 请求时间范围: ${startISO} 到 ${endISO}`);
     
     // 构建查询参数
     const params = new URLSearchParams({
       start_time: startISO,
       end_time: endISO,
       skip: '0',
-      limit: '100'
+      limit: '1000'
     });
     
     const response = await fetch(`/api/sensors/${deviceId}?${params.toString()}`, {
@@ -420,6 +437,9 @@ const fetchDeviceHistoryData = async (deviceId: number) => {
             humidity: item.humidity
           });
         });
+        // 更新该设备的历史数据更新时间
+        lastHistoryUpdateTime.value.set(deviceId, new Date());
+        console.log(`[fetchDeviceHistoryData] 设备 ${deviceId} 历史数据已更新，共 ${data.data.length} 条记录`);
       }
     }
   } catch (error) {
@@ -431,8 +451,17 @@ const fetchDeviceHistoryData = async (deviceId: number) => {
 const getOrUpdateDeviceHistoryData = async (deviceId: number) => {
   // 检查该设备的历史数据是否存在
   const existingData = deviceHistoryData.value.filter(d => d.deviceId === deviceId);
-  if (existingData.length === 0 || shouldUpdateData()) {
+  
+  // 检查是否需要更新（使用独立的历史数据更新时间）
+  const lastUpdate = lastHistoryUpdateTime.value.get(deviceId);
+  const needsUpdate = existingData.length === 0 || !lastUpdate || 
+    (new Date().getTime() - lastUpdate.getTime() > DATA_UPDATE_INTERVAL);
+  
+  if (needsUpdate) {
+    console.log(`[getOrUpdateDeviceHistoryData] 设备 ${deviceId} 需要更新历史数据`);
     await fetchDeviceHistoryData(deviceId);
+  } else {
+    console.log(`[getOrUpdateDeviceHistoryData] 设备 ${deviceId} 使用缓存的历史数据`);
   }
 };
 
@@ -456,9 +485,9 @@ const fetchSensorData = async (deviceId: number) => {
     const startTime = new Date();
     startTime.setHours(startTime.getHours() - 24);
     
-    // 格式化为ISO8601格式
-    const startISO = startTime.toISOString();
-    const endISO = endTime.toISOString();
+    // 格式化为ISO8601格式（本地时区）
+    const startISO = formatLocalISO(startTime);
+    const endISO = formatLocalISO(endTime);
     
     // 获取登录token
     const token = localStorage.getItem('accessToken');
@@ -472,7 +501,7 @@ const fetchSensorData = async (deviceId: number) => {
       start_time: startISO,
       end_time: endISO,
       skip: '0',
-      limit: '100'
+      limit: '1000'
     });
     
     // 发送请求到后端接口
@@ -517,7 +546,7 @@ const fetchSensorData = async (deviceId: number) => {
   return { times, temperatureValues, humidityValues };
 };
   
-  // 计算所有设备的平均值数据（最近24小时）
+  // 计算所有设备的平均值数据（最近24小时，按10分钟间隔采样）
   const getDeviceAverageData = () => {
     const times: string[] = [];
     const temperatureValues: number[] = [];
@@ -526,44 +555,38 @@ const fetchSensorData = async (deviceId: number) => {
     // 获取所有设备的历史数据
     const allHistoryData = deviceHistoryData.value;
     
-    // 只取最近24小时的数据
-    const filteredData = allHistoryData.slice(-24 * devices.value.length);
-    
-    // 按时间分组
+    // 按10分钟间隔分组
     const timeGroups: Record<string, { temp: number[], humidity: number[] }> = {};
     
-    filteredData.forEach(data => {
+    allHistoryData.forEach(data => {
       const date = new Date(data.timestamp);
-      const hourKey = `${date.getHours().toString().padStart(2, '0')}:00`;
+      // 按10分钟间隔分组，格式: HH:00, HH:10, HH:20, ...
+      const minutes = Math.floor(date.getMinutes() / 10) * 10;
+      const timeKey = `${date.getHours().toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
       
-      if (!timeGroups[hourKey]) {
-        timeGroups[hourKey] = { temp: [], humidity: [] };
+      if (!timeGroups[timeKey]) {
+        timeGroups[timeKey] = { temp: [], humidity: [] };
       }
       
-      timeGroups[hourKey].temp.push(data.temperature);
-      timeGroups[hourKey].humidity.push(data.humidity);
+      timeGroups[timeKey].temp.push(data.temperature);
+      timeGroups[timeKey].humidity.push(data.humidity);
     });
     
-    // 生成最近24小时的时间
-    for (let i = 23; i >= 0; i--) {
-      const date = new Date();
-      date.setHours(date.getHours() - i);
-      const hourKey = `${date.getHours().toString().padStart(2, '0')}:00`;
-      times.push(hourKey);
-      
-      // 计算每个时间点的平均值
-      const group = timeGroups[hourKey];
-      if (group) {
-        const tempAvg = group.temp.length > 0 ? group.temp.reduce((sum, val) => sum + val, 0) / group.temp.length : 0;
-        const humidityAvg = group.humidity.length > 0 ? group.humidity.reduce((sum, val) => sum + val, 0) / group.humidity.length : 0;
+    // 获取所有时间点并排序
+    const sortedTimeKeys = Object.keys(timeGroups).sort();
+    
+    // 只包含有数据的时间点
+    sortedTimeKeys.forEach(timeKey => {
+      const group = timeGroups[timeKey];
+      if (group && group.temp.length > 0) {
+        times.push(timeKey);
+        const tempAvg = group.temp.reduce((sum, val) => sum + val, 0) / group.temp.length;
+        const humidityAvg = group.humidity.reduce((sum, val) => sum + val, 0) / group.humidity.length;
         
         temperatureValues.push(Number(tempAvg.toFixed(1)));
         humidityValues.push(Number(humidityAvg.toFixed(1)));
-      } else {
-        temperatureValues.push(0);
-        humidityValues.push(0);
       }
-    }
+    });
     
     return {
       times,
