@@ -34,13 +34,13 @@ app = FastAPI(
     lifespan=lifespan,
     title="云雀 Lark",
     summary="物联网系统后端API开放接口文档",
-    version="0.4.3",
+    version="0.5.1",
     root_path="/api",
     docs_url=None,
     redoc_url=None,
     contact={
-        "name": "Mint",
-        "url": "https://www.mintlab.top/",
+        "name": "Lark--云雀 物联网系统前端",
+        "url": "https://lark.mintlab.top/",
     },
     openapi_external_docs={
         "description": "云雀 Lark Github项目",

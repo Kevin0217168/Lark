@@ -38,15 +38,17 @@ class Viewer:
     def disconnect(self):
         self.websocket = None
 
-    async def subscribe(self, device:Device.Esp32):
+    async def subscribe(self, device: Device.Esp32):
         await async_log(logger, "info", device.subscribers)
-        # 检查设备状态
         if len(device.subscribers) == 0:
-            # 如果之前还没有观看者, 通知上线
-            await async_log(logger, "info", f"通知设备{device.id}上线")
+            # 确保设备在线且 WebSocket 可用
             if not device.websocket or device.websocket.client_state != WebSocketState.CONNECTED:
-                return -1    
-            await device.websocket.send_json({"code":1, "item":"status", "key": "status", "values":"stream"})
+                return -1
+            try:
+                await device.websocket.send_json({"code":1, "item":"status", "key": "status", "values":"stream"})
+            except Exception:
+                await async_log(logger, "error", f"Device {device.id} WebSocket closed unexpectedly")
+                return -1
             
         # 用于向观看者转发
         device.subscribe(self)
