@@ -325,6 +325,7 @@ R400_DEVICE_ALREADY_EXIST = {
 # ==================== 传感器数据模型 ====================
 class SensorDataItem(BaseModel):
     """单条传感器数据"""
+
     id: int
     timestamp: datetime
     temperature: float
@@ -336,12 +337,14 @@ class SensorDataItem(BaseModel):
 
 class DeviceSensorData(BaseModel):
     """设备分组传感器数据"""
+
     device_id: int
     data: List[SensorDataItem]
 
 
 class SensorDataFilter(BaseModel):
     """传感器数据查询过滤条件"""
+
     model_config = {"extra": "forbid"}
     start_time: Optional[datetime] = Field(
         default=None, title="起始时间", description="查询起始时间（包含）"
@@ -355,6 +358,7 @@ class SensorDataFilter(BaseModel):
 
 class SensorDataCreate(BaseModel):
     """设备上报传感器数据"""
+
     secret: str = Field(..., title="设备密钥")
     temperature: float = Field(..., title="温度")
     humidity: float = Field(..., title="湿度")
@@ -365,10 +369,90 @@ class SensorDataCreate(BaseModel):
 
 class SensorDataDelete(BaseModel):
     """删除传感器数据的条件"""
+
     device_id: int = Field(..., title="设备ID")
     start_time: Optional[datetime] = Field(None, title="起始时间")
     end_time: Optional[datetime] = Field(None, title="结束时间")
 
+
+class StatisticData(BaseModel):
+    """温度或湿度统计信息"""
+
+    avg: float = Field(..., description="平均值")
+    max: float = Field(..., description="最大值")
+    min: float = Field(..., description="最小值")
+
+
+class SummaryData(BaseModel):
+    """数据统计摘要"""
+
+    total: int = Field(..., description="统计的数据总条数")
+    temperature: StatisticData = Field(..., description="温度统计")
+    humidity: StatisticData = Field(..., description="湿度统计")
+
+
+class GroupedDataItem(BaseModel):
+    """分组获取传感器的返回结构"""
+
+    group: int = Field(..., description="分组序号")
+    start_time: datetime = Field(..., description="分组起始时间")
+    end_time: datetime = Field(..., description="分组结束时间")
+    total: int = Field(..., description="该分组内的数据条数")
+    avg_temperature: float = Field(..., description="平均温度")
+    avg_humidity: float = Field(..., description="平均湿度")
+
+
+# ====================
+R200_SENSOR_SUMMARY = {
+    200: {
+        "description": "成功返回统计摘要",
+        "content": {
+            "application/json": {
+                "example": {
+                    "code": 200,
+                    "msg": "successful!",
+                    "data": {
+                        "total": 150,
+                        "temperature": {"avg": 21.5, "max": 25.8, "min": 18.2},
+                        "humidity": {"avg": 43.2, "max": 58.5, "min": 35.0},
+                    },
+                }
+            }
+        },
+    }
+}
+
+R200_SENSOR_GROUP = {
+    200: {
+        "description": "成功返回分组统计数据",
+        "content": {
+            "application/json": {
+                "example": {
+                    "code": 200,
+                    "msg": "successful!",
+                    "data": [
+                        {
+                            "group": 0,
+                            "start_time": "2025-03-26T10:00:00",
+                            "end_time": "2025-03-26T10:30:00",
+                            "total": 25,
+                            "avg_temperature": 21.2,
+                            "avg_humidity": 44.1,
+                        },
+                        {
+                            "group": 1,
+                            "start_time": "2025-03-26T10:30:00",
+                            "end_time": "2025-03-26T11:00:00",
+                            "total": 30,
+                            "avg_temperature": 21.5,
+                            "avg_humidity": 43.8,
+                        },
+                    ],
+                }
+            }
+        },
+    }
+}
 
 # ==================== 传感器错误响应 ====================
 R404_SENSOR_NOT_FOUND = {

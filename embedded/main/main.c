@@ -8,7 +8,10 @@
 #include "sht4x.h"
 
 static const char *TAG = "main";
-static const char *secret = "b1f9562544a348c98c57a66b32a92d32";
+// 设备2
+static const char *secret = "2d3173bfc1f64da0894a3257e1636d72";
+// 设备1
+// static const char *secret = "b1f9562544a348c98c57a66b32a92d32";
 extern bool Wifi_isConnected;
 
 Device_t device = {
@@ -98,20 +101,20 @@ void app_main(void)
         vTaskDelay(500 / portTICK_PERIOD_MS);
     }
 
-    i2c_scan();
+    // i2c_scan();
 
-    /* Initialize the i2c bus for the current platform */
-    sensirion_i2c_init();
+    // /* Initialize the i2c bus for the current platform */
+    // sensirion_i2c_init();
 
-    /* Busy loop for initialization, because the main loop does not work without
-     * a sensor.
-     */
-    while (sht4x_probe() != STATUS_OK)
-    {
-        printf("SHT sensor probing failed\n");
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-    }
-    printf("SHT sensor probing successful\n");
+    // /* Busy loop for initialization, because the main loop does not work without
+    //  * a sensor.
+    //  */
+    // while (sht4x_probe() != STATUS_OK)
+    // {
+    //     printf("SHT sensor probing failed\n");
+    //     vTaskDelay(1000 / portTICK_PERIOD_MS);
+    // }
+    // printf("SHT sensor probing successful\n");
 
     CameraInit();
     sensor_t *s = esp_camera_sensor_get();
@@ -123,10 +126,10 @@ void app_main(void)
     xTaskCreate(camera_transmit_task, "camera_transmit_task", 4096, &ucParameterToPass, 1, &xHandle);
     configASSERT(xHandle);
 
-    static uint8_t sensor_data_transmit_task_Handle_ParameterToPass;
-    TaskHandle_t sensor_data_transmit_task_Handle = NULL;
-    xTaskCreate(sensor_data_transmit_task, "sensor_data_transmit_task", 4096, &sensor_data_transmit_task_Handle_ParameterToPass, 1, &sensor_data_transmit_task_Handle);
-    configASSERT(xHandle);
+    // static uint8_t sensor_data_transmit_task_Handle_ParameterToPass;
+    // TaskHandle_t sensor_data_transmit_task_Handle = NULL;
+    // xTaskCreate(sensor_data_transmit_task, "sensor_data_transmit_task", 4096, &sensor_data_transmit_task_Handle_ParameterToPass, 1, &sensor_data_transmit_task_Handle);
+    // configASSERT(xHandle);
 }
 
 void sensor_data_transmit_task()
