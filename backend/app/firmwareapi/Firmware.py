@@ -20,8 +20,8 @@ from schema import (
 
 router = APIRouter(prefix="/firmwares", tags=["Firmwares"])
 
-FIRMWARE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "firmwares")
-# 确保固件存放目录存在
+FIRMWARE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "firmwares")
+# 确保固件存放目录存在（位于 app/ 外部，部署时不会被覆盖）
 os.makedirs(FIRMWARE_DIR, exist_ok=True)
 
 
@@ -66,7 +66,7 @@ async def upload_firmware(
     """
     # 管理员上传固件文件（仅 root 可操作）
 
-    固件文件存放在 static/firmwares 目录下，文件名格式: {设备类型}_{版本号}_{原始文件名}
+    固件文件存放在 app 外部的 firmwares 目录下，文件名格式: {设备类型}_{版本号}_{原始文件名}
     """
     if current_user.role != "root":
         return JSONResponse(
@@ -95,8 +95,8 @@ async def upload_firmware(
 
     await async_log(logger, "info", f"固件文件已保存: {filepath}")
 
-    # 存储相对路径到数据库
-    relative_path = f"static/firmwares/{filename}"
+    # 存储相对路径到数据库（相对于 app/ 目录）
+    relative_path = f"../firmwares/{filename}"
     new_firmware = Db.CreateFirmware(
         db,
         device_type=device_type,
