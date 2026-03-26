@@ -40,6 +40,37 @@ FastAPI + SQLite
 > 只要手动登录过, cookie有效期一天, 有效期使用`POST | /api/refresh`自动登录获取token, token有效期15分钟, 过期则会造成401响应, 此时再次调用自动登录获取新token, 在cookie有效期内都可以随时获取新token, 超过有效期返回401, 再次手动登录
 
 ## 如何连接设备?
+### 新模式（推荐）— 一个 WebSocket 对应一个设备
+**一个用户可以同时开启多个 WebSocket 连接，每个连接订阅一个不同的设备。**
+
+1. 直接开启ws连接, 传入设备id和token验证, 注意设备id是路径参数!
+```
+wss:/lark.mintlab.top/api/stream/viewer/ws/{device_id}?token=<JWT>
+```
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `device_id` | int (路径参数) | 要订阅的设备 ID |
+| `token` | string (查询参数) | 用户 JWT 认证令牌 |
+
+#### 错误情况
+
+| 错误码 | 说明 |
+|--------|------|
+| WebSocket 1008 | `Device not found` — 设备 ID 不存在 |
+| WebSocket 1008 | `Device not connected` — 设备不在线 |
+| `{"code": 400, ...}` | 订阅失败（设备 WebSocket 不可达），连接随后关闭 |
+
+#### 关键特性
+
+- **自动订阅**：WebSocket 连接建立后自动订阅目标设备，无需额外 HTTP 调用
+- **自动取消订阅**：WebSocket 断开时自动清理订阅关系
+- **设备断开通知**：设备离线时，服务器向观看者发送 `"设备已断开"` 文本消息，随后关闭观看者 WebSocket
+- **多设备并行观看**：同一用户可同时打开多个 WebSocket，每个连接观看不同设备
+- **连接去重**：同一 (user, device) 对若已有连接，旧连接会被自动关闭
+
+
+### 旧模式（已弃用）— 一个 WebSocket 对应多个设备
+
 1. 进入实时页面, 前端调用`wss://lark.mintlab.top/api/stream/viewer/ws?token=(登录获取的token)`
 与服务器建立ws连接, 注意token要传在参数里
 2. 调用`GET /devices`获取全部设备, 检查状态, 设备状态由后端自动设置

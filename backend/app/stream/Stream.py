@@ -152,7 +152,7 @@ async def device_websocket_endpoint(websocket: WebSocket, secret: str):
             if "bytes" in data:
                 await _on_device_bytes(device, websocket, data["bytes"])
     except (WebSocketDisconnect, RuntimeError) as e:
-        await async_log(logger, "info", "设备已断开: ", e)
+        await async_log(logger, "info", f"设备已断开: {e}")
         for subscriber in list(device.subscribers):
             if subscriber.websocket is None:
                 await async_log(logger, "info", f"用户还未连接: {subscriber.id}")
