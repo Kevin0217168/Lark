@@ -251,6 +251,9 @@ class DeviceFilter(BaseModel):
         default=None, title="设备ID", description="数据库设备唯一主键id"
     )
     name: Optional[str] = Field(default=None, title="设备名称", description="设备名称")
+    device_type: Optional[str] = Field(
+        default=None, title="设备类型", description="设备类型"
+    )
     area: Optional[str] = Field(
         default=None, title="设备所在区域", description="设备所在区域"
     )
@@ -279,6 +282,9 @@ class DeviceItem(BaseModel):
         title="设备名称",
         examples=["ESP32"],
     )
+    device_type: Optional[str] = Field(
+        default=None, min_length=1, title="设备类型", examples=["ESP32-CAM"]
+    )
     area: str = Field(..., min_length=1, title="设备所在区域", examples=["雏鸟区"])
     number: int = Field(..., ge=0, title="区域内编号", examples=[1])
     isOnline: Optional[bool] = Field(default=False, title="是否在线")
@@ -289,6 +295,7 @@ class DeviceItem(BaseModel):
 
 class DeviceUpdateItem(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, title="设备名称")
+    device_type: Optional[str] = Field(default=None, min_length=1, title="设备类型")
     area: Optional[str] = Field(default=None, min_length=1, title="设备所在区域")
     number: Optional[int] = Field(default=None, ge=0, title="区域内编号")
     isOnline: Optional[bool] = Field(default=None, title="是否在线")
@@ -474,6 +481,61 @@ R404_DEVICE_NOT_FOUND_BY_SECRET = {
         "content": {
             "application/json": {
                 "example": {"code": 404, "msg": "Device not found", "data": None}
+            }
+        },
+    }
+}
+
+
+# ==================== 固件管理模型 ====================
+class FirmwareOut(BaseModel):
+    id: int
+    device_type: str
+    name: str
+    version: str
+    filepath: str
+
+    class Config:
+        from_attributes = True
+
+
+class FirmwareItem(BaseModel):
+    device_type: str = Field(
+        ..., min_length=1, title="设备类型", description="固件适用的设备类型", examples=["ESP32-CAM"]
+    )
+    name: str = Field(
+        ..., min_length=1, title="固件名称", description="固件名称", examples=["lark_firmware"]
+    )
+    version: str = Field(
+        ..., min_length=1, title="固件版本", description="固件版本号", examples=["1.0.0"]
+    )
+
+
+class FirmwareSecret(BaseModel):
+    secret: str = Field(
+        ..., min_length=1, title="设备密钥", description="设备密钥", examples=["b1f9562544a348c98c57a66b32a92d32"]
+    )
+
+
+R404_FIRMWARE_NOT_FOUND = {
+    404: {
+        "model": CommonOut[None],
+        "description": "Firmware not found",
+        "content": {
+            "application/json": {
+                "example": {"code": 404, "msg": "Firmware not found", "data": None}
+            }
+        },
+    }
+}
+
+R400_FIRMWARE_ALREADY_EXIST = {
+    400: {
+        "model": CommonOut[None],
+        "description": "Firmware already exist.",
+        "content": {
+            "application/json": {
+                "example": {"code": 400, "msg": "Firmware already exist.", "data": None}
             }
         },
     }
