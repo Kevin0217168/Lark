@@ -5,6 +5,34 @@ const char *WS_TAG = "WifiSecurity";
 esp_http_client_handle_t WifiSecurityClient;
 esp_http_client_config_t config;
 
+// 时间是否已同步的全局标志
+static volatile bool time_synced = false;
+
+// SNTP 同步回调
+static void time_sync_notification_cb(struct timeval *tv)
+{
+    time_synced = true;
+    time_t now = tv->tv_sec;
+    struct tm timeinfo;
+    setenv("TZ", "CST-8", 1);
+    localtime_r(&now, &timeinfo);
+    ESP_LOGI("obtain_time", "SNTP 同步成功! 当前时间: %04d-%02d-%02d %02d:%02d:%02d",
+             timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+             timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+}
+
+bool is_time_synced(void)
+{
+    return time_synced;
+}
+
+bool is_time_valid(void)
+{
+    time_t now = time(NULL);
+    // 大于 2020-01-01 00:00:00 UTC 视为有效
+    return now > 1577836800;
+}
+
 void obtain_time(void)
 {
     // 设置时区（中国标准时间 UTC+8）
@@ -13,46 +41,37 @@ void obtain_time(void)
 
     // 初始化 SNTP
     esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
-    esp_sntp_setservername(0, "pool.ntp.org");
+    // 配置多个 NTP 服务器，提高可靠性
+    esp_sntp_setservername(0, "ntp.aliyun.com");       // 阿里云 NTP（国内快）
+    esp_sntp_setservername(1, "ntp.tencent.com");      // 腾讯云 NTP
+    esp_sntp_setservername(2, "cn.pool.ntp.org");      // 中国 NTP 池
+    esp_sntp_setservername(3, "pool.ntp.org");          // 国际 NTP 池（备用）
+    // 注册同步成功回调
+    sntp_set_time_sync_notification_cb(time_sync_notification_cb);
+    // 设置同步间隔为 1 小时（默认 1 小时，可按需调整）
     esp_sntp_init();
 
-    // 等待系统时间有效（超过 2020-01-01 00:00:00 的时间戳）
+    // 等待首次同步，最多等待 30 秒
     int retry = 0;
-    const int max_retry = 20;   // 最多等待 40 秒
-    bool synced = false;
-    while (retry < max_retry) {
+    const int max_retry = 15;
+    while (!is_time_valid() && retry < max_retry) {
         vTaskDelay(2000 / portTICK_PERIOD_MS);
-        time_t now = time(NULL);
-        // 如果时间大于 2020-01-01 的 Unix 时间戳，视为有效
-        if (now > 1577836800) {
-            synced = true;
-            break;
-        }
         retry++;
-        ESP_LOGD("obtain_time", "等待 SNTP 同步... 重试次数: %d", retry);
+        ESP_LOGD("obtain_time", "等待 SNTP 同步... 重试次数: %d/%d", retry, max_retry);
     }
 
-    if (synced) {
-        ESP_LOGI("obtain_time", "SNTP 同步成功");
-    } else {
-        ESP_LOGW("obtain_time", "SNTP 同步超时，可能无法获取正确时间");
-    }
-
-    // 停止 SNTP 服务（可选，如果后续不再需要可停止以节省资源）
-    esp_sntp_stop();
-
-    // 获取最终时间并打印
-    time_t now = time(NULL);
-    struct tm timeinfo;
-    localtime_r(&now, &timeinfo);
-
-    if (now > 0) {
+    if (is_time_valid()) {
+        time_synced = true;
+        time_t now = time(NULL);
+        struct tm timeinfo;
+        localtime_r(&now, &timeinfo);
         ESP_LOGI("obtain_time", "当前时间: %04d-%02d-%02d %02d:%02d:%02d",
                  timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
                  timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
     } else {
-        ESP_LOGE("obtain_time", "获取系统时间失败，时间为 1970-01-01");
+        ESP_LOGW("obtain_time", "SNTP 首次同步超时，SNTP 服务保持运行，后台将继续重试");
     }
+    // 注意：不再 esp_sntp_stop()，SNTP 服务保持运行以实现周期性自动重新同步
 }
 
 

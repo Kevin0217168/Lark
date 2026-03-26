@@ -14,7 +14,7 @@ router.include_router(Viewer.router)
 
 
 @router.websocket("/device/ws")
-async def websocket_endpoint(
+async def device_websocket_endpoint(
     websocket: WebSocket,
     secret: str,
 ):
@@ -22,7 +22,18 @@ async def websocket_endpoint(
         devices = Db.GetDevices(db, secret=secret)
     if len(devices) == 0:
         raise WebSocketException(code=1008, reason="Device ID not found")
-    device = Device.Esp32(devices.pop())
+    device_data = devices.pop()
+
+    # 移除旧连接（如果存在）
+    old_device = Device.esp32IdDict.get(device_data.id)
+    if old_device and old_device.websocket:
+        try:
+            await old_device.websocket.close()
+            await async_log(logger, "warning", f"设备{device_data.id} 存在旧连接, 已关闭")
+        except Exception:
+            pass
+
+    device = Device.Esp32(device_data)
 
     await websocket.accept()
     await websocket.send_text("Hello ESP32! from Server.")
@@ -61,9 +72,12 @@ async def websocket_endpoint(
                     await async_log(logger, "warning", f"操作响应数据错误: {e}")
                     continue
                 # 给所有订阅者转发消息
-                for subscriber in device.subscribers:
-                    await async_log(logger, "info", f"文本信息转发: 设备{device.id} -> 用户{subscriber.id}")
-                    await subscriber.websocket.send_json(json_data)
+                for subscriber in list(device.subscribers):
+                    try:
+                        await async_log(logger, "info", f"文本信息转发: 设备{device.id} -> 用户{subscriber.id}")
+                        await subscriber.websocket.send_json(json_data)
+                    except Exception as send_err:
+                        await async_log(logger, "warning", f"转发文本到用户{subscriber.id}失败: {send_err}")
                 await async_log(logger, "info", f"转发结束\n")
 
             if "bytes" in data:
@@ -82,14 +96,17 @@ async def websocket_endpoint(
                     )
                 else:
                     # 给所有观看者转发信息
-                    for subscriber in device.subscribers:
-                        await async_log(logger, "info", f"二进制信息转发: 设备{device.id} -> 用户{subscriber.id}")
-                        await subscriber.websocket.send_bytes(data["bytes"])
+                    for subscriber in list(device.subscribers):
+                        try:
+                            await async_log(logger, "info", f"二进制信息转发: 设备{device.id} -> 用户{subscriber.id}")
+                            await subscriber.websocket.send_bytes(data["bytes"])
+                        except Exception as send_err:
+                            await async_log(logger, "warning", f"转发二进制到用户{subscriber.id}失败: {send_err}")
                     await async_log(logger, "info", f"转发结束\n")
     except (WebSocketDisconnect, RuntimeError) as e:
         await async_log(logger, "info", "设备已断开: ", e)
         for subscriber in device.subscribers:
-            if subscriber.websocket == None:
+            if subscriber.websocket is None:
                 await async_log(logger, "info", f"用户还未连接: {subscriber.id}")
                 continue
             await subscriber.websocket.send_text("设备已断开")
@@ -97,7 +114,7 @@ async def websocket_endpoint(
 
 
 @router.websocket("/viewer/ws")
-async def websocket_endpoint(websocket: WebSocket, token: str):
+async def viewer_websocket_endpoint(websocket: WebSocket, token: str):
     # 验证身份
     with Db.OpenDb("viewer websocket_endpoint") as db:
         user = Security.VerifyToken(db, token, False)

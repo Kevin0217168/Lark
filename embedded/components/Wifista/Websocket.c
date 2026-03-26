@@ -10,19 +10,19 @@ WS_Context_t ws_context;
 
 bool Websocket_isConnected = false;
 
-static void reconnect_timer_callback(void *arg)
-{
-    ESP_LOGI(TAG, "Attempting to reconnect WebSocket...");
-    // 销毁旧客户端（如果还存在）
-    if (Websocket_client != NULL)
-    {
-        esp_websocket_client_stop(Websocket_client);
-        esp_websocket_client_destroy(Websocket_client);
-        Websocket_client = NULL;
-    }
-    // 重新启动连接
-    WebsocketStart(websocket_cfg.host, websocket_cfg.path, websocket_cfg.port);
-}
+// static void reconnect_timer_callback(void *arg)
+// {
+//     ESP_LOGI(TAG, "Attempting to reconnect WebSocket...");
+//     // 销毁旧客户端（如果还存在）
+//     if (Websocket_client != NULL)
+//     {
+//         esp_websocket_client_stop(Websocket_client);
+//         esp_websocket_client_destroy(Websocket_client);
+//         Websocket_client = NULL;
+//     }
+//     // 重新启动连接
+//     WebsocketStart(websocket_cfg.host, websocket_cfg.path, websocket_cfg.port);
+// }
 
 void Websocket_event_handler_register(void (*ws_disconnected_handler)(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data),
                                        void (* ws_text_handler)(void *handler_args, int len, const char *data_ptr))
