@@ -2,8 +2,11 @@ from fastapi import APIRouter
 from typing import Annotated, List
 from fastapi import status, Path, Query, Depends, Body, WebSocket
 from fastapi.responses import JSONResponse
+from starlette.websockets import WebSocketState
 from Logset import async_log, logger
 
+import asyncio
+import json
 import Db
 import Security
 from schema import (
@@ -20,12 +23,18 @@ router = APIRouter(prefix="/devices", tags=["Devices"])
 
 esp32IdDict = {}
 
+# ──────────────────── 设备指令常量 ────────────────────
+CMD_RESTART = {"code": 1, "item": "device", "key": "restart", "values": ""}
+CMD_OTA     = {"code": 1, "item": "device", "key": "ota", "values": ""}
+CMD_VERSION = {"code": 0, "item": "device", "key": "version", "values": ""}
+
 class Esp32:
     def __init__(self, device:Db.M_Devices):
         self.id = device.id
         self.websocket = None
         esp32IdDict[self.id] = self
         self.subscribers = []
+        self.pending_responses: dict[str, asyncio.Future] = {}
 
     # def __delete__(self, instance):
 
@@ -51,11 +60,33 @@ class Esp32:
     def unsubscribe(self, subscriber):
         self.subscribers.remove(subscriber)
 
+    async def send_and_wait(self, command: dict, key: str, timeout: float = 5.0) -> dict | None:
+        """发送指令并等待设备返回匹配 key 的响应。超时返回 None。"""
+        loop = asyncio.get_event_loop()
+        future = loop.create_future()
+        self.pending_responses[key] = future
+        try:
+            await self.websocket.send_json(command)
+            return await asyncio.wait_for(future, timeout=timeout)
+        except asyncio.TimeoutError:
+            return None
+        finally:
+            self.pending_responses.pop(key, None)
+
+    def resolve_pending(self, key: str, data: dict) -> bool:
+        """解析并完成一个挂起的 Future。返回是否成功匹配。"""
+        future = self.pending_responses.get(key)
+        if future and not future.done():
+            future.set_result(data)
+            return True
+        return False
+
 
 @router.get(
     "",
     response_model=CommonOut[List[Db.DeviceOut]],
     responses=R404_DEVICE_NOT_FOUND,
+    summary="查询设备列表",
 )
 async def get_devices(
     filter_query: Annotated[DeviceFilter, Query()],
@@ -79,6 +110,7 @@ async def get_devices(
     "/{id}",
     response_model=CommonOut[List[Db.DeviceOut]],
     responses=R404_DEVICE_NOT_FOUND,
+    summary="根据ID查询单个设备",
 )
 async def get_device(
     id: Annotated[int, Path(title="设备id", description="数据库设备唯一主键id")],
@@ -102,6 +134,7 @@ async def get_device(
     "",
     response_model=CommonOut[Db.DeviceOut],
     responses=R400_DEVICE_ALREADY_EXIST,
+    summary="注册新设备",
 )
 async def register_device(
     body: Annotated[DeviceItem, Body()],
@@ -130,6 +163,7 @@ async def register_device(
     "/{id}",
     response_model=CommonOut[Db.DeviceOut],
     responses=R404_DEVICE_NOT_FOUND,
+    summary="更新设备信息",
 )
 async def update_device(
     id: Annotated[int, Path(title="设备id", description="数据库设备唯一主键id")],
@@ -157,6 +191,7 @@ async def update_device(
     "/{id}",
     response_model=CommonOut[None],
     responses={**R404_DEVICE_NOT_FOUND, **R403_FORBIDDEN},
+    summary="删除设备",
 )
 async def delete_device(
     id: Annotated[int, Path(title="设备id", description="数据库设备唯一主键id")],
@@ -180,3 +215,140 @@ async def delete_device(
             content=CommonOut(code=404, msg="Device not found", data=None).model_dump(),
         )
     return CommonOut(data=None)
+
+
+# ──────────────────── 设备 WebSocket 指令工具 ────────────────────
+
+def _is_device_ws_alive(device: "Esp32") -> bool:
+    """检查设备的 WebSocket 是否仍处于连接状态。"""
+    return bool(device.websocket and device.websocket.client_state == WebSocketState.CONNECTED)
+
+
+async def _send_device_command(device_id: int, command: dict) -> CommonOut:
+    """
+    向在线设备发送 WebSocket 指令并等待响应。
+
+    Returns:
+        CommonOut 封装的响应
+    """
+    device = esp32IdDict.get(device_id)
+    if device is None or not _is_device_ws_alive(device):
+        return None, JSONResponse(
+            status_code=503,
+            content=CommonOut(code=503, msg="Device is not online", data=None).model_dump(),
+        )
+
+    try:
+        await device.websocket.send_json(command)
+    except Exception as e:
+        await async_log(logger, "error", f"发送指令到设备{device_id}失败: {e}")
+        return None, JSONResponse(
+            status_code=502,
+            content=CommonOut(code=502, msg=f"Failed to send command: {e}", data=None).model_dump(),
+        )
+
+    return device, None
+
+
+@router.post(
+    "/{id}/restart",
+    response_model=CommonOut[dict],
+    responses={**R404_DEVICE_NOT_FOUND},
+    summary="重启设备",
+)
+async def restart_device(
+    id: Annotated[int, Path(title="设备id", description="数据库设备唯一主键id")],
+    db: Db.Session = Depends(Db.GetDb("RestartDevice")),
+):
+    """
+    # 通过 WebSocket 向设备发送重启指令
+
+    设备收到指令后约 500ms 执行重启，WebSocket 连接将断开。
+    """
+    # 检查设备是否存在
+    data = Db.GetDevices(db, id=id)
+    if not data:
+        return JSONResponse(
+            status_code=404,
+            content=CommonOut(code=404, msg="Device not found", data=None).model_dump(),
+        )
+
+    device, err = await _send_device_command(id, CMD_RESTART)
+    if err:
+        return err
+
+    await async_log(logger, "info", f"已向设备{id}发送重启指令")
+    return CommonOut(msg="Restart command sent.", data={"key": "restart", "values": "ok"})
+
+
+@router.post(
+    "/{id}/ota",
+    response_model=CommonOut[dict],
+    responses={**R404_DEVICE_NOT_FOUND},
+    summary="设备OTA更新",
+)
+async def ota_device(
+    id: Annotated[int, Path(title="设备id", description="数据库设备唯一主键id")],
+    db: Db.Session = Depends(Db.GetDb("OtaDevice")),
+):
+    """
+    # 通过 WebSocket 向设备发送 OTA 固件更新指令
+
+    设备会自动从服务器检查新版本并下载。如果有新版本，下载完成后设备将自动重启。
+    OTA 过程中摄像头会被临时关闭以避免 SPI 总线冲突。
+    """
+    # 检查设备是否存在
+    data = Db.GetDevices(db, id=id)
+    if not data:
+        return JSONResponse(
+            status_code=404,
+            content=CommonOut(code=404, msg="Device not found", data=None).model_dump(),
+        )
+
+    device, err = await _send_device_command(id, CMD_OTA)
+    if err:
+        return err
+
+    await async_log(logger, "info", f"已向设备{id}发送OTA更新指令")
+    return CommonOut(msg="OTA command sent.", data={"key": "ota", "values": "ok"})
+
+
+@router.get(
+    "/{id}/version",
+    response_model=CommonOut[dict],
+    responses={**R404_DEVICE_NOT_FOUND},
+    summary="查询设备固件版本",
+)
+async def get_device_version(
+    id: Annotated[int, Path(title="设备id", description="数据库设备唯一主键id")],
+    db: Db.Session = Depends(Db.GetDb("GetDeviceVersion")),
+):
+    """
+    # 通过 WebSocket 查询设备当前固件版本号
+
+    向设备发送版本查询指令并等待响应（超时 5 秒）。
+    """
+    # 检查设备是否存在
+    data = Db.GetDevices(db, id=id)
+    if not data:
+        return JSONResponse(
+            status_code=404,
+            content=CommonOut(code=404, msg="Device not found", data=None).model_dump(),
+        )
+
+    device = esp32IdDict.get(id)
+    if device is None or not _is_device_ws_alive(device):
+        return JSONResponse(
+            status_code=503,
+            content=CommonOut(code=503, msg="Device is not online", data=None).model_dump(),
+        )
+
+    result = await device.send_and_wait(CMD_VERSION, "version", timeout=5.0)
+    if result is None:
+        return JSONResponse(
+            status_code=504,
+            content=CommonOut(code=504, msg="Device response timed out", data=None).model_dump(),
+        )
+
+    await async_log(logger, "info", f"设备{id}固件版本: {result.get('values')}")
+    return CommonOut(data={"key": "version", "values": result.get("values", "")})

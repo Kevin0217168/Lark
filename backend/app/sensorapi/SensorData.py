@@ -24,7 +24,7 @@ from schema import (
 
 router = APIRouter(prefix="/sensors", tags=["Sensors"])
 
-@router.get("/grouped", response_model=CommonOut[List[GroupedDataItem]], responses=R200_SENSOR_GROUP)
+@router.get("/grouped", response_model=CommonOut[List[GroupedDataItem]], responses=R200_SENSOR_GROUP, summary="获取分组统计数据")
 async def get_grouped_data(
     now: Annotated[Optional[datetime], Query()] = None,
     period: Annotated[int, Query(ge=1, description="时间段（秒）", examples=[86400])] = 86400,
@@ -107,7 +107,7 @@ async def get_grouped_data(
     return CommonOut(data=result)
 
 
-@router.get("/summary", response_model=CommonOut[SummaryData], responses=R200_SENSOR_SUMMARY)
+@router.get("/summary", response_model=CommonOut[SummaryData], responses=R200_SENSOR_SUMMARY, summary="获取数据统计摘要")
 async def get_summary_data(
     now: Annotated[Optional[datetime], Query(description="当前时间（不传则使用服务器时间）")] = None,
     period: Annotated[int, Query(ge=1, description="时间段（秒），以 now 向前计算", examples=[86400])] = 86400,
@@ -172,6 +172,7 @@ async def get_summary_data(
     "/{device_id}",
     response_model=CommonOut[List[Db.SensorDataItem]],
     responses=R404_SENSOR_NOT_FOUND,
+    summary="按设备查询传感器数据",
 )
 async def get_sensors_data_by_device(
     device_id: Annotated[int, Path(title="设备ID", description="数据库设备唯一主键id")],
@@ -212,6 +213,7 @@ async def get_sensors_data_by_device(
     "",
     response_model=CommonOut[List[Db.DeviceSensorData]],
     responses=R404_SENSOR_NOT_FOUND,
+    summary="查询所有传感器数据",
 )
 async def get_sensors_data(
     start_time: Annotated[Optional[datetime], Query()] = None,
@@ -248,6 +250,7 @@ async def get_sensors_data(
     "",
     response_model=CommonOut[Db.SensorDataItem],
     responses=R404_DEVICE_NOT_FOUND_BY_SECRET,
+    summary="设备上报传感器数据",
 )
 async def update_sensors_data(
     body: Annotated[SensorDataCreate, Body()],
@@ -294,6 +297,7 @@ async def update_sensors_data(
     "",
     response_model=CommonOut[int],
     responses={**R404_SENSOR_NOT_FOUND, **R403_FORBIDDEN},
+    summary="删除传感器数据",
 )
 async def delete_sensors_data(
     device_id: Annotated[int, Query(title="设备ID")],

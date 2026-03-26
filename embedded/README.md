@@ -24,7 +24,7 @@
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `code` | int | 是 | 0 表示查询，1 表示设定 |
-| `item` | string | 是 | 操作模块，目前支持 `status` 和 `camera` |
+| `item` | string | 是 | 操作模块，目前支持 `status`、`camera` 和 `device` |
 | `key` | string | 是 | 模块下的具体属性，见下表 |
 | `values` | string / int | 否 | 设定时必填，查询时可为空字符串或任意值 |
 
@@ -145,6 +145,49 @@
 ```json
 {"code":1,"msg":"水平镜像已翻转","key":"set_hmirror","values":"1"}
 ```
+
+### 3.3 device 模块（设备控制）
+
+| key | 操作 | values 取值 | 说明 |
+|-----|------|-------------|------|
+| `version` | 查询 | - | 返回当前固件版本号 |
+| `restart` | 设定 | 任意值 | 设备重启（发送响应后约 500ms 重启） |
+| `ota` | 设定 | 任意值 | 启动 OTA 固件更新任务（从服务器检查并下载新版本） |
+
+#### 示例
+
+**查询固件版本**  
+```json
+{"code":0,"item":"device","key":"version","values":""}
+```
+响应：
+```json
+{"code":1,"msg":"OK.","key":"version","values":"1.0.0"}
+```
+
+**重启设备**  
+```json
+{"code":1,"item":"device","key":"restart","values":""}
+```
+响应：
+```json
+{"code":1,"msg":"设备即将重启.","key":"restart","values":"ok"}
+```
+> 注意：设备会在发送响应后约 500ms 执行重启，WebSocket 连接将断开。
+
+**启动 OTA 更新**  
+```json
+{"code":1,"item":"device","key":"ota","values":""}
+```
+响应（成功启动）：
+```json
+{"code":1,"msg":"OTA任务已启动.","key":"ota","values":"ok"}
+```
+响应（启动失败）：
+```json
+{"code":0,"msg":"OTA任务启动失败.","key":"ota","values":""}
+```
+> 注意：OTA 任务启动后，设备会自动从服务器检查新版本并下载。如果有新版本，下载完成后设备将自动重启以应用更新。OTA 过程中摄像头会被临时关闭以避免 SPI 总线冲突。
 
 ## 4. 错误处理
 
