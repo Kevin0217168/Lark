@@ -76,7 +76,7 @@ static void i2c_bus_recovery(int sda_pin, int scl_pin)
 
 static const char *TAG = "main";
 // 默认密钥（首次烧录/未写入时使用）
-static char secret[SECRET_MAX_LEN] = "2d3173bfc1f64da0894a3257e1636d72";
+char secret[SECRET_MAX_LEN] = "2d3173bfc1f64da0894a3257e1636d72";
 
 // 设备1
 // static const char *secret = "b1f9562544a348c98c57a66b32a92d32";
