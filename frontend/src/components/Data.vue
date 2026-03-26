@@ -65,7 +65,7 @@
         
         <!-- 右侧视频流区域 -->
         <div class="data-right">
-          <div class="video-header">
+          <div class="video-header">/  
             <h3>实时监控</h3>
             <div class="video-controls">
               <el-button 
@@ -166,15 +166,15 @@
         <div class="analysis-content">
           <!-- 所有设备平均值图表 -->
           <div class="chart-container average-chart">
-            <h3>所有设备平均值</h3>
+            <h3>所有设备平均值 <span class="time-range">(最近24小时)</span></h3>
             <div ref="averageChartRef" class="chart"></div>
           </div>
           <div class="chart-container">
-            <h3>温度数据</h3>
+            <h3>温度数据 <span class="time-range">(最近24小时)</span></h3>
             <div ref="temperatureChartRef" class="chart"></div>
           </div>
           <div class="chart-container">
-            <h3>湿度数据</h3>
+            <h3>湿度数据 <span class="time-range">(最近24小时)</span></h3>
             <div ref="humidityChartRef" class="chart"></div>
           </div>
 
@@ -269,7 +269,7 @@ const getToken = () => {
 
 const route = useRoute();
 const router = useRouter();
-const { getDevices, getDeviceHistoryData, getDeviceAverageData, fetchDevices, updateDevice, fetchDeviceHistoryData, getOrUpdateDeviceHistoryData, fetchSensorData } = useDeviceStore();
+const { getDevices, getDeviceHistoryData, getDeviceAverageData, fetchDevices, updateDevice, fetchDeviceHistoryData, getOrUpdateDeviceHistoryData, fetchSensorData, fetchRealtimeSensorData } = useDeviceStore();
 // 直接获取设备数据
 const devices = getDevices();
 
@@ -298,12 +298,58 @@ const isWebSocketConnected = computed(() => {
   return ws !== null && ws.readyState === WebSocket.OPEN;
 });
 
+// 实时温湿度数据定时器
+let realtimeDataTimer: number | null = null;
+
+// 获取实时温湿度数据
+const fetchRealtimeData = async () => {
+  if (!selectedDeviceId.value) return;
+  
+  const sensorData = await fetchRealtimeSensorData(selectedDeviceId.value);
+  if (sensorData) {
+    updateDevice(selectedDeviceId.value, { 
+      temperature: sensorData.temperature, 
+      humidity: sensorData.humidity 
+    });
+    console.log(`[实时数据] 设备 ${selectedDeviceId.value} 温度: ${sensorData.temperature}°C, 湿度: ${sensorData.humidity}%`);
+  }
+};
+
+// 启动实时数据定时器
+const startRealtimeDataTimer = () => {
+  // 先清除旧的定时器
+  stopRealtimeDataTimer();
+  
+  // 立即获取一次数据
+  fetchRealtimeData();
+  
+  // 每分钟获取一次数据
+  realtimeDataTimer = window.setInterval(() => {
+    fetchRealtimeData();
+  }, 60000); // 60秒
+};
+
+// 停止实时数据定时器
+const stopRealtimeDataTimer = () => {
+  if (realtimeDataTimer) {
+    clearInterval(realtimeDataTimer);
+    realtimeDataTimer = null;
+  }
+};
+
 const handleDeviceChange = async () => {
   if (selectedDevice.value) {
     ElMessage.success(`已切换到设备: ${selectedDevice.value.name}`);
-    // 如果在分析界面，需要先获取历史数据再初始化图表
-    if (props.activeTab === 'analysis' && selectedDeviceId.value) {
-      await fetchDeviceHistoryData(selectedDeviceId.value);
+    
+    // 如果在实时界面，立即获取实时温湿度数据并启动定时器
+    if (props.activeTab === 'realtime') {
+      await fetchRealtimeData();
+      startRealtimeDataTimer();
+    }
+    
+    // 如果在分析界面，需要获取所有设备的历史数据再初始化图表
+    if (props.activeTab === 'analysis') {
+      await fetchDeviceHistoryData(); // 不传参数，获取所有设备数据
     }
     // 切换设备后更新图表
     nextTick(async () => {
@@ -990,10 +1036,10 @@ onMounted(async () => {
   // 不直接调用startRealtimeMonitoring()，避免与watch重复调用
   if (props.activeTab === 'realtime' && selectedDeviceId.value) {
     console.log('Device selected, realtime monitoring will be started by watch');
-  } else if (props.activeTab === 'analysis' && selectedDeviceId.value) {
-    // 如果在分析标签页，获取历史数据并初始化图表
+  } else if (props.activeTab === 'analysis') {
+    // 如果在分析标签页，获取所有设备的历史数据并初始化图表
     console.log('Initializing charts for analysis tab on mount');
-    await fetchDeviceHistoryData(selectedDeviceId.value);
+    await fetchDeviceHistoryData(); // 不传参数，获取所有设备数据
     nextTick(async () => {
       await initCharts();
     });
@@ -1026,33 +1072,31 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize);
   stopRealtimeMonitoring();
+  stopRealtimeDataTimer();
   temperatureChart?.dispose();
   humidityChart?.dispose();
   averageChart?.dispose();
 });
 
 // 监听activeTab变化，重置设备选择
-watch(() => props.activeTab, (newTab, oldTab) => {
+watch(() => props.activeTab, async (newTab, oldTab) => {
   console.log('Active tab changed:', newTab, 'Old tab:', oldTab);
   console.log('Devices available:', devices.length);
   console.log('Selected device ID:', selectedDeviceId.value);
   
   if (newTab === 'analysis') {
-    // 切换到分析标签时，如果有设备，初始化图表
-    if (devices.length > 0 && !selectedDeviceId.value) {
-      selectedDeviceId.value = devices[0]?.id || null;
-    }
-    // 分析界面需要获取历史数据来显示图表
-    if (selectedDeviceId.value) {
-      fetchDeviceHistoryData(selectedDeviceId.value);
-    }
+    // 切换到分析标签时，获取所有设备的历史数据
+    await fetchDeviceHistoryData(); // 不传参数，获取所有设备数据
     nextTick(async () => {
       await initCharts();
     });
-    // 停止实时监控
+    // 停止实时监控和实时数据定时器
     stopRealtimeMonitoring();
+    stopRealtimeDataTimer();
   } else if (newTab === 'history') {
-    // 切换到历史数据标签时，重新获取设备数据
+    // 切换到历史数据标签时，停止实时数据定时器
+    stopRealtimeDataTimer();
+    // 重新获取设备数据
     fetchDevices().then(() => {
       // 确保有设备被选择
       const latestDevices = getDevices();
@@ -1078,7 +1122,7 @@ watch(() => props.activeTab, (newTab, oldTab) => {
     stopRealtimeMonitoring();
   } else if (newTab === 'realtime') {
     // 切换到实时数据标签时，重新获取设备数据
-    fetchDevices().then(() => {
+    fetchDevices().then(async () => {
       // 确保有设备被选择
       const latestDevices = getDevices();
       if (latestDevices.length > 0) {
@@ -1086,9 +1130,11 @@ watch(() => props.activeTab, (newTab, oldTab) => {
         const deviceId = latestDevices[0]?.id || null;
         selectedDeviceId.value = deviceId;
         
-        // 直接启动实时监控，不依赖watch
+        // 立即获取实时温湿度数据并启动定时器
         if (deviceId) {
           console.log('Auto-starting realtime monitoring for device:', deviceId);
+          await fetchRealtimeData();
+          startRealtimeDataTimer();
           // 使用nextTick确保selectedDeviceId已更新
           nextTick(() => {
             startRealtimeMonitoring();
@@ -1423,6 +1469,13 @@ const goToFullscreen = () => {
   margin: 0 0 10px 0;
   font-size: 16px;
   color: #303133;
+}
+
+.chart-container .time-range {
+  font-size: 12px;
+  color: #909399;
+  font-weight: normal;
+  margin-left: 8px;
 }
 
 .chart {
