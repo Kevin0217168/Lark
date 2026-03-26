@@ -57,7 +57,7 @@ async def _handle_device_status_response(device: Device.Esp32, json_data: dict) 
 
 
 async def _on_device_text(device: Device.Esp32, raw: str) -> None:
-    """解析设备文本消息 → 处理状态响应 → 转发给订阅者。"""
+    """解析设备文本消息 → 解析挂起请求 → 处理状态响应 → 转发给订阅者。"""
     try:
         json_data = json.loads(raw)
     except json.JSONDecodeError:
@@ -66,6 +66,12 @@ async def _on_device_text(device: Device.Esp32, raw: str) -> None:
         return
 
     await async_log(logger, "info", f"收到文本信息, 来自设备{device.id} : {json_data}")
+
+    # 检查是否有挂起的请求等待此响应
+    resp_key = json_data.get("key")
+    if resp_key and device.resolve_pending(resp_key, json_data):
+        await async_log(logger, "info", f"设备{device.id} 响应已匹配挂起请求: {resp_key}")
+        return
 
     try:
         await _handle_device_status_response(device, json_data)

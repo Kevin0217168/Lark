@@ -13,7 +13,7 @@ from Logset import async_log, logger
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
-@router.get("/me", response_model=CommonOut[Db.UserOut])
+@router.get("/me", response_model=CommonOut[Db.UserOut], summary="获取当前登录用户信息")
 async def read_users_me(
     current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
 ):
@@ -28,6 +28,7 @@ async def read_users_me(
     "",
     response_model=CommonOut[List[Db.UserOut]],
     responses=R404_USER_NOT_FOUND,
+    summary="查询用户列表",
 )
 async def get_users(
     filter_query: Annotated[UsersFilter, Query()],
@@ -53,6 +54,7 @@ async def get_users(
     "/{id}",
     response_model=CommonOut[List[Db.UserOut]],
     responses=R404_USER_NOT_FOUND,
+    summary="根据ID查询单个用户",
 )
 async def get_users(
     id: Annotated[int, Path(title="用户id", description="数据库用户唯一主键id")],
@@ -77,6 +79,7 @@ async def get_users(
     "",
     response_model=CommonOut[Db.UserOut],
     responses=R400_USER_ALREADY_EXIST,
+    summary="注册新用户",
 )
 async def register_user(
     body: Annotated[UserItem, Body()],
@@ -111,6 +114,7 @@ async def register_user(
     "/{id}",
     response_model=CommonOut[Db.UserOut],
     responses=R404_USER_NOT_FOUND,
+    summary="更新用户信息",
 )
 async def update_user(
     id: Annotated[int, Path(title="用户id", description="数据库用户唯一主键id")],
@@ -150,6 +154,7 @@ from Logset import async_log, logger
     "/{id}",
     response_model=CommonOut[Db.UserOut],
     responses={**R404_USER_NOT_FOUND, **R403_FORBIDDEN},
+    summary="删除用户",
 )
 async def delete_user(
     id: Annotated[int, Path(title="用户id", description="数据库用户唯一主键id")],

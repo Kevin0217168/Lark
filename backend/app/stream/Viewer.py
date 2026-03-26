@@ -140,7 +140,7 @@ def _resolve_viewer_and_device(
 
 # ──────────────────── HTTP 端点 ────────────────────
 
-@router.post("", response_model=CommonOut[None], deprecated=True)
+@router.post("", response_model=CommonOut[None], deprecated=True, summary="注册观看者身份")
 async def register_viewer(
     response: Response,
     op: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
@@ -157,7 +157,7 @@ async def register_viewer(
     return CommonOut(code=200, msg="viewer register OK.")
 
 
-@router.delete("", response_model=CommonOut[None], deprecated=True)
+@router.delete("", response_model=CommonOut[None], deprecated=True, summary="注销观看者身份")
 async def unregister_viewer(
     response: Response,
     op: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
@@ -174,7 +174,7 @@ async def unregister_viewer(
     return CommonOut(code=200, msg="viewer unregister OK.")
 
 
-@router.post("/following/{device_id}", response_model=CommonOut[None], deprecated=True)
+@router.post("/following/{device_id}", response_model=CommonOut[None], deprecated=True, summary="订阅设备推流")
 async def subscribe_to_device(
     device_id: Annotated[int, "Device ID"],
     response: Response,
@@ -195,7 +195,7 @@ async def subscribe_to_device(
     return CommonOut(code=200, msg="device subscribe OK.")
 
 
-@router.delete("/following/{device_id}", response_model=CommonOut[None], deprecated=True)
+@router.delete("/following/{device_id}", response_model=CommonOut[None], deprecated=True, summary="取消订阅设备")
 async def unsubscribe_to_device(
     device_id: Annotated[int, "Device ID"],
     response: Response,
