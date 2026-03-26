@@ -81,10 +81,10 @@
                 :min="0" 
                 :max="63" 
                 :step="1"
+                :show-tooltip="false"
                 size="small"
-                style="flex: 1; margin: 0 8px;"
+                style="flex: 1; margin-left: 8px;"
               />
-              <span class="setting-value">{{ imageQuality }}</span>
             </div>
             <div class="setting-item">
               <span class="setting-label">视频尺寸</span>
@@ -193,20 +193,32 @@
         
         <!-- 历史数据列表 -->
         <div class="history-list">
-          <div v-for="(item, index) in historyDataList" :key="index" class="history-item">
-            <div class="history-time">{{ item.timestamp }}</div>
-            <div class="history-data">
-              <div class="data-point">
-                <span class="label">温度</span>
-                <span class="value">{{ item.temperature }}°C</span>
-              </div>
-              <div class="data-point">
-                <span class="label">湿度</span>
-                <span class="value">{{ item.humidity }}%</span>
-              </div>
-
+          <div v-for="(item, index) in paginatedHistoryData" :key="index" class="history-item">
+            <div class="history-row">
+              <span class="device-name">{{ item.deviceName }}</span>
+              <span class="device-id">ID: {{ item.deviceId }}</span>
+              <span class="history-time">{{ item.timestamp }}</span>
+            </div>
+            <div class="history-row data-row">
+              <span class="data-item">温度 {{ item.temperature }}°C</span>
+              <span class="data-item">湿度 {{ item.humidity }}%</span>
             </div>
           </div>
+        </div>
+        
+        <!-- 分页组件 -->
+        <div class="pagination-container">
+          <el-pagination
+            v-model:current-page="currentPage"
+            v-model:page-size="pageSize"
+            :page-sizes="[5, 10, 20]"
+            :total="historyDataList.length"
+            layout="prev, pager, next"
+            background
+            :pager-count="3"
+            @size-change="handleSizeChange"
+            @current-change="handleCurrentChange"
+          />
         </div>
       </div>
       
@@ -232,7 +244,7 @@ const getToken = () => {
   return localStorage.getItem('accessToken');
 };
 
-const { getDevices, getDeviceHistoryData, getDeviceAverageData, fetchDevices } = useDeviceStore();
+const { getDevices, getDeviceHistoryData, getDeviceAverageData, fetchDevices, getOrUpdateDeviceHistoryData } = useDeviceStore();
 const devices = getDevices();
 
 const props = defineProps<{
@@ -252,9 +264,13 @@ const isWebSocketConnected = computed(() => {
   return ws !== null && ws.readyState === WebSocket.OPEN;
 });
 
-const handleDeviceChange = () => {
+const handleDeviceChange = async () => {
   if (selectedDevice.value) {
     ElMessage.success(`已切换到设备: ${selectedDevice.value.name}`);
+    // 如果在分析界面，需要先获取历史数据再初始化图表
+    if (activeTab.value === 'analysis' && selectedDeviceId.value) {
+      await getOrUpdateDeviceHistoryData(selectedDeviceId.value);
+    }
     nextTick(() => {
       initCharts();
     });
@@ -272,17 +288,49 @@ const selectedHistoryDevice = computed(() => {
 const historyDataList = computed(() => {
   if (!historyDeviceId.value) return [];
   const historyData = getDeviceHistoryData(historyDeviceId.value);
+  const device = selectedHistoryDevice.value;
+  const deviceName = device?.name || '';
   return historyData
     .map(data => ({
       ...data,
+      deviceName: deviceName,
+      deviceId: historyDeviceId.value,
       timestamp: data.timestamp
     }))
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 });
 
-const handleHistoryDeviceChange = () => {
-  if (selectedHistoryDevice.value) {
+// 分页相关
+const currentPage = ref(1);
+const pageSize = ref(10);
+
+// 分页后的历史数据
+const paginatedHistoryData = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  const end = start + pageSize.value;
+  return historyDataList.value.slice(start, end);
+});
+
+// 处理每页条数变化
+const handleSizeChange = (val: number) => {
+  pageSize.value = val;
+  currentPage.value = 1;
+};
+
+// 处理页码变化
+const handleCurrentChange = (val: number) => {
+  currentPage.value = val;
+};
+
+const handleHistoryDeviceChange = async () => {
+  if (selectedHistoryDevice.value && historyDeviceId.value) {
     ElMessage.success(`已切换到设备: ${selectedHistoryDevice.value.name}`);
+    // 获取该设备的历史数据
+    console.log('Fetching history data for device:', historyDeviceId.value);
+    await getOrUpdateDeviceHistoryData(historyDeviceId.value);
+    console.log('History data fetched');
+    // 重置页码
+    currentPage.value = 1;
   }
 };
 
@@ -660,6 +708,30 @@ const stopRealtimeMonitoring = async () => {
   isStreamDisconnected.value = false;
 };
 
+// 格式化时间标签，只显示小时和分钟
+const formatTimeLabel = (timestamp: string) => {
+  // 如果已经是 HH:00 格式，直接返回
+  if (/^\d{2}:\d{2}$/.test(timestamp)) {
+    return timestamp;
+  }
+  const date = new Date(timestamp);
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  return `${hours}:${minutes}`;
+};
+
+// 采样函数：从数组中均匀采样指定数量的点
+const sampleData = (data: any[], count: number) => {
+  if (data.length <= count) return data;
+  const result = [];
+  const step = (data.length - 1) / (count - 1);
+  for (let i = 0; i < count; i++) {
+    const index = Math.round(i * step);
+    result.push(data[index]);
+  }
+  return result;
+};
+
 // 初始化图表
 const initCharts = () => {
   // 销毁旧图表实例
@@ -672,47 +744,79 @@ const initCharts = () => {
     averageChart = echarts.init(averageChartRef.value);
     const avgData = getDeviceAverageData();
     
+    // 采样12个点显示（保持24小时范围）
+    const sampledTimes = sampleData(avgData.times, 12);
+    const sampledTempValues = sampleData(avgData.temperatureValues, 12);
+    const sampledHumidityValues = sampleData(avgData.humidityValues, 12);
+    
     averageChart.setOption({
       tooltip: {
         trigger: 'axis'
       },
       legend: {
         data: ['平均温度', '平均湿度'],
-        top: 10,
-        textStyle: { fontSize: 12 },
-        itemGap: 10
+        top: 5,
+        textStyle: { fontSize: 11 },
+        itemGap: 15
       },
       grid: {
-        left: '3%',
-        right: '4%',
-        bottom: '3%',
-        top: '60',
-        containLabel: true
+        left: '12%',
+        right: '8%',
+        bottom: '15%',
+        top: '18%',
+        containLabel: false
       },
       xAxis: {
         type: 'category',
-        data: avgData.times.slice(-12),
-        axisLabel: { fontSize: 10, rotate: 45 }
+        data: sampledTimes,
+        axisLabel: { 
+          fontSize: 10, 
+          interval: 1
+        }
       },
       yAxis: {
         type: 'value',
+        name: '数值',
+        nameTextStyle: {
+          fontSize: 10
+        },
         axisLabel: { fontSize: 10 }
       },
       series: [
         {
           name: '平均温度',
-          data: avgData.temperatureValues.slice(-12),
+          data: sampledTempValues,
           type: 'line',
           smooth: true,
-          itemStyle: { color: '#ff7875' }
+          itemStyle: { color: '#ff7875' },
+          areaStyle: {
+            color: {
+              type: 'linear',
+              x: 0, y: 0, x2: 0, y2: 1,
+              colorStops: [{
+                offset: 0, color: 'rgba(255, 120, 117, 0.3)'
+              }, {
+                offset: 1, color: 'rgba(255, 120, 117, 0.05)'
+              }]
+            }
+          }
         },
         {
           name: '平均湿度',
-          data: avgData.humidityValues.slice(-12),
+          data: sampledHumidityValues,
           type: 'line',
           smooth: true,
-          itemStyle: {
-            color: '#69c0ff'
+          itemStyle: { color: '#69c0ff' },
+          areaStyle: {
+            color: {
+              type: 'linear',
+              x: 0, y: 0, x2: 0, y2: 1,
+              colorStops: [{
+                offset: 0, color: 'rgba(105, 192, 255, 0.3)'
+              }, {
+                offset: 1, color: 'rgba(105, 192, 255, 0.05)'
+              }]
+            }
           }
         }
       ]
@@ -724,30 +828,63 @@ const initCharts = () => {
     temperatureChart = echarts.init(temperatureChartRef.value);
     const historyData = getDeviceHistoryData(selectedDeviceId.value);
     
+    // 采样12个点显示（保持完整时间范围）
+    const sampledHistoryData = sampleData(historyData, 12);
+    const tempValues = sampledHistoryData.map(d => d.temperature);
+    const tempMin = Math.min(...tempValues);
+    const tempMax = Math.max(...tempValues);
+    // 调整纵轴范围，使数据更直观
+    const tempRange = tempMax - tempMin;
+    let tempYMin = tempMin;
+    let tempYMax = tempMax;
+    if (tempRange < 5) {
+      tempYMin = Math.floor(tempMin - 1);
+      tempYMax = Math.ceil(tempMax + 1);
+    }
+    
     temperatureChart.setOption({
       tooltip: { trigger: 'axis' },
       grid: {
-        left: '3%',
-        right: '4%',
-        bottom: '3%',
-        top: '30',
-        containLabel: true
+        left: '15%',
+        right: '8%',
+        bottom: '15%',
+        top: '12%',
+        containLabel: false
       },
       xAxis: {
         type: 'category',
-        data: historyData.map(d => d.timestamp).slice(-12),
-        axisLabel: { fontSize: 10, rotate: 45 }
+        data: sampledHistoryData.map(d => d.timestamp).map(formatTimeLabel),
+        axisLabel: { 
+          fontSize: 10, 
+          interval: 1
+        }
       },
       yAxis: {
         type: 'value',
-        name: '温度(°C)',
+        name: '温度 (℃)',
+        min: tempYMin,
+        max: tempYMax,
+        nameTextStyle: {
+          fontSize: 10
+        },
         axisLabel: { fontSize: 10 }
       },
       series: [{
-        data: historyData.map(d => d.temperature).slice(-12),
+        data: tempValues,
         type: 'line',
         smooth: true,
-        itemStyle: { color: '#ff7875' }
+        itemStyle: { color: '#ff7875' },
+        areaStyle: {
+          color: {
+            type: 'linear',
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [{
+              offset: 0, color: 'rgba(255, 120, 117, 0.3)'
+            }, {
+              offset: 1, color: 'rgba(255, 120, 117, 0.05)'
+            }]
+          }
+        }
       }]
     });
   }
@@ -757,30 +894,63 @@ const initCharts = () => {
     humidityChart = echarts.init(humidityChartRef.value);
     const historyData = getDeviceHistoryData(selectedDeviceId.value);
     
+    // 采样12个点显示（保持完整时间范围）
+    const sampledHistoryData = sampleData(historyData, 12);
+    const humidityValues = sampledHistoryData.map(d => d.humidity);
+    const humidityMin = Math.min(...humidityValues);
+    const humidityMax = Math.max(...humidityValues);
+    // 调整纵轴范围，使数据更直观
+    const humidityRange = humidityMax - humidityMin;
+    let humidityYMin = humidityMin;
+    let humidityYMax = humidityMax;
+    if (humidityRange < 5) {
+      humidityYMin = Math.floor(humidityMin - 1);
+      humidityYMax = Math.ceil(humidityMax + 1);
+    }
+    
     humidityChart.setOption({
       tooltip: { trigger: 'axis' },
       grid: {
-        left: '3%',
-        right: '4%',
-        bottom: '3%',
-        top: '30',
-        containLabel: true
+        left: '15%',
+        right: '8%',
+        bottom: '15%',
+        top: '12%',
+        containLabel: false
       },
       xAxis: {
         type: 'category',
-        data: historyData.map(d => d.timestamp).slice(-12),
-        axisLabel: { fontSize: 10, rotate: 45 }
+        data: sampledHistoryData.map(d => d.timestamp).map(formatTimeLabel),
+        axisLabel: { 
+          fontSize: 10, 
+          interval: 1
+        }
       },
       yAxis: {
         type: 'value',
-        name: '湿度(%)',
+        name: '湿度 (%)',
+        min: humidityYMin,
+        max: humidityYMax,
+        nameTextStyle: {
+          fontSize: 10
+        },
         axisLabel: { fontSize: 10 }
       },
       series: [{
-        data: historyData.map(d => d.humidity).slice(-12),
+        data: humidityValues,
         type: 'line',
         smooth: true,
-        itemStyle: { color: '#69c0ff' }
+        itemStyle: { color: '#69c0ff' },
+        areaStyle: {
+          color: {
+            type: 'linear',
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [{
+              offset: 0, color: 'rgba(105, 192, 255, 0.3)'
+            }, {
+              offset: 1, color: 'rgba(105, 192, 255, 0.05)'
+            }]
+          }
+        }
       }]
     });
   }
@@ -801,6 +971,10 @@ watch(() => props.activeTab, (newTab) => {
     if (devices.length > 0 && !selectedDeviceId.value) {
       selectedDeviceId.value = devices[0]?.id || null;
     }
+    // 分析界面需要获取历史数据来显示图表
+    if (selectedDeviceId.value) {
+      getOrUpdateDeviceHistoryData(selectedDeviceId.value);
+    }
     nextTick(() => {
       initCharts();
     });
@@ -811,6 +985,10 @@ watch(() => props.activeTab, (newTab) => {
   } else if (newTab === 'history') {
     if (devices.length > 0 && !historyDeviceId.value) {
       historyDeviceId.value = devices[0]?.id || null;
+    }
+    // 获取历史数据
+    if (historyDeviceId.value) {
+      getOrUpdateDeviceHistoryData(historyDeviceId.value);
     }
   }
 });
@@ -829,9 +1007,10 @@ watch(() => selectedDeviceId.value, (newDeviceId, oldDeviceId) => {
   });
 });
 
-// 监听滑块变化
+// 监听滑块变化，将值反转后发送给后端（1-63 -> 63-1）
 watch(imageQuality, (newQuality) => {
-  sendStreamQuality(newQuality);
+  const invertedQuality = 64 - newQuality;
+  sendStreamQuality(invertedQuality);
 });
 
 // 监听视频尺寸变化
@@ -849,8 +1028,16 @@ onMounted(async () => {
       selectedDeviceId.value = devices[0]?.id || null;
     } else if (activeTab.value === 'history' && !historyDeviceId.value) {
       historyDeviceId.value = devices[0]?.id || null;
+      // 获取历史数据
+      if (historyDeviceId.value) {
+        await getOrUpdateDeviceHistoryData(historyDeviceId.value);
+      }
     } else if (activeTab.value === 'analysis' && !selectedDeviceId.value) {
       selectedDeviceId.value = devices[0]?.id || null;
+      // 分析界面也需要获取历史数据来显示图表
+      if (selectedDeviceId.value) {
+        await getOrUpdateDeviceHistoryData(selectedDeviceId.value);
+      }
     }
   }
   
@@ -1194,38 +1381,70 @@ onUnmounted(() => {
 
 .history-item {
   background: white;
-  border-radius: 12px;
-  padding: 16px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 
-.history-time {
-  font-size: 12px;
-  color: #909399;
-  margin-bottom: 12px;
-}
-
-.history-data {
+.history-row {
   display: flex;
   justify-content: space-between;
-}
-
-.data-point {
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 
-.data-point .label {
-  font-size: 12px;
-  color: #909399;
-}
-
-.data-point .value {
+.history-row .device-name {
   font-size: 14px;
   font-weight: 600;
   color: #303133;
+  flex-shrink: 0;
+}
+
+.history-row .device-id {
+  font-size: 12px;
+  color: #909399;
+  flex-shrink: 0;
+}
+
+.history-row .history-time {
+  font-size: 12px;
+  color: #909399;
+  margin-left: auto;
+}
+
+.history-row.data-row {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.history-row .data-item {
+  font-size: 14px;
+  color: #303133;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pagination-container {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
+  padding: 0 4px;
+  overflow-x: auto;
+}
+
+.pagination-container :deep(.el-pagination) {
+  --el-pagination-button-width: 28px;
+  --el-pagination-button-height: 28px;
+  font-size: 12px;
+}
+
+.pagination-container :deep(.el-pagination .el-select .el-input) {
+  width: 80px;
 }
 
 .history-placeholder {

@@ -44,7 +44,13 @@ const handleMenuSelect = (key: string) => {
 // 监听路由变化，重置默认激活项
 watch(() => route.path, (newPath) => {
   if (newPath === '/Stream' || newPath === '/Data') {
-    activeTab.value = 'realtime';
+    // 检查是否有 activeTab 查询参数
+    const activeTabParam = route.query.activeTab as string;
+    if (activeTabParam && ['realtime', 'analysis', 'history'].includes(activeTabParam)) {
+      activeTab.value = activeTabParam;
+    } else {
+      activeTab.value = 'realtime';
+    }
   } else if (newPath === '/Device') {
     // 检查是否有 tab 查询参数
     const tabParam = route.query.tab as string;
@@ -63,6 +69,17 @@ watch(() => route.query.tab, (newTab) => {
     const tabParam = newTab as string;
     if (['overview', 'management', 'logs'].includes(tabParam)) {
       activeTab.value = tabParam;
+      emit('tabChange', activeTab.value);
+    }
+  }
+});
+
+// 监听 activeTab 查询参数变化
+watch(() => route.query.activeTab, (newActiveTab) => {
+  if ((route.path === '/Stream' || route.path === '/Data') && newActiveTab) {
+    const activeTabParam = newActiveTab as string;
+    if (['realtime', 'analysis', 'history'].includes(activeTabParam)) {
+      activeTab.value = activeTabParam;
       emit('tabChange', activeTab.value);
     }
   }

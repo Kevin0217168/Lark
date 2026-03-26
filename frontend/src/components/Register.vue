@@ -1,6 +1,6 @@
 <template>
   <el-card class="register-card">
-    <h3 class="title">鸟厂后台管理 - 注册</h3>
+    <h3 class="title">云雀管理系统 - 注册</h3>
 
     <el-form :model="form" ref="formRef" :rules="rules">
       <el-form-item label="用户名" prop="username">
@@ -200,6 +200,7 @@ const handleRegister = async () => {
   padding-bottom: 30px;
   width: 400px;
   margin-top: 5%;
+  margin-bottom: 60px;
   border-radius: 15px;
 }
 

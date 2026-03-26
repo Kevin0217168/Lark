@@ -36,6 +36,7 @@ const router = createRouter({
     {
       path: "/Data",
       component: Data,
+      props: (route) => ({ activeTab: route.query.activeTab || 'realtime' })
     },
     {
       path: "/Profile",
