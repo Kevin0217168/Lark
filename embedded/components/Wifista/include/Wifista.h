@@ -39,6 +39,8 @@ typedef struct
 
 void WifistaInit();
 void obtain_time(void);
+bool is_time_synced(void);
+bool is_time_valid(void);
 void WifiSecurityClientInit();
 esp_err_t WifiSecurityRequest(const char *host, const char *path, uint16_t port, WifiSecurityMethod_t method,
      char *post_data, void (ResponseUserHandler)(RequestContext_t*));

@@ -1,4 +1,5 @@
 #include "Wifista.h"
+#include "esp_camera.h"
 #include "esp_system.h"
 #include "esp_event.h"
 #include "esp_log.h"
@@ -8,8 +9,8 @@
 static const char* TAG = "OTA";
 
 #define OTA_URL_SIZE 256
-#define OTA_URL "https://file.mintlab.top/ota/hardware.bin"
-#define OTA_RECV_TIMEOUT 30
+#define OTA_URL "https://file.mintlab.top/ota/lark.bin"
+#define OTA_RECV_TIMEOUT 30000
 
 #define BUFFSIZE 8196
 #define HASH_LEN 32 /* SHA-256 digest length */
@@ -131,6 +132,11 @@ void ota_task(void *pvParameter)
 
                     image_header_was_checked = true;
 
+                    // OTA flash 擦写与摄像头 PSRAM DMA 共享 SPI 总线，同时运行会触发 WDT
+                    // 在开始 flash 操作前先关闭摄像头 DMA
+                    ESP_LOGI(TAG, "OTA 更新开始，关闭摄像头以避免 SPI 总线冲突...");
+                    esp_camera_deinit();
+
                     err = esp_ota_begin(update_partition, OTA_WITH_SEQUENTIAL_WRITES, &update_handle);
                     if (err != ESP_OK) {
                         ESP_LOGE(TAG, "esp_ota_begin failed (%s)", esp_err_to_name(err));
@@ -154,6 +160,8 @@ void ota_task(void *pvParameter)
             }
             binary_file_length += data_read;
             ESP_LOGD(TAG, "Written image length %d", binary_file_length);
+            // 让出 CPU 时间给其他任务，避免看门狗超时
+            vTaskDelay(1);
         } else if (data_read == 0) {
            /*
             * As esp_http_client_read never returns negative error code, we rely on

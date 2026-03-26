@@ -30,7 +30,8 @@ class Viewer:
             viewerIdDict.pop(self.id)
         # 在对应设备上取消订阅
         for i in self.subscribed_device:
-            i.subscribers.pop()
+            if self in i.subscribers:
+                i.subscribers.remove(self)
 
     def connect(self, websocket: WebSocket):
         self.websocket = websocket

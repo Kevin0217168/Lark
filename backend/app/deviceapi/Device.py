@@ -37,12 +37,13 @@ class Esp32:
 
     def disconnected(self):
         self.websocket = None
-        f = esp32IdDict.pop(self.id, None)
-        if not f:
-            logger.warning(f"设备{self.id} 试图从列表清除自己, 失败")
-        with Db.OpenDb("Device Disconnected") as db:
-            Db.UpdateDevice(db, id=self.id, isOnline=False, status="none")
-        del self
+        # 只有字典中还是自己时才删除和更新状态，避免旧连接断开时误清新连接
+        if esp32IdDict.get(self.id) is self:
+            esp32IdDict.pop(self.id, None)
+            with Db.OpenDb("Device Disconnected") as db:
+                Db.UpdateDevice(db, id=self.id, isOnline=False, status="none")
+        else:
+            logger.warning(f"设备{self.id} 旧连接断开, 新连接仍在线, 跳过状态更新")
 
     def subscribe(self, subscriber):
         self.subscribers.append(subscriber)
