@@ -1,6 +1,10 @@
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_app_format.h"
+#include "esp_ota_ops.h"
+#include "esp_flash_partitions.h"
+#include "esp_partition.h"
 #include "nvs_flash.h"
 #include "Wifista.h"
 #include "Camera.h"
@@ -19,6 +23,7 @@ Device_t device = {
     .uuid = "",
     .isOnline = false,
     .status = DEVICE_OFFLINE,
+    //TODO: 存储版本信息
 };
 
 void register_handler(RequestContext_t *ctx)
@@ -72,6 +77,7 @@ extern void i2c_scan(void);
 
 void app_main(void)
 {
+    // ---------------------WIFI连接配置-------------------------
     printf("Hello ESP-IDF!\n");
     nvs_flash_init();
     WifistaInit("关闭", "kaiwen0818");
@@ -80,9 +86,39 @@ void app_main(void)
     {
         vTaskDelay(500 / portTICK_PERIOD_MS);
     }
-
+    // SNTP获取时间
     obtain_time();
 
+    // ---------------------版本更新检测--------------------------
+    const esp_app_desc_t* desc;
+    desc = esp_app_get_description();
+    ESP_LOGI(TAG, "当前运行的版本: Version: %s\n", desc->version);
+
+    const esp_partition_t *running = esp_ota_get_running_partition();
+    esp_ota_img_states_t ota_state;
+    if (esp_ota_get_state_partition(running, &ota_state) == ESP_OK) {
+        if (ota_state == ESP_OTA_IMG_PENDING_VERIFY) {
+            // 固件第一次运行, 执行诊断
+            // run diagnostic function ...
+            // bool diagnostic_is_ok = diagnostic();
+            // TODO: 检查后续的连接和传感器初始化是否正常
+            bool diagnostic_is_ok = true;
+            if (diagnostic_is_ok) {
+                ESP_LOGI(TAG, "Diagnostics completed successfully! Continuing execution ...");
+                esp_ota_mark_app_valid_cancel_rollback();
+            } else {
+                ESP_LOGE(TAG, "Diagnostics failed! Start rollback to the previous version ...");
+                esp_ota_mark_app_invalid_rollback_and_reboot();
+            }
+        }
+    }
+
+    static uint8_t ota_task_Handle_ParameterToPass;
+    TaskHandle_t ota_task_Handle = NULL;
+    xTaskCreate(ota_task, "ota_task", 8192, &ota_task_Handle_ParameterToPass, 1, &ota_task_Handle);
+    configASSERT(ota_task_Handle);
+
+    // ---------------------连接服务器----------------------------
     // 创建任务执行 HTTPS 请求
     WifiSecurityClientInit();
 
@@ -91,7 +127,6 @@ void app_main(void)
     snprintf(path_data, sizeof(path_data), "/api/stream/device/ws?secret=%s", secret);
     // 注册回调函数
     Websocket_event_handler_register(NULL, ws_text_handler);
-
     WebsocketStart("wss://lark.mintlab.top", path_data, 443);
     // WebsocketStart("ws://192.168.1.199", path_data, 8080);
 
@@ -101,35 +136,36 @@ void app_main(void)
         vTaskDelay(500 / portTICK_PERIOD_MS);
     }
 
-    // i2c_scan();
+    // ----------------------初始化传感器-----------------------------
+    // 传感器初始化
+    i2c_scan();
+    sensirion_i2c_init();
+    while (sht4x_probe() != STATUS_OK)
+    {
+        printf("SHT sensor probing failed\n");
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+    printf("SHT sensor probing successful\n");
 
-    // /* Initialize the i2c bus for the current platform */
-    // sensirion_i2c_init();
-
-    // /* Busy loop for initialization, because the main loop does not work without
-    //  * a sensor.
-    //  */
-    // while (sht4x_probe() != STATUS_OK)
-    // {
-    //     printf("SHT sensor probing failed\n");
-    //     vTaskDelay(1000 / portTICK_PERIOD_MS);
-    // }
-    // printf("SHT sensor probing successful\n");
-
+    // 摄像头初始化
     CameraInit();
     sensor_t *s = esp_camera_sensor_get();
     s->set_framesize(s, FRAMESIZE_SVGA);
     s->set_vflip(s, 1);
 
+    // -------------------------开启任务-------------------------------
+
+    // 开启图像传输任务
     static uint8_t ucParameterToPass;
     TaskHandle_t xHandle = NULL;
     xTaskCreate(camera_transmit_task, "camera_transmit_task", 4096, &ucParameterToPass, 1, &xHandle);
     configASSERT(xHandle);
 
-    // static uint8_t sensor_data_transmit_task_Handle_ParameterToPass;
-    // TaskHandle_t sensor_data_transmit_task_Handle = NULL;
-    // xTaskCreate(sensor_data_transmit_task, "sensor_data_transmit_task", 4096, &sensor_data_transmit_task_Handle_ParameterToPass, 1, &sensor_data_transmit_task_Handle);
-    // configASSERT(xHandle);
+    // 开启传感器传输任务
+    static uint8_t sensor_data_transmit_task_Handle_ParameterToPass;
+    TaskHandle_t sensor_data_transmit_task_Handle = NULL;
+    xTaskCreate(sensor_data_transmit_task, "sensor_data_transmit_task", 4096, &sensor_data_transmit_task_Handle_ParameterToPass, 1, &sensor_data_transmit_task_Handle);
+    configASSERT(sensor_data_transmit_task_Handle);
 }
 
 void sensor_data_transmit_task()

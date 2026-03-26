@@ -51,4 +51,6 @@ bool WebsocketIsConnected();
 bool WebsocketSendbytes(uint8_t *data, int len);
 bool WebsocketSendText(uint8_t *data, int len);
 
+void ota_task(void *pvParameter);
+
 #endif
