@@ -239,7 +239,6 @@ void app_main(void)
     if (ota_state_valid && ota_state == ESP_OTA_IMG_PENDING_VERIFY) {
         // 固件第一次运行, 执行诊断
         ESP_LOGI(TAG, "新版本喵");
-        ESP_LOGI(TAG, "[DIAGNOSTIC] 开始运行固件诊断...");
         if (diagnostic()) {
             ESP_LOGI(TAG, "Diagnostics completed successfully! Continuing execution ...");
             esp_ota_mark_app_valid_cancel_rollback();
