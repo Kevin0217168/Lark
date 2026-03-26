@@ -595,11 +595,10 @@ const startRealtimeMonitoring = async () => {
       return;
     }
     
-    // 建立WebSocket连接
+    // 建立WebSocket连接（新的连接模式：一个WebSocket对应一个设备）
     console.log('开始建立WebSocket连接');
-    // 使用相对路径，让Vite代理转发到后端
-    const wsUrl = `/api/stream/viewer/ws?token=${token}`;
-    console.log('WebSocket URL:', wsUrl.substring(0, 50) + '...');
+    const wsUrl = `/api/stream/viewer/ws/${selectedDeviceId.value}?token=${token}`;
+    console.log('WebSocket URL:', wsUrl.substring(0, 70) + '...');
     connectionError.value = '正在开启ws连接';
     ws = new WebSocket(wsUrl);
     
@@ -621,13 +620,19 @@ const startRealtimeMonitoring = async () => {
         }
       }, 2500);
       
-      // 连接成功后，发送请求开启设备推流
-      startDeviceStreaming();
+      // 新的连接模式不需要单独发送请求开启设备推流
     };
     
     // 监听消息事件
     ws.onmessage = (event) => {
       try {
+        // 检查是否是设备断开的文本消息
+        if (typeof event.data === 'string' && event.data.includes('设备已断开')) {
+          console.log('收到设备断开消息:', event.data);
+          connectionError.value = '设备已断开';
+          return;
+        }
+        
         // 尝试解析JSON数据
         try {
           const data = JSON.parse(event.data);
@@ -638,6 +643,9 @@ const startRealtimeMonitoring = async () => {
             console.log('视频尺寸设置成功:', data);
           } else if (data.code === 1) {
             console.log('操作成功:', data.msg);
+          } else if (data.code === 400) {
+            console.error('订阅失败:', data.msg);
+            connectionError.value = '订阅失败';
           } else {
             console.error('操作失败:', data.msg);
           }
@@ -810,26 +818,7 @@ const stopRealtimeMonitoring = async () => {
   }
   
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-    // 如果有选中的设备，先取消订阅
-    if (selectedDeviceId.value) {
-      try {
-        // 获取并打印当前token
-        const token = getToken();
-        console.log('取消订阅时的token:', token);
-        
-        await fetch(`/api/stream/viewer/following/${selectedDeviceId.value}`, {
-          method: 'DELETE',
-          headers: {
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        console.log('取消设备推流成功');
-      } catch (error) {
-        console.error('取消设备推流失败:', error);
-      }
-    }
-    
+    // 新的连接模式：WebSocket断开时会自动清理订阅关系
     ws.close();
     ws = null;
   }

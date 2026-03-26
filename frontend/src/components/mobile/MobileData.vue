@@ -540,7 +540,8 @@ const startRealtimeMonitoring = async () => {
       return;
     }
     
-    const wsUrl = `/api/stream/viewer/ws?token=${token}`;
+    // 建立WebSocket连接（新的连接模式：一个WebSocket对应一个设备）
+    const wsUrl = `/api/stream/viewer/ws/${selectedDeviceId.value}?token=${token}`;
     connectionError.value = '正在开启ws连接';
     ws = new WebSocket(wsUrl);
     
@@ -560,11 +561,18 @@ const startRealtimeMonitoring = async () => {
         }
       }, 2500);
       
-      startDeviceStreaming();
+      // 新的连接模式不需要单独发送请求开启设备推流
     };
     
     ws.onmessage = (event) => {
       try {
+        // 检查是否是设备断开的文本消息
+        if (typeof event.data === 'string' && event.data.includes('设备已断开')) {
+          console.log('收到设备断开消息:', event.data);
+          connectionError.value = '设备已断开';
+          return;
+        }
+        
         try {
           const data = JSON.parse(event.data);
           // 检查是否是画质设置响应
@@ -574,6 +582,9 @@ const startRealtimeMonitoring = async () => {
             console.log('视频尺寸设置成功:', data);
           } else if (data.code === 1) {
             console.log('操作成功:', data.msg);
+          } else if (data.code === 400) {
+            console.error('订阅失败:', data.msg);
+            connectionError.value = '订阅失败';
           } else {
             console.error('操作失败:', data.msg);
           }
@@ -724,24 +735,7 @@ const stopRealtimeMonitoring = async () => {
   }
   
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-    if (selectedDeviceId.value) {
-      try {
-        const token = getToken();
-        console.log('取消订阅时的token:', token);
-        
-        await fetch(`/api/stream/viewer/following/${selectedDeviceId.value}`, {
-          method: 'DELETE',
-          headers: {
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        console.log('取消设备推流成功');
-      } catch (error) {
-        console.error('取消设备推流失败:', error);
-      }
-    }
-    
+    // 新的连接模式：WebSocket断开时会自动清理订阅关系
     ws.close();
     ws = null;
   }
@@ -1029,6 +1023,10 @@ watch(() => props.activeTab, async (newTab) => {
     // 停止实时数据定时器
     stopRealtimeDataTimer();
     
+    // 分析界面需要选择第一个设备并获取所有设备的历史数据
+    if (devices.length > 0 && !selectedDeviceId.value) {
+      selectedDeviceId.value = devices[0]?.id || null;
+    }
     // 分析界面需要获取所有设备的历史数据来显示图表
     await getOrUpdateDeviceHistoryData(); // 不传参数，获取所有设备数据
     nextTick(() => {
@@ -1102,7 +1100,10 @@ onMounted(async () => {
         await getOrUpdateDeviceHistoryData(historyDeviceId.value);
       }
     } else if (activeTab.value === 'analysis') {
-      // 分析界面需要获取所有设备的历史数据来显示图表
+      // 分析界面需要选择第一个设备并获取所有设备的历史数据
+      if (!selectedDeviceId.value) {
+        selectedDeviceId.value = devices[0]?.id || null;
+      }
       await getOrUpdateDeviceHistoryData(); // 不传参数，获取所有设备数据
     }
   }
