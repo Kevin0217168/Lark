@@ -31,6 +31,10 @@
               <span class="label">类型</span>
               <span class="value">{{ device.device_type || '未设置' }}</span>
             </div>
+            <div class="info-row">
+              <span class="label">固件版本</span>
+              <span class="value">{{ deviceVersions[device.id] || '加载中...' }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -125,6 +129,7 @@
           <div class="device-actions">
             <el-button size="small" @click="handleEdit(device)">编辑</el-button>
             <el-button size="small" type="success" @click="handleUpdateFirmware(device)">更新固件</el-button>
+            <el-button size="small" type="warning" @click="handleRestart(device)">重启</el-button>
             <el-button size="small" type="danger" @click="handleDelete(device)">删除</el-button>
           </div>
         </div>
@@ -245,7 +250,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus } from '@element-plus/icons-vue';
 import { useDeviceStore, type Device, type DeviceLog } from '../../stores/deviceStore';
@@ -257,7 +262,82 @@ const props = defineProps<{
 
 const activeTab = computed(() => props.activeTab || 'overview');
 
-const { devices, getDeviceLogs, fetchDevices } = useDeviceStore();
+const { devices, getDeviceLogs, fetchDevices: storeFetchDevices } = useDeviceStore();
+
+// 获取设备列表
+const fetchDevices = async () => {
+  try {
+    await storeFetchDevices();
+    // 获取每个设备的固件版本
+    devices.value.forEach((device: Device) => {
+      fetchDeviceVersion(device.id);
+    });
+  } catch (error) {
+    console.error('获取设备列表出错:', error);
+    ElMessage.error('获取设备列表失败，请检查网络连接');
+  }
+};
+
+// 获取设备固件版本
+const fetchDeviceVersion = async (deviceId: number) => {
+  try {
+    // 先尝试刷新token
+    const refreshToken = localStorage.getItem('refreshToken');
+    if (refreshToken) {
+      const refreshResponse = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ refresh_token: refreshToken })
+      });
+
+      if (refreshResponse.ok) {
+        const refreshData = await refreshResponse.json();
+        if (refreshData.access_token) {
+          localStorage.setItem('accessToken', refreshData.access_token);
+        }
+      }
+    }
+
+    // 获取最新的token
+    const token = localStorage.getItem('accessToken');
+
+    // 调用查询固件版本API
+    const response = await fetch(`/api/devices/${deviceId}/version`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': token ? `Bearer ${token}` : ''
+      }
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log('查询固件版本成功:', data);
+      deviceVersions.value[deviceId] = data.data.values;
+    } else if (response.status === 403) {
+      const errorData = await response.json();
+      console.log('查询固件版本权限不足:', errorData);
+      deviceVersions.value[deviceId] = '权限不足';
+    } else if (response.status === 404) {
+      const errorData = await response.json();
+      console.log('查询固件版本设备不存在:', errorData);
+      deviceVersions.value[deviceId] = '设备不存在';
+    } else if (response.status === 422) {
+      const errorData = await response.json();
+      console.log('查询固件版本参数错误:', errorData);
+      deviceVersions.value[deviceId] = '参数错误';
+    } else {
+      console.log('查询固件版本失败响应:', response);
+      deviceVersions.value[deviceId] = '查询失败';
+    }
+  } catch (error) {
+    console.error('查询固件版本出错:', error);
+    deviceVersions.value[deviceId] = '查询失败';
+  }
+};
 
 const selectedDeviceId = ref<number | null>(null);
 
@@ -345,6 +425,29 @@ const deviceForm = ref({
   status: 'none',
   isOnline: false,
   device_type: ''
+});
+
+// 存储设备固件版本
+const deviceVersions = ref<{ [key: number]: string }>({});
+
+// 记录接口调用时间，防止重复调用
+const lastCallTime = ref<{ [key: string]: number }>({});
+const CALL_INTERVAL = 10000; // 10秒间隔
+
+// 检查是否可以调用接口
+const canCall = (key: string): boolean => {
+  const now = Date.now();
+  const lastTime = lastCallTime.value[key] || 0;
+  if (now - lastTime > CALL_INTERVAL) {
+    lastCallTime.value[key] = now;
+    return true;
+  }
+  return false;
+};
+
+// 组件挂载时获取设备列表和固件版本
+onMounted(() => {
+  fetchDevices();
 });
 
 // 显示添加对话框
@@ -541,6 +644,9 @@ const handleDelete = async (device: Device) => {
           if (refreshData.access_token) {
             localStorage.setItem('accessToken', refreshData.access_token);
           }
+        } else {
+          ElMessage.error('令牌刷新失败，无法执行删除操作');
+          return;
         }
 
         // 获取最新的token
@@ -586,17 +692,157 @@ const handleDelete = async (device: Device) => {
 // 更新固件
 const handleUpdateFirmware = (device: Device) => {
   ElMessageBox.confirm(
-    `确定要为设备 "${device.name}" 更新固件吗？`,
+    '确定要为设备更新固件吗？更新过程中摄像头会被临时关闭，设备可能会自动重启。',
     '更新固件',
     {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'info',
     }
-  ).then(() => {
-    ElMessage.success(`设备 "${device.name}" 固件更新成功`);
+  ).then(async () => {
+    const key = `device_${device.id}`;
+    if (!canCall(key)) {
+      ElMessage.warning('操作过于频繁，请10秒后再试');
+      return;
+    }
+    
+    try {
+      // 先尝试刷新token
+      const refreshToken = localStorage.getItem('refreshToken');
+      if (refreshToken) {
+        const refreshResponse = await fetch('/api/auth/refresh', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({ refresh_token: refreshToken })
+        });
+
+        if (refreshResponse.ok) {
+          const refreshData = await refreshResponse.json();
+          if (refreshData.access_token) {
+            localStorage.setItem('accessToken', refreshData.access_token);
+          }
+        }
+      }
+
+      // 获取最新的token
+      const token = localStorage.getItem('accessToken');
+
+      // 调用OTA更新API
+      const response = await fetch(`/api/devices/${device.id}/ota`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : ''
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('OTA更新成功响应:', data);
+        ElMessage.success('OTA更新命令已发送，设备将自动检查并下载新版本');
+        // 刷新设备列表
+        await fetchDevices();
+      } else if (response.status === 403) {
+        const errorData = await response.json();
+        console.log('OTA更新权限不足:', errorData);
+        ElMessage.error(errorData.msg || '权限不足，仅root用户可更新固件');
+      } else if (response.status === 404) {
+        const errorData = await response.json();
+        console.log('OTA更新设备不存在:', errorData);
+        ElMessage.error(errorData.msg || '设备不存在');
+      } else if (response.status === 422) {
+        const errorData = await response.json();
+        console.log('OTA更新参数错误:', errorData);
+        ElMessage.error('请求参数错误：' + JSON.stringify(errorData.detail));
+      } else {
+        console.log('OTA更新失败响应:', response);
+        ElMessage.error('固件更新失败：' + response.statusText);
+      }
+    } catch (error) {
+      console.error('更新固件出错:', error);
+      ElMessage.error('更新固件失败，请检查网络连接');
+    }
   }).catch(() => {
     // 取消更新
+  });
+};
+
+// 重启设备
+const handleRestart = (device: Device) => {
+  ElMessageBox.confirm(
+    '确定要重启该设备吗？重启后设备将离线约500ms并重新连接。',
+    '确认重启',
+    {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }
+  ).then(async () => {
+    const key = `device_${device.id}`;
+    if (!canCall(key)) {
+      ElMessage.warning('操作过于频繁，请10秒后再试');
+      return;
+    }
+    
+    try {
+      // 先尝试刷新token
+      const refreshToken = localStorage.getItem('refreshToken');
+      if (refreshToken) {
+        const refreshResponse = await fetch('/api/auth/refresh', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({ refresh_token: refreshToken })
+        });
+
+        if (refreshResponse.ok) {
+          const refreshData = await refreshResponse.json();
+          if (refreshData.access_token) {
+            localStorage.setItem('accessToken', refreshData.access_token);
+          }
+        }
+      }
+
+      // 获取最新的token
+      const token = localStorage.getItem('accessToken');
+
+      // 调用重启设备API
+      const response = await fetch(`/api/devices/${device.id}/restart`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : ''
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        ElMessage.success('重启命令已发送，设备将在约500ms后重启');
+        // 刷新设备列表
+        await fetchDevices();
+      } else if (response.status === 403) {
+        const errorData = await response.json();
+        ElMessage.error(errorData.msg || '权限不足，仅root用户可重启设备');
+      } else if (response.status === 404) {
+        const errorData = await response.json();
+        ElMessage.error(errorData.msg || '设备不存在');
+      } else if (response.status === 422) {
+        const errorData = await response.json();
+        ElMessage.error('请求参数错误：' + JSON.stringify(errorData.detail));
+      } else {
+        ElMessage.error('重启设备失败：' + response.statusText);
+      }
+    } catch (error) {
+      console.error('重启设备出错:', error);
+      ElMessage.error('重启设备失败，请检查网络连接');
+    }
+  }).catch(() => {
+    // 取消确认
   });
 };
 </script>
