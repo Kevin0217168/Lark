@@ -32,6 +32,10 @@
             <div class="data-value">{{ selectedDevice.humidity }}%</div>
           </div>
           <div class="data-item full">
+            <div class="data-label">类型</div>
+            <div class="data-value">{{ selectedDevice.device_type || '未设置' }}</div>
+          </div>
+          <div class="data-item full">
             <div class="data-label">创建时间</div>
             <div class="data-value small">{{ selectedDevice.createTime }}</div>
           </div>
@@ -182,6 +186,10 @@
           <div class="info-item">
             <span class="info-label">设备名称</span>
             <span class="info-value">{{ selectedHistoryDevice.name }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">设备类型</span>
+            <span class="info-value">{{ selectedHistoryDevice.device_type || '未设置' }}</span>
           </div>
           <div class="info-item">
             <span class="info-label">设备状态</span>

@@ -11,6 +11,7 @@
             <h5>{{ device.name }}</h5>
             <p>区域: {{ device.area || '未设置' }}</p>
             <p>编号: {{ device.number || '-' }}</p>
+            <p>类型: {{ device.device_type || '未设置' }}</p>
             <p>
               状态:
               <el-tag :type="device.isOnline ? 'success' : 'danger'">
@@ -73,6 +74,7 @@
         <el-table-column prop="name" label="设备名称" min-width="150" />
         <el-table-column prop="area" label="所属区域" min-width="120" />
         <el-table-column prop="number" label="设备编号" min-width="100" />
+        <el-table-column prop="device_type" label="设备类型" min-width="120" />
         <el-table-column label="在线状态" min-width="120">
           <template #default="scope">
             <el-tag :type="scope.row.isOnline ? 'success' : 'danger'">
@@ -192,6 +194,9 @@
       <el-form-item label="设备编号">
         <el-input-number v-model="deviceForm.number" :min="1" placeholder="请输入设备编号" />
       </el-form-item>
+      <el-form-item label="设备类型">
+        <el-input v-model="deviceForm.device_type" placeholder="请输入设备类型" />
+      </el-form-item>
     </el-form>
     <template #footer>
       <el-button @click="dialogVisible = false">取消</el-button>
@@ -297,7 +302,8 @@ const deviceForm = ref({
   area: '',
   number: 1,
   status: 'none',
-  isOnline: false
+  isOnline: false,
+  device_type: ''
 });
 
 // 显示添加对话框
@@ -310,7 +316,8 @@ const showAddDialog = () => {
     area: '',
     number: 1,
     status: 'none',
-    isOnline: false
+    isOnline: false,
+    device_type: ''
   };
   dialogVisible.value = true;
 };
@@ -325,7 +332,8 @@ const handleEdit = (device: Device) => {
     area: device.area || '',
     number: device.number || 1,
     status: device.status,
-    isOnline: device.isOnline
+    isOnline: device.isOnline,
+    device_type: device.device_type || ''
   };
   dialogVisible.value = true;
 };
@@ -371,6 +379,7 @@ const handleSave = async () => {
           name: deviceForm.value.name,
           area: deviceForm.value.area,
           number: deviceForm.value.number,
+          device_type: deviceForm.value.device_type,
           isOnline: deviceForm.value.isOnline,
           status: deviceForm.value.status
         })

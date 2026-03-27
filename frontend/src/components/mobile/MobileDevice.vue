@@ -27,6 +27,10 @@
               <span class="label">编号</span>
               <span class="value">{{ device.number || '-' }}</span>
             </div>
+            <div class="info-row">
+              <span class="label">类型</span>
+              <span class="value">{{ device.device_type || '未设置' }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -112,6 +116,10 @@
             <div class="info-row">
               <span class="label">编号</span>
               <span class="value">{{ device.number || '-' }}</span>
+            </div>
+            <div class="info-row">
+              <span class="label">类型</span>
+              <span class="value">{{ device.device_type || '未设置' }}</span>
             </div>
           </div>
           <div class="device-actions">
@@ -220,6 +228,9 @@
         </el-form-item>
         <el-form-item label="设备编号">
           <el-input-number v-model="deviceForm.number" :min="1" placeholder="请输入设备编号" style="width: 100%;" />
+        </el-form-item>
+        <el-form-item label="设备类型">
+          <el-input v-model="deviceForm.device_type" placeholder="请输入设备类型" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -332,7 +343,8 @@ const deviceForm = ref({
   area: '',
   number: 1,
   status: 'none',
-  isOnline: false
+  isOnline: false,
+  device_type: ''
 });
 
 // 显示添加对话框
@@ -345,7 +357,8 @@ const showAddDialog = () => {
     area: '',
     number: 1,
     status: 'none',
-    isOnline: false
+    isOnline: false,
+    device_type: ''
   };
   dialogVisible.value = true;
 };
@@ -360,7 +373,8 @@ const handleEdit = (device: Device) => {
     area: device.area || '',
     number: device.number || 1,
     status: device.status,
-    isOnline: device.isOnline
+    isOnline: device.isOnline,
+    device_type: device.device_type || ''
   };
   dialogVisible.value = true;
 };
@@ -406,6 +420,7 @@ const handleSave = async () => {
           name: deviceForm.value.name,
           area: deviceForm.value.area,
           number: deviceForm.value.number,
+          device_type: deviceForm.value.device_type,
           isOnline: deviceForm.value.isOnline,
           status: deviceForm.value.status
         })
@@ -461,6 +476,7 @@ const handleSave = async () => {
           name: deviceForm.value.name,
           area: deviceForm.value.area,
           number: deviceForm.value.number,
+          device_type: deviceForm.value.device_type,
           isOnline: false,
           status: 'none'
         })
