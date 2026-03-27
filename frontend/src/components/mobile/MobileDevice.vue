@@ -125,6 +125,10 @@
               <span class="label">类型</span>
               <span class="value">{{ device.device_type || '未设置' }}</span>
             </div>
+            <div class="info-row">
+              <span class="label">固件版本</span>
+              <span class="value">{{ deviceVersions[device.id] || '加载中...' }}</span>
+            </div>
           </div>
           <div class="device-actions">
             <el-button size="small" @click="handleEdit(device)">编辑</el-button>
