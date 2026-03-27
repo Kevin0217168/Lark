@@ -392,30 +392,25 @@ export const useDeviceStore = () => {
   // 初始化时清理过期日志
   cleanOldLogs();
   
-  // 从后端获取设备历史数据
-const fetchDeviceHistoryData = async (deviceId: number) => {
+  // 从后端获取设备历史数据（支持获取单个设备或所有设备）
+const fetchDeviceHistoryData = async (deviceId?: number) => {
   try {
     const token = localStorage.getItem('accessToken');
-    // 计算时间范围：最近24小时
-    const endTime = new Date();
-    const startTime = new Date();
-    startTime.setHours(startTime.getHours() - 24);
-    
-    // 格式化为ISO8601格式（本地时区）
-    const startISO = formatLocalISO(startTime);
-    const endISO = formatLocalISO(endTime);
-    
-    console.log(`[fetchDeviceHistoryData] 设备 ${deviceId} 请求时间范围: ${startISO} 到 ${endISO}`);
-    
-    // 构建查询参数
+    // 使用新的分组统计接口，24小时内分成48组
     const params = new URLSearchParams({
-      start_time: startISO,
-      end_time: endISO,
-      skip: '0',
-      limit: '1000'
+      period: '86400', // 24小时（秒）
+      group: '48'      // 分成48组
     });
     
-    const response = await fetch(`/api/sensors/${deviceId}?${params.toString()}`, {
+    // 如果指定了设备ID，添加到参数中
+    if (deviceId !== undefined) {
+      params.append('device_id', deviceId.toString());
+      console.log(`[fetchDeviceHistoryData] 设备 ${deviceId} 请求分组统计数据`);
+    } else {
+      console.log(`[fetchDeviceHistoryData] 请求所有设备的分组统计数据`);
+    }
+    
+    const response = await fetch(`/api/sensors/grouped?${params.toString()}`, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
@@ -426,20 +421,42 @@ const fetchDeviceHistoryData = async (deviceId: number) => {
     if (response.ok) {
       const data = await response.json();
       if (data.code === 200 && Array.isArray(data.data)) {
-        // 清空旧数据
-        deviceHistoryData.value = deviceHistoryData.value.filter(d => d.deviceId !== deviceId);
-        // 添加新数据
-        data.data.forEach((item: any) => {
-          deviceHistoryData.value.push({
-            deviceId: deviceId,
-            timestamp: item.timestamp,
-            temperature: item.temperature,
-            humidity: item.humidity
+        if (deviceId !== undefined) {
+          // 清空该设备的旧数据
+          deviceHistoryData.value = deviceHistoryData.value.filter(d => d.deviceId !== deviceId);
+          // 添加新数据
+          data.data.forEach((item: any) => {
+            deviceHistoryData.value.push({
+              deviceId: deviceId,
+              timestamp: item.end_time,
+              temperature: Number(item.avg_temperature.toFixed(2)),
+              humidity: Number(item.avg_humidity.toFixed(2))
+            });
           });
-        });
-        // 更新该设备的历史数据更新时间
-        lastHistoryUpdateTime.value.set(deviceId, new Date());
-        console.log(`[fetchDeviceHistoryData] 设备 ${deviceId} 历史数据已更新，共 ${data.data.length} 条记录`);
+          // 更新该设备的历史数据更新时间
+          lastHistoryUpdateTime.value.set(deviceId, new Date());
+          console.log(`[fetchDeviceHistoryData] 设备 ${deviceId} 历史数据已更新，共 ${data.data.length} 条记录`);
+        } else {
+          // 获取所有设备数据时，清空所有旧数据
+          deviceHistoryData.value = [];
+          // 添加新数据（需要从响应中获取设备ID）
+          data.data.forEach((item: any) => {
+            // 如果返回的数据包含设备ID，使用它；否则使用0作为默认值
+            const itemDeviceId = item.device_id || 0;
+            deviceHistoryData.value.push({
+              deviceId: itemDeviceId,
+              timestamp: item.end_time,
+              temperature: Number(item.avg_temperature.toFixed(2)),
+              humidity: Number(item.avg_humidity.toFixed(2))
+            });
+          });
+          // 更新所有设备的历史数据更新时间
+          const now = new Date();
+          devices.value.forEach(device => {
+            lastHistoryUpdateTime.value.set(device.id, now);
+          });
+          console.log(`[fetchDeviceHistoryData] 所有设备历史数据已更新，共 ${data.data.length} 条记录`);
+        }
       }
     }
   } catch (error) {
@@ -447,21 +464,38 @@ const fetchDeviceHistoryData = async (deviceId: number) => {
   }
 };
 
-// 获取或更新设备历史数据
-const getOrUpdateDeviceHistoryData = async (deviceId: number) => {
-  // 检查该设备的历史数据是否存在
-  const existingData = deviceHistoryData.value.filter(d => d.deviceId === deviceId);
-  
-  // 检查是否需要更新（使用独立的历史数据更新时间）
-  const lastUpdate = lastHistoryUpdateTime.value.get(deviceId);
-  const needsUpdate = existingData.length === 0 || !lastUpdate || 
-    (new Date().getTime() - lastUpdate.getTime() > DATA_UPDATE_INTERVAL);
-  
-  if (needsUpdate) {
-    console.log(`[getOrUpdateDeviceHistoryData] 设备 ${deviceId} 需要更新历史数据`);
-    await fetchDeviceHistoryData(deviceId);
+// 获取或更新设备历史数据（支持获取单个设备或所有设备）
+const getOrUpdateDeviceHistoryData = async (deviceId?: number) => {
+  if (deviceId !== undefined) {
+    // 获取单个设备的历史数据
+    const existingData = deviceHistoryData.value.filter(d => d.deviceId === deviceId);
+    
+    // 检查是否需要更新（使用独立的历史数据更新时间）
+    const lastUpdate = lastHistoryUpdateTime.value.get(deviceId);
+    const needsUpdate = existingData.length === 0 || !lastUpdate || 
+      (new Date().getTime() - lastUpdate.getTime() > DATA_UPDATE_INTERVAL);
+    
+    if (needsUpdate) {
+      console.log(`[getOrUpdateDeviceHistoryData] 设备 ${deviceId} 需要更新历史数据`);
+      await fetchDeviceHistoryData(deviceId);
+    } else {
+      console.log(`[getOrUpdateDeviceHistoryData] 设备 ${deviceId} 使用缓存的历史数据`);
+    }
   } else {
-    console.log(`[getOrUpdateDeviceHistoryData] 设备 ${deviceId} 使用缓存的历史数据`);
+    // 获取所有设备的历史数据
+    const now = new Date();
+    const needsUpdate = deviceHistoryData.value.length === 0 || 
+      devices.value.some(device => {
+        const lastUpdate = lastHistoryUpdateTime.value.get(device.id);
+        return !lastUpdate || (now.getTime() - lastUpdate.getTime() > DATA_UPDATE_INTERVAL);
+      });
+    
+    if (needsUpdate) {
+      console.log(`[getOrUpdateDeviceHistoryData] 需要更新所有设备的历史数据`);
+      await fetchDeviceHistoryData(); // 不传参数，获取所有设备数据
+    } else {
+      console.log(`[getOrUpdateDeviceHistoryData] 使用缓存的所有设备历史数据`);
+    }
   }
 };
 
@@ -480,15 +514,6 @@ const fetchSensorData = async (deviceId: number) => {
   const humidityValues: number[] = [];
   
   try {
-    // 计算时间范围：最近24小时
-    const endTime = new Date();
-    const startTime = new Date();
-    startTime.setHours(startTime.getHours() - 24);
-    
-    // 格式化为ISO8601格式（本地时区）
-    const startISO = formatLocalISO(startTime);
-    const endISO = formatLocalISO(endTime);
-    
     // 获取登录token
     const token = localStorage.getItem('accessToken');
     if (!token) {
@@ -496,16 +521,15 @@ const fetchSensorData = async (deviceId: number) => {
       return { times, temperatureValues, humidityValues };
     }
     
-    // 构建查询参数
+    // 使用新的分组统计接口，24小时内分成48组
     const params = new URLSearchParams({
-      start_time: startISO,
-      end_time: endISO,
-      skip: '0',
-      limit: '1000'
+      period: '86400', // 24小时（秒）
+      group: '48',     // 分成48组
+      device_id: deviceId.toString()
     });
     
     // 发送请求到后端接口
-    const response = await fetch(`/api/sensors/${deviceId}?${params.toString()}`, {
+    const response = await fetch(`/api/sensors/grouped?${params.toString()}`, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
@@ -522,32 +546,21 @@ const fetchSensorData = async (deviceId: number) => {
     // 处理响应数据
     if (data.code === 200 && data.data && Array.isArray(data.data)) {
       data.data.forEach((item: any) => {
-        const date = new Date(item.timestamp);
+        const date = new Date(item.end_time);
         times.push(`${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`);
-        temperatureValues.push(item.temperature);
-        humidityValues.push(item.humidity);
+        temperatureValues.push(Number(item.avg_temperature.toFixed(2)));
+        humidityValues.push(Number(item.avg_humidity.toFixed(2)));
       });
     }
   } catch (error) {
     console.error('获取传感器数据失败:', error);
   }
   
-  // 如果没有数据，返回最近24小时的空数据
-  if (times.length === 0) {
-    for (let i = 23; i >= 0; i--) {
-      const date = new Date();
-      date.setHours(date.getHours() - i);
-      times.push(`${date.getHours().toString().padStart(2, '0')}:00`);
-      temperatureValues.push(0);
-      humidityValues.push(0);
-    }
-  }
-  
   return { times, temperatureValues, humidityValues };
 };
   
-  // 计算所有设备的平均值数据（最近24小时，按10分钟间隔采样）
-  const getDeviceAverageData = () => {
+  // 计算所有设备的平均值数据（支持自定义时间范围，默认24小时，按30分钟间隔采样，使用所有设备数据做平均）
+  const getDeviceAverageData = (hours: number = 24) => {
     const times: string[] = [];
     const temperatureValues: number[] = [];
     const humidityValues: number[] = [];
@@ -555,36 +568,63 @@ const fetchSensorData = async (deviceId: number) => {
     // 获取所有设备的历史数据
     const allHistoryData = deviceHistoryData.value;
     
-    // 按10分钟间隔分组
-    const timeGroups: Record<string, { temp: number[], humidity: number[] }> = {};
+    if (allHistoryData.length === 0) {
+      return { times, temperatureValues, humidityValues };
+    }
     
-    allHistoryData.forEach(data => {
-      const date = new Date(data.timestamp);
-      // 按10分钟间隔分组，格式: HH:00, HH:10, HH:20, ...
-      const minutes = Math.floor(date.getMinutes() / 10) * 10;
-      const timeKey = `${date.getHours().toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    // 首先，找到数据的时间范围，然后生成30分钟间隔的时间点
+    const now = new Date();
+    
+    // 生成指定小时内的30分钟间隔时间点
+    const timePoints: Date[] = [];
+    const pointCount = hours * 2; // 每小时2个点（30分钟一个点）
+    for (let i = pointCount - 1; i >= 0; i--) {
+      const pointTime = new Date(now);
+      pointTime.setMinutes(Math.floor(pointTime.getMinutes() / 30) * 30 - i * 30);
+      pointTime.setSeconds(0);
+      pointTime.setMilliseconds(0);
+      timePoints.push(pointTime);
+    }
+    
+    // 对每个时间点，取前后15分钟范围内的数据计算平均值
+    timePoints.forEach(pointTime => {
+      const timeKey = `${pointTime.getHours().toString().padStart(2, '0')}:${pointTime.getMinutes().toString().padStart(2, '0')}`;
       
-      if (!timeGroups[timeKey]) {
-        timeGroups[timeKey] = { temp: [], humidity: [] };
-      }
+      // 定义时间范围：前后15分钟
+      const startTimeRange = new Date(pointTime);
+      startTimeRange.setMinutes(startTimeRange.getMinutes() - 15);
       
-      timeGroups[timeKey].temp.push(data.temperature);
-      timeGroups[timeKey].humidity.push(data.humidity);
-    });
-    
-    // 获取所有时间点并排序
-    const sortedTimeKeys = Object.keys(timeGroups).sort();
-    
-    // 只包含有数据的时间点
-    sortedTimeKeys.forEach(timeKey => {
-      const group = timeGroups[timeKey];
-      if (group && group.temp.length > 0) {
-        times.push(timeKey);
-        const tempAvg = group.temp.reduce((sum, val) => sum + val, 0) / group.temp.length;
-        const humidityAvg = group.humidity.reduce((sum, val) => sum + val, 0) / group.humidity.length;
+      const endTimeRange = new Date(pointTime);
+      endTimeRange.setMinutes(endTimeRange.getMinutes() + 15);
+      
+      // 收集这个时间范围内的所有设备数据
+      const temps: number[] = [];
+      const humids: number[] = [];
+      const deviceSet = new Set<number>();
+      
+      allHistoryData.forEach(data => {
+        const dataTime = new Date(data.timestamp);
         
-        temperatureValues.push(Number(tempAvg.toFixed(1)));
-        humidityValues.push(Number(humidityAvg.toFixed(1)));
+        // 检查数据是否在时间范围内
+        if (dataTime >= startTimeRange && dataTime <= endTimeRange) {
+          // 确保每个设备只计算一次（取该设备在时间范围内的最后一条数据）
+          if (!deviceSet.has(data.deviceId)) {
+            deviceSet.add(data.deviceId);
+            temps.push(data.temperature);
+            humids.push(data.humidity);
+          }
+        }
+      });
+      
+      // 如果有数据，计算平均值
+      if (temps.length > 0) {
+        times.push(timeKey);
+        
+        const tempAvg = temps.reduce((sum, val) => sum + val, 0) / temps.length;
+        const humidityAvg = humids.reduce((sum, val) => sum + val, 0) / humids.length;
+        
+        temperatureValues.push(Number(tempAvg.toFixed(2)));
+        humidityValues.push(Number(humidityAvg.toFixed(2)));
       }
     });
     
@@ -607,13 +647,23 @@ const fetchSensorData = async (deviceId: number) => {
         };
       }
       
+      // 过滤掉无效数据（温度为0或湿度为0的数据）
+      const validData = allHistoryData.filter(data => data.temperature !== 0 && data.humidity !== 0);
+      
+      if (validData.length === 0) {
+        return {
+          temperature: { max: 0, min: 0 },
+          humidity: { max: 0, min: 0 }
+        };
+      }
+      
       // 计算温度最高最低
-      const temperatures = allHistoryData.map(data => data.temperature);
+      const temperatures = validData.map(data => data.temperature);
       const tempMax = Math.max(...temperatures);
       const tempMin = Math.min(...temperatures);
       
       // 计算湿度最高最低
-      const humidities = allHistoryData.map(data => data.humidity);
+      const humidities = validData.map(data => data.humidity);
       const humidityMax = Math.max(...humidities);
       const humidityMin = Math.min(...humidities);
       
@@ -622,6 +672,51 @@ const fetchSensorData = async (deviceId: number) => {
         humidity: { max: humidityMax, min: humidityMin }
       };
     };
+
+  // 获取实时温湿度数据（2分钟内，1组）
+  const fetchRealtimeSensorData = async (deviceId: number) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        console.error('未登录，无法获取实时传感器数据');
+        return null;
+      }
+
+      // 使用分组统计接口，2分钟内，1组
+      const params = new URLSearchParams({
+        period: '120', // 2分钟（秒）
+        group: '1',    // 1组
+        device_id: deviceId.toString()
+      });
+
+      const response = await fetch(`/api/sensors/grouped?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.code === 200 && data.data && Array.isArray(data.data) && data.data.length > 0) {
+        const item = data.data[0];
+        return {
+          temperature: Number(item.avg_temperature.toFixed(2)),
+          humidity: Number(item.avg_humidity.toFixed(2))
+        };
+      }
+
+      return null;
+    } catch (error) {
+      console.error('获取实时传感器数据失败:', error);
+      return null;
+    }
+  };
   
   return {
     devices,
@@ -647,6 +742,7 @@ const fetchSensorData = async (deviceId: number) => {
     getDeviceAverageData,
     getDeviceExtremaData,
     fetchSensorData,
+    fetchRealtimeSensorData,
     fetchAllSensorsData,
     fetchDevices,
     getOrUpdateDevices,

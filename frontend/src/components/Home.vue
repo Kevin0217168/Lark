@@ -80,7 +80,7 @@
     <div class="chart-section">
       <div class="chart-card">
         <div class="chart-header">
-          <h3 class="chart-title">所有设备平均值</h3>
+          <h3 class="chart-title">所有设备平均值 <span class="time-range">(最近24小时)</span></h3>
         </div>
         <div ref="averageChartRef" class="chart"></div>
       </div>
@@ -106,7 +106,8 @@ const {
   getDeviceAverageData,
   getDeviceExtremaData,
   fetchDevices,
-  getOrUpdateDevices
+  getOrUpdateDevices,
+  fetchDeviceHistoryData
 } = useDeviceStore();
 
 // 计算设备统计信息
@@ -273,6 +274,8 @@ onMounted(async () => {
   window.addEventListener('resize', handleResize);
   // 从后端获取设备数据
   await getOrUpdateDevices();
+  // 获取所有设备的历史数据用于平均值图表
+  await fetchDeviceHistoryData();
   // 初始化图表
   initChart();
 });
@@ -280,6 +283,12 @@ onMounted(async () => {
 // 监听设备数据变化
 watch(devices, () => {
   // 设备数据变化时重新初始化图表
+  initChart();
+}, { deep: true });
+
+// 监听历史数据变化
+watch(deviceHistoryData, () => {
+  // 历史数据变化时重新初始化图表
   initChart();
 }, { deep: true });
 
@@ -474,14 +483,14 @@ onUnmounted(() => {
 .env-max {
   font-size: 16px;
   font-weight: 600;
-  color: #ff6b6b;
+  color: #ffffff;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
 .env-min {
   font-size: 16px;
   font-weight: 600;
-  color: #69c0ff;
+  color: #ffffff;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
@@ -603,6 +612,13 @@ onUnmounted(() => {
   font-weight: 600;
   color: #303133;
   margin: 0;
+}
+
+.time-range {
+  font-size: 12px;
+  color: #909399;
+  font-weight: normal;
+  margin-left: 8px;
 }
 
 .time-select {

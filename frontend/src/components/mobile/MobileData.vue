@@ -148,15 +148,15 @@
       <!-- 图表 -->
       <div class="chart-section">
         <div class="chart-card">
-          <h3>所有设备平均值</h3>
+          <h3>所有设备平均值 <span class="time-range">(最近6小时)</span></h3>
           <div ref="averageChartRef" class="chart"></div>
         </div>
         <div class="chart-card">
-          <h3>温度数据</h3>
+          <h3>温度数据 <span class="time-range">(最近6小时)</span></h3>
           <div ref="temperatureChartRef" class="chart"></div>
         </div>
         <div class="chart-card">
-          <h3>湿度数据</h3>
+          <h3>湿度数据 <span class="time-range">(最近6小时)</span></h3>
           <div ref="humidityChartRef" class="chart"></div>
         </div>
        
@@ -244,7 +244,7 @@ const getToken = () => {
   return localStorage.getItem('accessToken');
 };
 
-const { getDevices, getDeviceHistoryData, getDeviceAverageData, fetchDevices, getOrUpdateDeviceHistoryData } = useDeviceStore();
+const { getDevices, getDeviceHistoryData, getDeviceAverageData, fetchDevices, getOrUpdateDeviceHistoryData, updateDevice, fetchRealtimeSensorData } = useDeviceStore();
 const devices = getDevices();
 
 const props = defineProps<{
@@ -257,16 +257,64 @@ const selectedDeviceId = ref<number | null>(null);
 
 const selectedDevice = computed(() => {
   if (!selectedDeviceId.value) return null;
-  return devices.find(device => device.id === selectedDeviceId.value) || null;
+  // 每次计算时重新获取最新的设备列表
+  const latestDevices = getDevices();
+  return latestDevices.find(device => device.id === selectedDeviceId.value) || null;
 });
 
 const isWebSocketConnected = computed(() => {
   return ws !== null && ws.readyState === WebSocket.OPEN;
 });
 
+// 实时温湿度数据定时器
+let realtimeDataTimer: number | null = null;
+
+// 获取实时温湿度数据
+const fetchRealtimeData = async () => {
+  if (!selectedDeviceId.value) return;
+  
+  const sensorData = await fetchRealtimeSensorData(selectedDeviceId.value);
+  if (sensorData) {
+    updateDevice(selectedDeviceId.value, { 
+      temperature: sensorData.temperature, 
+      humidity: sensorData.humidity 
+    });
+    console.log(`[实时数据] 设备 ${selectedDeviceId.value} 温度: ${sensorData.temperature}°C, 湿度: ${sensorData.humidity}%`);
+  }
+};
+
+// 启动实时数据定时器
+const startRealtimeDataTimer = () => {
+  // 先清除旧的定时器
+  stopRealtimeDataTimer();
+  
+  // 立即获取一次数据
+  fetchRealtimeData();
+  
+  // 每分钟获取一次数据
+  realtimeDataTimer = window.setInterval(() => {
+    fetchRealtimeData();
+  }, 60000); // 60秒
+};
+
+// 停止实时数据定时器
+const stopRealtimeDataTimer = () => {
+  if (realtimeDataTimer) {
+    clearInterval(realtimeDataTimer);
+    realtimeDataTimer = null;
+  }
+};
+
 const handleDeviceChange = async () => {
   if (selectedDevice.value) {
     ElMessage.success(`已切换到设备: ${selectedDevice.value.name}`);
+    
+    // 如果在实时界面，立即获取实时温湿度数据并启动定时器
+    if (activeTab.value === 'realtime') {
+      await fetchRealtimeData();
+      startRealtimeDataTimer();
+    }
+    
     // 如果在分析界面，需要先获取历史数据再初始化图表
     if (activeTab.value === 'analysis' && selectedDeviceId.value) {
       await getOrUpdateDeviceHistoryData(selectedDeviceId.value);
@@ -492,7 +540,8 @@ const startRealtimeMonitoring = async () => {
       return;
     }
     
-    const wsUrl = `/api/stream/viewer/ws?token=${token}`;
+    // 建立WebSocket连接（新的连接模式：一个WebSocket对应一个设备）
+    const wsUrl = `/api/stream/viewer/ws/${selectedDeviceId.value}?token=${token}`;
     connectionError.value = '正在开启ws连接';
     ws = new WebSocket(wsUrl);
     
@@ -512,11 +561,18 @@ const startRealtimeMonitoring = async () => {
         }
       }, 2500);
       
-      startDeviceStreaming();
+      // 新的连接模式不需要单独发送请求开启设备推流
     };
     
     ws.onmessage = (event) => {
       try {
+        // 检查是否是设备断开的文本消息
+        if (typeof event.data === 'string' && event.data.includes('设备已断开')) {
+          console.log('收到设备断开消息:', event.data);
+          connectionError.value = '设备已断开';
+          return;
+        }
+        
         try {
           const data = JSON.parse(event.data);
           // 检查是否是画质设置响应
@@ -526,6 +582,9 @@ const startRealtimeMonitoring = async () => {
             console.log('视频尺寸设置成功:', data);
           } else if (data.code === 1) {
             console.log('操作成功:', data.msg);
+          } else if (data.code === 400) {
+            console.error('订阅失败:', data.msg);
+            connectionError.value = '订阅失败';
           } else {
             console.error('操作失败:', data.msg);
           }
@@ -676,24 +735,7 @@ const stopRealtimeMonitoring = async () => {
   }
   
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-    if (selectedDeviceId.value) {
-      try {
-        const token = getToken();
-        console.log('取消订阅时的token:', token);
-        
-        await fetch(`/api/stream/viewer/following/${selectedDeviceId.value}`, {
-          method: 'DELETE',
-          headers: {
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        console.log('取消设备推流成功');
-      } catch (error) {
-        console.error('取消设备推流失败:', error);
-      }
-    }
-    
+    // 新的连接模式：WebSocket断开时会自动清理订阅关系
     ws.close();
     ws = null;
   }
@@ -742,9 +784,9 @@ const initCharts = () => {
   // 初始化平均图表
   if (averageChartRef.value) {
     averageChart = echarts.init(averageChartRef.value);
-    const avgData = getDeviceAverageData();
+    const avgData = getDeviceAverageData(6); // 6小时范围
     
-    // 采样12个点显示（保持24小时范围）
+    // 采样12个点显示（保持6小时范围）
     const sampledTimes = sampleData(avgData.times, 12);
     const sampledTempValues = sampleData(avgData.temperatureValues, 12);
     const sampledHumidityValues = sampleData(avgData.humidityValues, 12);
@@ -826,9 +868,14 @@ const initCharts = () => {
   // 初始化温度图表
   if (temperatureChartRef.value && selectedDeviceId.value) {
     temperatureChart = echarts.init(temperatureChartRef.value);
-    const historyData = getDeviceHistoryData(selectedDeviceId.value);
+    const allHistoryData = getDeviceHistoryData(selectedDeviceId.value);
     
-    // 采样12个点显示（保持完整时间范围）
+    // 过滤最近6小时的数据
+    const sixHoursAgo = new Date();
+    sixHoursAgo.setHours(sixHoursAgo.getHours() - 6);
+    const historyData = allHistoryData.filter(d => new Date(d.timestamp) >= sixHoursAgo);
+    
+    // 采样12个点显示（保持6小时范围）
     const sampledHistoryData = sampleData(historyData, 12);
     const tempValues = sampledHistoryData.map(d => d.temperature);
     const tempMin = Math.min(...tempValues);
@@ -892,9 +939,14 @@ const initCharts = () => {
   // 初始化湿度图表
   if (humidityChartRef.value && selectedDeviceId.value) {
     humidityChart = echarts.init(humidityChartRef.value);
-    const historyData = getDeviceHistoryData(selectedDeviceId.value);
+    const allHistoryData = getDeviceHistoryData(selectedDeviceId.value);
     
-    // 采样12个点显示（保持完整时间范围）
+    // 过滤最近6小时的数据
+    const sixHoursAgo = new Date();
+    sixHoursAgo.setHours(sixHoursAgo.getHours() - 6);
+    const historyData = allHistoryData.filter(d => new Date(d.timestamp) >= sixHoursAgo);
+    
+    // 采样12个点显示（保持6小时范围）
     const sampledHistoryData = sampleData(historyData, 12);
     const humidityValues = sampledHistoryData.map(d => d.humidity);
     const humidityMin = Math.min(...humidityValues);
@@ -966,15 +1018,17 @@ const handleResize = () => {
 };
 
 // 监听activeTab变化
-watch(() => props.activeTab, (newTab) => {
+watch(() => props.activeTab, async (newTab) => {
   if (newTab === 'analysis') {
+    // 停止实时数据定时器
+    stopRealtimeDataTimer();
+    
+    // 分析界面需要选择第一个设备并获取所有设备的历史数据
     if (devices.length > 0 && !selectedDeviceId.value) {
       selectedDeviceId.value = devices[0]?.id || null;
     }
-    // 分析界面需要获取历史数据来显示图表
-    if (selectedDeviceId.value) {
-      getOrUpdateDeviceHistoryData(selectedDeviceId.value);
-    }
+    // 分析界面需要获取所有设备的历史数据来显示图表
+    await getOrUpdateDeviceHistoryData(); // 不传参数，获取所有设备数据
     nextTick(() => {
       initCharts();
     });
@@ -982,7 +1036,15 @@ watch(() => props.activeTab, (newTab) => {
     if (devices.length > 0 && !selectedDeviceId.value) {
       selectedDeviceId.value = devices[0]?.id || null;
     }
+    // 立即获取实时温湿度数据并启动定时器
+    if (selectedDeviceId.value) {
+      await fetchRealtimeData();
+      startRealtimeDataTimer();
+    }
   } else if (newTab === 'history') {
+    // 停止实时数据定时器
+    stopRealtimeDataTimer();
+    
     if (devices.length > 0 && !historyDeviceId.value) {
       historyDeviceId.value = devices[0]?.id || null;
     }
@@ -1026,18 +1088,23 @@ onMounted(async () => {
   if (devices.length > 0) {
     if (activeTab.value === 'realtime' && !selectedDeviceId.value) {
       selectedDeviceId.value = devices[0]?.id || null;
+      // 立即获取实时温湿度数据并启动定时器
+      if (selectedDeviceId.value) {
+        await fetchRealtimeData();
+        startRealtimeDataTimer();
+      }
     } else if (activeTab.value === 'history' && !historyDeviceId.value) {
       historyDeviceId.value = devices[0]?.id || null;
       // 获取历史数据
       if (historyDeviceId.value) {
         await getOrUpdateDeviceHistoryData(historyDeviceId.value);
       }
-    } else if (activeTab.value === 'analysis' && !selectedDeviceId.value) {
-      selectedDeviceId.value = devices[0]?.id || null;
-      // 分析界面也需要获取历史数据来显示图表
-      if (selectedDeviceId.value) {
-        await getOrUpdateDeviceHistoryData(selectedDeviceId.value);
+    } else if (activeTab.value === 'analysis') {
+      // 分析界面需要选择第一个设备并获取所有设备的历史数据
+      if (!selectedDeviceId.value) {
+        selectedDeviceId.value = devices[0]?.id || null;
       }
+      await getOrUpdateDeviceHistoryData(); // 不传参数，获取所有设备数据
     }
   }
   
@@ -1050,6 +1117,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   stopRealtimeMonitoring();
+  stopRealtimeDataTimer();
   window.removeEventListener('resize', handleResize);
   temperatureChart?.dispose();
   humidityChart?.dispose();
@@ -1328,6 +1396,13 @@ onUnmounted(() => {
   font-size: 16px;
   font-weight: 600;
   color: #303133;
+}
+
+.chart-card h3 .time-range {
+  font-size: 12px;
+  font-weight: 400;
+  color: #909399;
+  margin-left: 8px;
 }
 
 .chart {

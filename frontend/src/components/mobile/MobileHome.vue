@@ -79,7 +79,7 @@
     <div class="mobile-chart-section">
       <div class="chart-card">
         <div class="chart-header">
-          <h3 class="chart-title">所有设备平均值</h3>
+          <h3 class="chart-title">所有设备平均值 <span class="time-range">(最近6小时)</span></h3>
         </div>
         <div ref="averageChartRef" class="chart"></div>
       </div>
@@ -154,7 +154,7 @@ const initChart = () => {
     }
     averageChart = echarts.init(averageChartRef.value);
     
-    const avgData = getDeviceAverageData();
+    const avgData = getDeviceAverageData(6); // 6小时范围
     
     averageChart.setOption({
       tooltip: {
@@ -179,7 +179,7 @@ const initChart = () => {
       },
       yAxis: {
         type: 'value',
-        name: '数值',
+        name: '数值', 
         axisLabel: {
           fontSize: 10
         }
@@ -291,7 +291,7 @@ onUnmounted(() => {
 }
 
 .mobile-stats-card.blue {
-  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  background: linear-gradient(135deg, #4a8fe7 0%, #0099ff 100%);
 }
 
 .mobile-stats-card.red {
@@ -423,12 +423,12 @@ onUnmounted(() => {
 }
 
 .env-max {
-  color: #ff6b6b;
+  color: #ffffff;
   background: rgba(255, 107, 107, 0.15);
 }
 
 .env-min {
-  color: #7077ff;
+  color: #ffffff;
   background: rgba(77, 171, 247, 0.15);
 }
 
@@ -523,6 +523,13 @@ onUnmounted(() => {
   font-weight: 600;
   color: #303133;
   margin: 0;
+}
+
+.chart-title .time-range {
+  font-size: 12px;
+  font-weight: 400;
+  color: #909399;
+  margin-left: 8px;
 }
 
 .chart {
