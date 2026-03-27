@@ -63,11 +63,33 @@ import Sider from "./components/Sider.vue";
 import MobilePage from "./pages/MobilePage.vue";
 import { shouldUseMobilePage } from "./utils/mobileAdapter";
 
-import { RouterView, RouterLink, useRoute } from "vue-router";
+import { RouterView, RouterLink, useRoute, useRouter } from "vue-router";
+import { ElMessage } from "element-plus";
 
 const route = useRoute();
+const router = useRouter();
 const activeTab = ref<string>('realtime');
 const isMobile = ref<boolean>(false);
+
+// 全局401错误处理
+const handle401Error = () => {
+  ElMessage.error('登录已过期，请重新登录');
+  // 清除本地存储的token
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+  // 跳转到登录页面
+  router.push('/Login');
+};
+
+// 监听所有fetch请求的401错误
+const originalFetch = window.fetch;
+window.fetch = async (...args) => {
+  const response = await originalFetch(...args);
+  if (response.status === 401) {
+    handle401Error();
+  }
+  return response;
+};
 
 // 检查是否是登录或注册页面
 const isAuthPage = computed(() => {
