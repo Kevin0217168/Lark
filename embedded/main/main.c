@@ -76,7 +76,8 @@ static void i2c_bus_recovery(int sda_pin, int scl_pin)
 
 static const char *TAG = "main";
 // 默认密钥（首次烧录/未写入时使用）
-char secret[SECRET_MAX_LEN] = "2d3173bfc1f64da0894a3257e1636d72";
+char secret[SECRET_MAX_LEN] = "b1f9562544a348c98c57a66b32a92d32";
+// char secret[SECRET_MAX_LEN] = "2d3173bfc1f64da0894a3257e1636d72";
 
 // 设备1
 // static const char *secret = "b1f9562544a348c98c57a66b32a92d32";
@@ -258,8 +259,8 @@ void app_main(void)
     snprintf(path_data, sizeof(path_data), "/api/stream/device/ws?secret=%s", secret);
     // 注册回调函数
     Websocket_event_handler_register(NULL, ws_text_handler);
-    // WebsocketStart("wss://lark.mintlab.top", path_data, 443);
-    WebsocketStart("ws://192.168.1.200", path_data, 8080);
+    WebsocketStart("wss://lark.mintlab.top", path_data, 443);
+    // WebsocketStart("ws://192.168.1.200", path_data, 8080);
 
     // 等待ws连接成功
     while (!WebsocketIsConnected())
