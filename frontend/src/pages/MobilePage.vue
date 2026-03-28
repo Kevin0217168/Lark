@@ -87,7 +87,7 @@
       <HomePage v-if="route.path === '/Home'" />
       <MobileData v-else-if="route.path === '/Data' || route.path === '/Stream'" :activeTab="activeTab" />
       <DevicePage v-else-if="route.path === '/Device'" :activeTab="activeTab" />
-      <MobileProfile v-else-if="route.path === '/Profile'" />
+      <ProfilePage v-else-if="route.path === '/Profile'" />
       <MobileUserManage v-else-if="route.path === '/UserManage' && isAdmin" />
       <div v-else class="mobile-placeholder">
         <h2>移动端页面</h2>
@@ -147,7 +147,7 @@ import { HomeFilled, DataAnalysis, Monitor, User, Grid } from '@element-plus/ico
 import HomePage from '../components/HomePage.vue';
 import MobileData from '../components/mobile/MobileData.vue';
 import DevicePage from '../components/DevicePage.vue';
-import MobileProfile from '../components/mobile/MobileProfile.vue';
+import ProfilePage from '../components/ProfilePage.vue';
 import MobileUserManage from '../components/mobile/MobileUserManage.vue';
 
 const route = useRoute();
