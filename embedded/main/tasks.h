@@ -18,6 +18,9 @@ bool diagnostic(void);
 /** 摄像头推流信号量（进入推流模式时释放，唤醒传输任务） */
 extern SemaphoreHandle_t camera_stream_sem;
 
+/** OTA 进行中标志，其他 TLS 任务应跳过 HTTP 请求以释放内部 SRAM */
+extern volatile bool ota_in_progress;
+
 /** 初始化摄像头推流信号量，须在创建 camera_transmit_task 之前调用 */
 void camera_stream_sem_init(void);
 

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "esp_app_format.h"
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
@@ -84,6 +85,12 @@ void app_main(void)
     // SNTP获取时间
     obtain_time();
 
+    // ----------------------远程日志 阶段二：启动 POST 上传--------------------------
+    // 网络已就绪，启动 flush 任务，通过独立 HTTP POST 批量上传日志
+    remote_log_start("https://lark.mintlab.top", "/api/logs", 443, secret);
+    // remote_log_start("http://192.168.1.200", "/api/logs", 8080, secret);
+
+
     // ---------------------版本更新检测--------------------------
     const esp_app_desc_t* desc;
     desc = esp_app_get_description();
@@ -127,16 +134,8 @@ void app_main(void)
         }
     }
 
-    // ----------------------OTA 验证完成：所有诊断通过--------------------------
-    if (ota_pending) {
-        ESP_LOGI(TAG, "OTA 诊断全部通过, 确认新固件有效");
-        esp_ota_mark_app_valid_cancel_rollback();
-    }
+    // ----------------------OTA 验证（网络部分）推迟到 ota_task 版本检查通过后确认--------------------------
 
-    // ----------------------远程日志 阶段二：启动 POST 上传--------------------------
-    // 网络已就绪，启动 flush 任务，通过独立 HTTP POST 批量上传日志
-    remote_log_start("https://lark.mintlab.top", "/api/logs", 443, secret);
-    // remote_log_start("http://192.168.1.200", "/api/logs", 8080, secret);
 
     // ----------------------初始化传感器-----------------------------
     // 如果不是第一次 OTA 运行（或者已经诊断过），则在这里正常初始化
@@ -179,14 +178,40 @@ void app_main(void)
     // ----------------------OTA 任务（在传感器/摄像头初始化完成后启动）-----------
     // 注意：OTA 必须在摄像头初始化之后启动，因为 OTA flash 擦写 与
     // 摄像头 PSRAM DMA 共享 SPI 总线，同时运行会触发 WDT
-    static uint8_t ota_task_Handle_ParameterToPass;
+    // 将 ota_pending 传给 ota_task，版本检查通过后在任务内确认固件有效
+    SemaphoreHandle_t ota_sem = NULL;
+    ota_sem = xSemaphoreCreateBinary();
+    configASSERT(ota_sem);
+
     TaskHandle_t ota_task_Handle = NULL;
-    xTaskCreate(ota_task, "ota_task", 8192, &ota_task_Handle_ParameterToPass, 1, &ota_task_Handle);
+    
+    ota_context_t ota_context = {
+        .ota_pending_flag = ota_pending,
+        .ota_sem = ota_sem
+    };
+    
+    xTaskCreate(ota_task, "ota_task", 8192, &ota_context, 1, &ota_task_Handle);
     configASSERT(ota_task_Handle);
 
     // -------------------------开启任务-------------------------------
+    ESP_LOGI(TAG, "等待 OTA 任务...");
+    xSemaphoreTake(ota_sem, portMAX_DELAY);
+    ESP_LOGI(TAG, "OTA 任务已完成，继续启动其他任务...");
+
+    // OTA 待验证流程中，摄像头在 OTA 任务写 flash 前被关闭，需要重新初始化
+    if (ota_pending) {
+        ESP_LOGI(TAG, "重新初始化摄像头...");
+        i2c_bus_recovery(26, 27);
+        CameraInit();
+        sensor_t *s2 = esp_camera_sensor_get();
+        if (s2 != NULL) {
+            s2->set_framesize(s2, FRAMESIZE_SVGA);
+            s2->set_vflip(s2, 1);
+        }
+    }
 
     // 开启图像传输任务
+    // 所有用户任务栈分配到 PSRAM，释放 ~32KB 内部 SRAM 给 TLS 握手使用
     camera_stream_sem_init();   // 必须在创建任务之前初始化信号量
     static uint8_t ucParameterToPass;
     TaskHandle_t xHandle = NULL;
@@ -196,7 +221,7 @@ void app_main(void)
     // 开启传感器传输任务（TLS HTTPS POST 需要至少 8192 字节栈空间）
     static uint8_t sensor_data_transmit_task_Handle_ParameterToPass;
     TaskHandle_t sensor_data_transmit_task_Handle = NULL;
-    xTaskCreate(sensor_data_transmit_task, "sensor_data_transmit_task", 8192, &sensor_data_transmit_task_Handle_ParameterToPass, 1, &sensor_data_transmit_task_Handle);
+    xTaskCreate(sensor_data_transmit_task, "sensor_data_transmit_task", 6144, &sensor_data_transmit_task_Handle_ParameterToPass, 1, &sensor_data_transmit_task_Handle);
     configASSERT(sensor_data_transmit_task_Handle);
 
     // 开启健康监控任务（检测 WiFi/WS 长时间断连自动重启）

@@ -7,6 +7,11 @@
 #include "esp_app_format.h"
 #include <errno.h>
 
+/* 来自 main 组件的外部符号（避免循环依赖不直接 include） */
+extern volatile bool ota_in_progress;
+extern void remote_log_pause(void);
+extern void remote_log_resume(void);
+
 static const char *TAG = "ota";
 
 // ===================== OTA 服务器配置 =====================
@@ -18,6 +23,8 @@ static const char *TAG = "ota";
 // #define OTA_API_DOWNLOAD "http://192.168.1.200:8080/api/firmwares/download"
 
 #define OTA_RECV_TIMEOUT       30000
+#define OTA_CHECK_MAX_RETRY    6        // 版本检查最大重试次数
+#define OTA_CHECK_RETRY_MS     3000     // 重试间隔（等待其他 TLS 连接释放内部 SRAM）
 
 #define BUFFSIZE 8196
 
@@ -321,7 +328,17 @@ static bool ota_download_and_update(const esp_partition_t *running)
  */
 void ota_task(void *pvParameter)
 {
-    ESP_LOGI(TAG, "OTA task started");
+    ota_context_t *context = (ota_context_t *)pvParameter;
+    bool ota_pending = context ? context->ota_pending_flag : false;
+    SemaphoreHandle_t ota_sem = context ? context->ota_sem : NULL;
+
+    ESP_LOGI(TAG, "OTA task started (ota_pending=%d)", ota_pending);
+
+    /* 暂停其他 TLS 任务，释放内部 SRAM 给 OTA TLS 握手使用 */
+    ota_in_progress = true;
+    remote_log_pause();
+    /* 等待其他任务当前的 TLS 连接释放 */
+    vTaskDelay(pdMS_TO_TICKS(2000));
 
     const esp_partition_t *configured = esp_ota_get_boot_partition();
     const esp_partition_t *running = esp_ota_get_running_partition();
@@ -336,6 +353,10 @@ void ota_task(void *pvParameter)
     esp_app_desc_t running_info;
     if (esp_ota_get_partition_description(running, &running_info) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to get running firmware description");
+        if (ota_pending) {
+            ESP_LOGE(TAG, "OTA 检查失败, 回滚到上一个版本...");
+            esp_ota_mark_app_invalid_rollback_and_reboot();
+        }
         goto exit;
     }
     ESP_LOGI(TAG, "Running firmware version: %s", running_info.version);
@@ -343,7 +364,20 @@ void ota_task(void *pvParameter)
     ESP_LOGI(TAG, "Checking for firmware update...");
 
     char latest_version[32] = {0};
-    if (ota_check_latest_version(latest_version, sizeof(latest_version))) {
+    bool version_ok = false;
+    for (int attempt = 0; attempt < OTA_CHECK_MAX_RETRY; attempt++) {
+        if (ota_check_latest_version(latest_version, sizeof(latest_version))) {
+            version_ok = true;
+            break;
+        }
+        if (attempt + 1 < OTA_CHECK_MAX_RETRY) {
+            ESP_LOGW(TAG, "Version check failed (%d/%d), %dms 后重试...",
+                     attempt + 1, OTA_CHECK_MAX_RETRY, OTA_CHECK_RETRY_MS);
+            vTaskDelay(pdMS_TO_TICKS(OTA_CHECK_RETRY_MS));
+        }
+    }
+
+    if (version_ok) {
         if (strcmp(latest_version, running_info.version) != 0) {
             ESP_LOGI(TAG, "New firmware available: %s (current: %s), starting OTA download...",
                      latest_version, running_info.version);
@@ -357,9 +391,30 @@ void ota_task(void *pvParameter)
         }
     } else {
         ESP_LOGW(TAG, "Failed to check latest firmware version");
+        if (ota_pending) {
+            ESP_LOGE(TAG, "OTA 版本检查失败, 回滚到上一个版本...");
+            esp_ota_mark_app_invalid_rollback_and_reboot();
+        }
+    }
+
+    // OTA 检查任务执行成功，确认新固件有效
+    if (ota_pending) {
+        ESP_LOGI(TAG, "OTA 诊断全部通过, 确认新固件有效");
+        // mark_valid 需要写 flash，与摄像头 PSRAM DMA 共享 SPI 总线
+        // diagnostic() 已初始化摄像头，必须先关闭以避免 WDT
+        ESP_LOGI(TAG, "关闭摄像头以安全写入 otadata...");
+        esp_camera_deinit();
+        esp_ota_mark_app_valid_cancel_rollback();
     }
 
 exit:
+    /* 恢复其他 TLS 任务 */
+    ota_in_progress = false;
+    remote_log_resume();
+
     ESP_LOGI(TAG, "OTA task finished, deleting self");
+    if (ota_sem) {
+        xSemaphoreGive(ota_sem);  // 通知主任务 OTA 流程已结束
+    }
     vTaskDelete(NULL);
 }

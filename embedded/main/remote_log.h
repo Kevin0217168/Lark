@@ -48,6 +48,19 @@ esp_err_t remote_log_start(const char *base_url, const char *path,
 bool remote_log_is_connected(void);
 
 /**
+ * @brief 暂停远程日志上传（释放 TLS 连接，释放内部 SRAM 给 OTA 使用）
+ *
+ * flush 任务继续运行但跳过 HTTP 发送，日志暂存在环形缓冲区。
+ * 持久 HTTP client 会被销毁以释放 TLS 会话占用的内部 SRAM。
+ */
+void remote_log_pause(void);
+
+/**
+ * @brief 恢复远程日志上传
+ */
+void remote_log_resume(void);
+
+/**
  * @brief 停止远程日志（恢复默认 vprintf）
  */
 void remote_log_deinit(void);

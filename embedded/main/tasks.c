@@ -28,6 +28,9 @@ extern bool Wifi_isConnected;
 /* ───── 摄像头推流信号量 ───── */
 SemaphoreHandle_t camera_stream_sem = NULL;
 
+/* ───── OTA 进行中标志 ───── */
+volatile bool ota_in_progress = false;
+
 void camera_stream_sem_init(void)
 {
     camera_stream_sem = xSemaphoreCreateBinary();
@@ -59,8 +62,6 @@ bool diagnostic(void)
         return false;
     }
     ESP_LOGI(TAG, "摄像头初始化成功");
-
-    ESP_LOGI(TAG, "固件诊断通过");
     return true;
 }
 
@@ -92,11 +93,18 @@ void camera_transmit_task(void *pvParameter)
 
 /* ───────────────── 传感器数据采集与上报 ───────────────── */
 
+// 传感器上报重试配置
+#define SENSOR_POST_MAX_RETRY   3       // 最大重试次数
+#define SENSOR_POST_RETRY_MS    3000    // 重试间隔 3 秒（等待其他 TLS 连接释放内部 SRAM）
+
 void sensor_data_transmit_task(void *pvParameter)
 {
     (void)pvParameter;
     time_t now = 0;
     struct tm timeinfo = {0};
+
+    // 启动后延迟 5 秒，错开 OTA/rlog 首次 TLS 握手的内存高峰
+    vTaskDelay(pdMS_TO_TICKS(5000));
 
     while (1)
     {
@@ -131,11 +139,30 @@ void sensor_data_transmit_task(void *pvParameter)
                          secret, temp_c, hum_pct);
             }
 
-            int ret_code = WifiSecurityRequest("https://lark.mintlab.top", "/api/sensors", 443,
+            // 带重试的 HTTPS POST（并发 TLS 握手可能偶发失败）
+            int ret_code = ESP_FAIL;
+            if (ota_in_progress) {
+                ESP_LOGW(TAG, "OTA 进行中，跳过传感器上报");
+            } else {
+            for (int attempt = 0; attempt < SENSOR_POST_MAX_RETRY; attempt++) {
+                if (ota_in_progress) {
+                    ESP_LOGW(TAG, "OTA 进行中，取消传感器上报重试");
+                    break;
+                }
+                ret_code = WifiSecurityRequest("https://lark.mintlab.top", "/api/sensors", 443,
                                                WS_CLINENT_METHOD_POST, post_data, NULL);
+                if (ret_code == ESP_OK) {
+                    break;
+                }
+                ESP_LOGW(TAG, "传感器上报失败 (%d/%d), %dms 后重试...",
+                         attempt + 1, SENSOR_POST_MAX_RETRY, SENSOR_POST_RETRY_MS);
+                vTaskDelay(pdMS_TO_TICKS(SENSOR_POST_RETRY_MS));
+            }
+            }
             if (ret_code != ESP_OK)
             {
-                ESP_LOGE(TAG, "传感器数据上报失败, err=%d", ret_code);
+                ESP_LOGE(TAG, "传感器数据上报失败 (已重试 %d 次), err=%d",
+                         SENSOR_POST_MAX_RETRY, ret_code);
             }
         }
         else
@@ -178,9 +205,11 @@ static void log_system_status(void)
     int pct_heap     = (total_internal + total_spiram) ?
         (int)(free_heap * 100 / (total_internal + total_spiram)) : 0;
 
-    ESP_LOGI("sys_mon", "[内存] 堆=%u/%uB(%d%%) 最低=%uB | 内部=%u/%uB(%d%%) | PSRAM=%u/%uB(%d%%)",
+    size_t largest_internal = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
+
+    ESP_LOGI("sys_mon", "[内存] 堆=%u/%uB(%d%%) 最低=%uB | 内部=%u/%uB(%d%%) 最大连续=%uB | PSRAM=%u/%uB(%d%%)",
         (unsigned)free_heap, (unsigned)(total_internal + total_spiram), pct_heap, (unsigned)min_free_heap,
-        (unsigned)free_internal, (unsigned)total_internal, pct_internal,
+        (unsigned)free_internal, (unsigned)total_internal, pct_internal, (unsigned)largest_internal,
         (unsigned)free_spiram, (unsigned)total_spiram, pct_spiram);
 
     /* ── 任务列表（逐条打印，每条 < 120 字节，远程日志不会截断） ── */

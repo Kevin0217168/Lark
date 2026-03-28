@@ -197,9 +197,8 @@ static bool set_device(const char *key, cJSON *values_item, cJSON *json)
 
     if (strcasecmp(key, "ota") == 0) {
         ESP_LOGI(TAG, "收到OTA指令，启动OTA任务...");
-        static uint8_t ota_param;
         TaskHandle_t h = NULL;
-        if (xTaskCreate(ota_task, "ota_task_ws", 8192, &ota_param, 1, &h) == pdPASS) {
+        if (xTaskCreate(ota_task, "ota_task_ws", 8192, NULL, 1, &h) == pdPASS) {
             ws_reply(1, "OTA任务已启动.", key, "ok");
         } else {
             ws_reply(0, "OTA任务启动失败.", key, "");
