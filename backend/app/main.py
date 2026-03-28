@@ -11,6 +11,7 @@ from userapi import User, Login
 from deviceapi import Device
 from sensorapi import SensorData
 from firmwareapi import Firmware
+from logapi import DeviceLog
 
 import os
 from Logset import async_log, logger, request_logger, log_executor
@@ -35,7 +36,7 @@ app = FastAPI(
     lifespan=lifespan,
     title="云雀 Lark",
     summary="物联网系统后端API开放接口文档",
-    version="0.6.1",
+    version="0.7.1",
     root_path="/api",
     docs_url=None,
     redoc_url=None,
@@ -56,6 +57,7 @@ app.include_router(Login.router)
 app.include_router(Device.router)
 app.include_router(SensorData.router)
 app.include_router(Firmware.router)
+app.include_router(DeviceLog.router)
 
 # 挂载静态文件
 from fastapi.staticfiles import StaticFiles
