@@ -230,10 +230,10 @@ const { devices, getDeviceLogs, addDevice, updateDevice, deleteDevice } = store;
 const fetchDevices = async () => {
   try {
     await store.fetchDevices();
-    // 获取每个设备的固件版本
-    devices.value.forEach((device: Device) => {
-      fetchDeviceVersion(device.id);
-    });
+    // 获取每个设备的固件版本（顺序拉取，避免并发刷新 token / 请求风暴）
+      for (const device of devices.value as Device[]) {
+        await fetchDeviceVersion(device.id);
+      }
   } catch (error) {
     console.error('获取设备列表出错:', error);
     ElMessage.error('获取设备列表失败，请检查网络连接');
@@ -243,37 +243,13 @@ const fetchDevices = async () => {
 // 获取设备固件版本
 const fetchDeviceVersion = async (deviceId: number) => {
   try {
-    // 先尝试刷新token
-    const refreshToken = localStorage.getItem('refreshToken');
-    if (refreshToken) {
-      const refreshResponse = await fetch('/api/auth/refresh', {
-        method: 'POST',
+    // 调用查询固件版本API（认证及刷新逻辑由全局 /api/refresh 方案或 API 层统一处理）
+      const response = await fetch(`/api/devices/${deviceId}/version`, {
+        method: 'GET',
         headers: {
-          'Content-Type': 'application/json',
           'Accept': 'application/json'
-        },
-        body: JSON.stringify({ refresh_token: refreshToken })
-      });
-
-      if (refreshResponse.ok) {
-        const refreshData = await refreshResponse.json();
-        if (refreshData.access_token) {
-          localStorage.setItem('accessToken', refreshData.access_token);
         }
-      }
-    }
-
-    // 获取最新的token
-    const token = localStorage.getItem('accessToken');
-
-    // 调用查询固件版本API
-    const response = await fetch(`/api/devices/${deviceId}/version`, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': token ? `Bearer ${token}` : ''
-      }
-    });
+      });
 
     if (response.ok) {
         const data = await response.json();
@@ -588,23 +564,20 @@ const handleDelete = (device: Device) => {
     }
     
     try {
-      // 先尝试刷新token
-      const refreshToken = localStorage.getItem('refreshToken');
-      if (refreshToken) {
-        const refreshResponse = await fetch('/api/auth/refresh', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({ refresh_token: refreshToken })
-        });
+      // 调用后端提供的刷新接口
+      const refreshResponse = await fetch('/api/refresh', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
+        },
+        credentials: 'include' // 携带cookie
+      });
 
-        if (refreshResponse.ok) {
-          const refreshData = await refreshResponse.json();
-          if (refreshData.access_token) {
-            localStorage.setItem('accessToken', refreshData.access_token);
-          }
+      if (refreshResponse.ok) {
+        const refreshData = await refreshResponse.json();
+        if (refreshData.access_token) {
+          localStorage.setItem('accessToken', refreshData.access_token);
         }
       }
 
@@ -649,7 +622,7 @@ const handleDelete = (device: Device) => {
 // 重启设备
 const handleRestart = (device: Device) => {
   ElMessageBox.confirm(
-    '确定要重启该设备吗？重启后设备将离线约500ms并重新连接。',
+    '确定要重启该设备吗？设备收到指令后约500ms执行重启。',
     '确认重启',
     {
       confirmButtonText: '确定',
@@ -664,23 +637,20 @@ const handleRestart = (device: Device) => {
     }
     
     try {
-      // 先尝试刷新token
-      const refreshToken = localStorage.getItem('refreshToken');
-      if (refreshToken) {
-        const refreshResponse = await fetch('/api/auth/refresh', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({ refresh_token: refreshToken })
-        });
+      // 调用后端提供的刷新接口
+      const refreshResponse = await fetch('/api/refresh', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
+        },
+        credentials: 'include' // 携带cookie
+      });
 
-        if (refreshResponse.ok) {
-          const refreshData = await refreshResponse.json();
-          if (refreshData.access_token) {
-            localStorage.setItem('accessToken', refreshData.access_token);
-          }
+      if (refreshResponse.ok) {
+        const refreshData = await refreshResponse.json();
+        if (refreshData.access_token) {
+          localStorage.setItem('accessToken', refreshData.access_token);
         }
       }
 
@@ -734,23 +704,20 @@ const handleUpdateFirmware = (device: Device) => {
     }
   ).then(async () => {
     try {
-      // 先尝试刷新token
-      const refreshToken = localStorage.getItem('refreshToken');
-      if (refreshToken) {
-        const refreshResponse = await fetch('/api/auth/refresh', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({ refresh_token: refreshToken })
-        });
+      // 调用后端提供的刷新接口
+      const refreshResponse = await fetch('/api/refresh', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
+        },
+        credentials: 'include' // 携带cookie
+      });
 
-        if (refreshResponse.ok) {
-          const refreshData = await refreshResponse.json();
-          if (refreshData.access_token) {
-            localStorage.setItem('accessToken', refreshData.access_token);
-          }
+      if (refreshResponse.ok) {
+        const refreshData = await refreshResponse.json();
+        if (refreshData.access_token) {
+          localStorage.setItem('accessToken', refreshData.access_token);
         }
       }
 

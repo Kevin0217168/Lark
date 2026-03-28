@@ -52,7 +52,7 @@
                   <span class="cell-value highlight">{{ selectedDevice.humidity }}%</span>
                 </div>
                 <div class="data-cell">
-                  <el-icon><Box /></el-icon>
+                  <el-icon><Monitor /></el-icon>
                   <span class="cell-label">类型</span>
                   <span class="cell-value">{{ selectedDevice.device_type || '未设置' }}</span>
                 </div>
