@@ -138,9 +138,11 @@ async def get_device_logs_text(
     text_parts = []
     for log in logs:
         char = _level_char.get(log.level, "I")
-        header = f"──── {log.timestamp.strftime('%Y-%m-%d %H:%M:%S')} [{log.level}] ────"
+        ts = log.timestamp.strftime('%Y-%m-%d %H:%M:%S')
         body = f"{char} ({log.tick}) {log.tag}: {log.content}"
-        text_parts.append(f"{header}\n{body}")
+        # 多行内容每行都加上时间和等级前缀
+        for line in body.splitlines():
+            text_parts.append(f"{ts} [{log.level}] {line}")
     return PlainTextResponse("\n".join(text_parts))
 
 

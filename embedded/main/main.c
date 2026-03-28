@@ -200,8 +200,9 @@ void app_main(void)
     configASSERT(sensor_data_transmit_task_Handle);
 
     // 开启健康监控任务（检测 WiFi/WS 长时间断连自动重启）
+    // 注意：log_system_status() 内有大量 snprintf 格式化，栈需求较大
     static uint8_t health_monitor_param;
     TaskHandle_t health_monitor_handle = NULL;
-    xTaskCreate(health_monitor_task, "health_monitor", 2048, &health_monitor_param, 1, &health_monitor_handle);
+    xTaskCreate(health_monitor_task, "health_monitor", 4096, &health_monitor_param, 1, &health_monitor_handle);
     configASSERT(health_monitor_handle);
 }

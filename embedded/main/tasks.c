@@ -5,6 +5,7 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_system.h"
+#include "esp_heap_caps.h"
 
 #include "Wifista.h"
 #include "Camera.h"
@@ -136,17 +137,87 @@ void sensor_data_transmit_task(void *pvParameter)
 
 /* ───────────────── 健康监控 ───────────────── */
 
+// 每隔多少个健康检查周期输出一次系统状态（6 × 10s = 60s）
+#define SYSTEM_STATUS_LOG_INTERVAL  6
+
+/**
+ * @brief 打印所有任务状态及系统内存使用情况（紧凑格式，适合远程日志）
+ *
+ * 内存说明：
+ *   - "堆" = esp_get_free_heap_size()，包含内部 SRAM + PSRAM 的总空闲
+ *   - "内部" = MALLOC_CAP_INTERNAL，仅芯片内置 SRAM（约 320 KB）
+ *   - "PSRAM" = MALLOC_CAP_SPIRAM，外挂 SPI RAM（板载 4 MB）
+ *   - xTaskCreate() 分配的任务栈来自 **内部 SRAM**
+ *     （如需放到 PSRAM，须用 xTaskCreateWithCaps + MALLOC_CAP_SPIRAM）
+ *   - "历史最低" 反映运行以来堆空闲的最小值，是内存泄漏的关键指标
+ */
+static void log_system_status(void)
+{
+    /* ── 内存概览（每条独立输出，避免单条日志过长被截断或被其他任务打断） ── */
+    size_t free_heap      = esp_get_free_heap_size();
+    size_t min_free_heap  = esp_get_minimum_free_heap_size();
+    size_t total_internal = heap_caps_get_total_size(MALLOC_CAP_INTERNAL);
+    size_t free_internal  = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    size_t total_spiram   = heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
+    size_t free_spiram    = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+
+    int pct_internal = total_internal ? (int)(free_internal * 100 / total_internal) : 0;
+    int pct_spiram   = total_spiram   ? (int)(free_spiram   * 100 / total_spiram)   : 0;
+    int pct_heap     = (total_internal + total_spiram) ?
+        (int)(free_heap * 100 / (total_internal + total_spiram)) : 0;
+
+    ESP_LOGI("trace", "[内存] 堆=%u/%uB(%d%%) 最低=%uB | 内部=%u/%uB(%d%%) | PSRAM=%u/%uB(%d%%)",
+        (unsigned)free_heap, (unsigned)(total_internal + total_spiram), pct_heap, (unsigned)min_free_heap,
+        (unsigned)free_internal, (unsigned)total_internal, pct_internal,
+        (unsigned)free_spiram, (unsigned)total_spiram, pct_spiram);
+
+    /* ── 任务列表（逐条打印，每条 < 120 字节，远程日志不会截断） ── */
+    UBaseType_t task_count = uxTaskGetNumberOfTasks();
+    TaskStatus_t *task_array = malloc(task_count * sizeof(TaskStatus_t));
+    if (task_array == NULL) {
+        ESP_LOGW(TAG, "[系统状态] 任务快照分配失败");
+        return;
+    }
+
+    UBaseType_t got = uxTaskGetSystemState(task_array, task_count, NULL);
+
+    static const char *state_str[] = {"运行","就绪","阻塞","挂起","删除","未知"};
+
+    ESP_LOGI("trace", "[任务×%u] %-20s %-6s %-4s %-8s",
+             (unsigned)got, "名称", "状态", "优先", "栈剩(B)");
+
+    for (UBaseType_t i = 0; i < got; i++) {
+        int st = task_array[i].eCurrentState;
+        if (st < 0 || st > 4) st = 5;
+        ESP_LOGI("trace", "  %-20s %-6s %-4u %-8u",
+                 task_array[i].pcTaskName,
+                 state_str[st],
+                 (unsigned)task_array[i].uxCurrentPriority,
+                 (unsigned)(task_array[i].usStackHighWaterMark * sizeof(StackType_t)));
+    }
+
+    free(task_array);
+}
+
 void health_monitor_task(void *pvParameter)
 {
     (void)pvParameter;
     int wifi_disconnect_count = 0;
     int ws_disconnect_count = 0;
+    int status_log_counter = 0;
 
     // 启动后等待一段时间，让系统完成初始化
     vTaskDelay(pdMS_TO_TICKS(HEALTH_CHECK_INTERVAL_MS));
 
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(HEALTH_CHECK_INTERVAL_MS));
+
+        // 定期输出系统状态（任务列表 + 内存）
+        status_log_counter++;
+        if (status_log_counter >= SYSTEM_STATUS_LOG_INTERVAL) {
+            status_log_counter = 0;
+            log_system_status();
+        }
 
         // 检查 WiFi 连接
         if (!Wifi_isConnected) {
