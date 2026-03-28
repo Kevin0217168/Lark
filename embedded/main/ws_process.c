@@ -8,7 +8,7 @@
 #include "freertos/task.h"
 #include "tasks.h"
 
-static const char *TAG = "ws_text_process";
+static const char *TAG = "ws_cmd";
 
 extern Device_t device;
 
@@ -234,13 +234,13 @@ void ws_text_handler(void *handler_args, int len, const char *data_ptr)
 {
     cJSON *json = cJSON_ParseWithLength(data_ptr, len);
     if (!json) {
-        ESP_LOGI(TAG, "收到 JSON 数据, 解析失败");
+        ESP_LOGW(TAG, "JSON 解析失败");
         ws_reply(0, "JSON 数据解析失败", "", "");
         return;
     }
 
     char *dbg = cJSON_Print(json);
-    ESP_LOGI(TAG, "收到 JSON 数据, 解析成功: \n%s\n", dbg);
+    ESP_LOGD(TAG, "收到: %s", dbg);
     cJSON_free(dbg);
 
     cJSON *code_item   = cJSON_GetObjectItemCaseSensitive(json, "code");
@@ -252,8 +252,8 @@ void ws_text_handler(void *handler_args, int len, const char *data_ptr)
     if (!cJSON_IsNumber(code_item) || !cJSON_IsString(item_item) ||
         !cJSON_IsString(key_item)  || (!cJSON_IsString(values_item) && !cJSON_IsNumber(values_item)))
     {
-        ESP_LOGE(TAG, "返回的 JSON 缺少必要字段或类型错误");
-        ws_reply(0, "返回的 JSON 缺少必要字段或类型错误", "", "");
+        ESP_LOGE(TAG, "JSON 字段缺失或类型错误");
+        ws_reply(0, "JSON 字段缺失或类型错误", "", "");
         cJSON_Delete(json);
         return;
     }

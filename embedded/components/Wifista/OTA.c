@@ -7,7 +7,7 @@
 #include "esp_app_format.h"
 #include <errno.h>
 
-static const char *TAG = "OTA";
+static const char *TAG = "ota";
 
 // ===================== OTA 服务器配置 =====================
 // 生产环境

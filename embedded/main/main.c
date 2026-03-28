@@ -33,7 +33,7 @@ Device_t device = {
 void app_main(void)
 {
     // ---------------------WIFI连接配置-------------------------
-    printf("Hello ESP-IDF!\n");
+    ESP_LOGI(TAG, "系统启动");
     esp_err_t nvs_ret = nvs_flash_init();
     if (nvs_ret == ESP_ERR_NVS_NO_FREE_PAGES || nvs_ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
@@ -45,11 +45,11 @@ void app_main(void)
     if (load_secret_from_nvs(nvs_secret, sizeof(nvs_secret)) == ESP_OK && nvs_secret[0] != '\0') {
         strncpy(secret, nvs_secret, sizeof(secret) - 1);
         secret[sizeof(secret) - 1] = '\0';
-        ESP_LOGI(TAG, "Loaded secret from NVS: %s", secret);
+        ESP_LOGI(TAG, "NVS 密钥已加载 (..%s)", secret + (strlen(secret) > 4 ? strlen(secret) - 4 : 0));
     } else {
         // 第一次启动或未写入过，写入默认密钥
         save_secret_to_nvs(secret);
-        ESP_LOGI(TAG, "Saved default secret to NVS: %s", secret);
+        ESP_LOGI(TAG, "默认密钥已写入 NVS");
     }
 
     // ----------------------远程日志 阶段一：安装钩子--------------------------
@@ -87,17 +87,16 @@ void app_main(void)
     // ---------------------版本更新检测--------------------------
     const esp_app_desc_t* desc;
     desc = esp_app_get_description();
-    ESP_LOGI(TAG, "---------------------固件信息---------------------------------");
-    ESP_LOGI(TAG, "当前运行的版本: Version: %s\n", desc->version);
+    ESP_LOGI(TAG, "固件版本: %s", desc->version);
 
     // OTA 硬件诊断（仅在 OTA 待验证时执行，网络验证推迟到 WS 连接后）
     if (ota_pending) {
-        ESP_LOGI(TAG, "新版本固件, 开始硬件诊断...");
+        ESP_LOGI(TAG, "新版本固件诊断中...");
         if (!diagnostic()) {
             ESP_LOGE(TAG, "硬件诊断失败! 回滚到上一个版本...");
             esp_ota_mark_app_invalid_rollback_and_reboot();
         }
-        ESP_LOGI(TAG, "硬件诊断通过, 继续验证网络连接...");
+        ESP_LOGI(TAG, "硬件诊断通过, 继续验证网络...");
     } else if (!ota_state_valid) {
         ESP_LOGW(TAG, "无法获取 OTA 状态 (rollback 可能未启用), 跳过诊断");
     }
@@ -130,7 +129,7 @@ void app_main(void)
 
     // ----------------------OTA 验证完成：所有诊断通过--------------------------
     if (ota_pending) {
-        ESP_LOGI(TAG, "OTA 诊断全部通过（硬件 + 网络），确认新固件有效");
+        ESP_LOGI(TAG, "OTA 诊断全部通过, 确认新固件有效");
         esp_ota_mark_app_valid_cancel_rollback();
     }
 

@@ -8,6 +8,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+static const char *TAG = "sht4x_i2c";
+
 // 配置
 #define I2C_MASTER_NUM      I2C_NUM_0
 #define I2C_MASTER_SCL_IO   14
@@ -33,7 +35,7 @@ static i2c_master_dev_handle_t get_or_create_device(uint8_t address) {
         }
     }
     if (g_dev_count >= MAX_I2C_DEVICES) {
-        ESP_LOGE("SENSIRION", "Too many I2C devices");
+        ESP_LOGE(TAG, "Too many I2C devices");
         return NULL;
     }
     i2c_device_config_t dev_config = {
@@ -45,11 +47,11 @@ static i2c_master_dev_handle_t get_or_create_device(uint8_t address) {
     esp_err_t ret = i2c_master_bus_add_device(g_i2c_bus_handle, &dev_config,
                                               &g_devices[g_dev_count].handle);
     if (ret != ESP_OK) {
-        ESP_LOGE("SENSIRION", "Add device 0x%02x failed: %s", address, esp_err_to_name(ret));
+        ESP_LOGE(TAG, "Add device 0x%02x failed: %s", address, esp_err_to_name(ret));
         return NULL;
     }
     g_devices[g_dev_count].address = address;
-    ESP_LOGI("SENSIRION", "Added device 0x%02x", address);
+    ESP_LOGI(TAG, "Added device 0x%02x", address);
     return g_devices[g_dev_count++].handle;
 }
 
@@ -70,12 +72,12 @@ void sensirion_i2c_init(void) {
     };
     esp_err_t ret = i2c_new_master_bus(&bus_config, &g_i2c_bus_handle);
     if (ret != ESP_OK) {
-        ESP_LOGE("SENSIRION", "I2C bus init failed: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "I2C bus init failed: %s", esp_err_to_name(ret));
         return;
     }
     g_i2c_initialized = true;
     g_dev_count = 0;
-    ESP_LOGI("SENSIRION", "I2C bus initialized");
+    ESP_LOGI(TAG, "I2C bus initialized");
 }
 
 void sensirion_i2c_release(void) {
@@ -95,17 +97,17 @@ void sensirion_i2c_release(void) {
 
 int8_t sensirion_i2c_read(uint8_t address, uint8_t* data, uint16_t count) {
     if (!g_i2c_initialized) {
-        ESP_LOGE("SENSIRION", "I2C not initialized");
+        ESP_LOGE(TAG, "I2C not initialized");
         return STATUS_FAIL;
     }
     if (data == NULL || count == 0) {
-        ESP_LOGE("SENSIRION", "Invalid read: data=%p, count=%u", data, count);
+        ESP_LOGE(TAG, "Invalid read: data=%p, count=%u", data, count);
         return STATUS_FAIL;
     }
 
     i2c_master_dev_handle_t dev = get_or_create_device(address);
     if (dev == NULL) {
-        ESP_LOGE("SENSIRION", "No device handle for 0x%02x", address);
+        ESP_LOGE(TAG, "No device handle for 0x%02x", address);
         return STATUS_FAIL;
     }
 
@@ -116,24 +118,24 @@ int8_t sensirion_i2c_read(uint8_t address, uint8_t* data, uint16_t count) {
         pdMS_TO_TICKS(I2C_MASTER_TIMEOUT_MS)
     );
     if (ret != ESP_OK) {
-        ESP_LOGE("SENSIRION", "I2C read 0x%02x failed: %s", address, esp_err_to_name(ret));
+        ESP_LOGE(TAG, "I2C read 0x%02x failed: %s", address, esp_err_to_name(ret));
     }
     return (ret == ESP_OK) ? STATUS_OK : STATUS_FAIL;
 }
 
 int8_t sensirion_i2c_write(uint8_t address, const uint8_t* data, uint16_t count) {
     if (!g_i2c_initialized) {
-        ESP_LOGE("SENSIRION", "I2C not initialized");
+        ESP_LOGE(TAG, "I2C not initialized");
         return STATUS_FAIL;
     }
     if (data == NULL || count == 0) {
-        ESP_LOGE("SENSIRION", "Invalid write: data=%p, count=%u", data, count);
+        ESP_LOGE(TAG, "Invalid write: data=%p, count=%u", data, count);
         return STATUS_FAIL;
     }
 
     i2c_master_dev_handle_t dev = get_or_create_device(address);
     if (dev == NULL) {
-        ESP_LOGE("SENSIRION", "No device handle for 0x%02x", address);
+        ESP_LOGE(TAG, "No device handle for 0x%02x", address);
         return STATUS_FAIL;
     }
 
@@ -143,7 +145,7 @@ int8_t sensirion_i2c_write(uint8_t address, const uint8_t* data, uint16_t count)
         pdMS_TO_TICKS(I2C_MASTER_TIMEOUT_MS)
     );
     if (ret != ESP_OK) {
-        ESP_LOGE("SENSIRION", "I2C write 0x%02x failed: %s", address, esp_err_to_name(ret));
+        ESP_LOGE(TAG, "I2C write 0x%02x failed: %s", address, esp_err_to_name(ret));
     }
     return (ret == ESP_OK) ? STATUS_OK : STATUS_FAIL;
 }

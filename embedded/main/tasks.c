@@ -16,7 +16,7 @@
 #include "i2c_recovery.h"
 #include "tasks.h"
 
-static const char *TAG = "tasks";
+static const char *TAG = "task";
 
 // 健康监控配置
 #define HEALTH_CHECK_INTERVAL_MS    10000   // 健康检查间隔 10 秒
@@ -38,7 +38,7 @@ void camera_stream_sem_init(void)
 
 bool diagnostic(void)
 {
-    ESP_LOGI(TAG, "开始运行固件诊断...");
+    ESP_LOGI(TAG, "固件诊断开始");
 
     // 1. I2C 总线恢复 + 检查 SHT4x 传感器
     i2c_bus_recovery(I2C_SDA_PIN, I2C_SCL_PIN);
@@ -48,7 +48,7 @@ bool diagnostic(void)
         ESP_LOGE(TAG, "诊断失败: SHT4x 传感器未响应");
         return false;
     }
-    ESP_LOGI(TAG, "SHT4x 传感器探测成功");
+    ESP_LOGI(TAG, "SHT4x 探测成功");
 
     // 2. 检查摄像头初始化
     CameraInit();
@@ -58,9 +58,9 @@ bool diagnostic(void)
         ESP_LOGE(TAG, "诊断失败: 无法获取摄像头传感器指针");
         return false;
     }
-    ESP_LOGI(TAG, "摄像头传感器初始化成功");
+    ESP_LOGI(TAG, "摄像头初始化成功");
 
-    ESP_LOGI(TAG, "固件诊断通过!");
+    ESP_LOGI(TAG, "固件诊断通过");
     return true;
 }
 
@@ -77,10 +77,10 @@ void camera_transmit_task(void *pvParameter)
     while (1)
     {
         /* 阻塞等待信号量，直到被唤醒才开始推流，不占用 CPU */
-        ESP_LOGI(TAG, "摄像头待机模式，等待推流信号量...");
+        ESP_LOGI(TAG, "摄像头待机, 等待推流信号");
         xSemaphoreTake(camera_stream_sem, portMAX_DELAY);
 
-        ESP_LOGI(TAG, "收到推流信号，开始图像传输");
+        ESP_LOGI(TAG, "开始图像推流");
         /* 持续推流，直到状态不再是 DEVICE_ON_STREAM */
         while (device.status == DEVICE_ON_STREAM)
         {
@@ -106,7 +106,7 @@ void sensor_data_transmit_task(void *pvParameter)
         {
             float temp_c = temperature / 1000.0f;
             float hum_pct = humidity / 1000.0f;
-            ESP_LOGI(TAG, "measured temperature: %0.2f °C, humidity: %0.2f %%RH",
+            ESP_LOGI(TAG, "温度: %.2f°C, 湿度: %.1f%%",
                      temp_c, hum_pct);
 
             char post_data[256];
@@ -114,7 +114,7 @@ void sensor_data_transmit_task(void *pvParameter)
                 time(&now);
                 setenv("TZ", "CST-8", 1);
                 localtime_r(&now, &timeinfo);
-                ESP_LOGI(TAG, "当前时间: %04d-%02d-%02d %02d:%02d:%02d+08:00",
+                ESP_LOGD(TAG, "时间: %04d-%02d-%02d %02d:%02d:%02d",
                          timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
                          timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
 
@@ -125,7 +125,7 @@ void sensor_data_transmit_task(void *pvParameter)
                          "{\"secret\":\"%s\",\"temperature\":%.2f,\"humidity\":%.2f,\"timestamp\":\"%s\"}",
                          secret, temp_c, hum_pct, timestamp_str);
             } else {
-                ESP_LOGW(TAG, "时间尚未同步，不附带时间戳，由后端补充");
+                ESP_LOGW(TAG, "时间未同步, 由后端补充时间戳");
                 snprintf(post_data, sizeof(post_data),
                          "{\"secret\":\"%s\",\"temperature\":%.2f,\"humidity\":%.2f}",
                          secret, temp_c, hum_pct);
@@ -135,12 +135,12 @@ void sensor_data_transmit_task(void *pvParameter)
                                                WS_CLINENT_METHOD_POST, post_data, NULL);
             if (ret_code != ESP_OK)
             {
-                ESP_LOGE(TAG, "Failed to send sensor data, error=%d", ret_code);
+                ESP_LOGE(TAG, "传感器数据上报失败, err=%d", ret_code);
             }
         }
         else
         {
-            ESP_LOGE(TAG, "error reading measurement");
+            ESP_LOGE(TAG, "SHT4x 读取失败");
         }
 
         vTaskDelay(60000 / portTICK_PERIOD_MS);
@@ -178,7 +178,7 @@ static void log_system_status(void)
     int pct_heap     = (total_internal + total_spiram) ?
         (int)(free_heap * 100 / (total_internal + total_spiram)) : 0;
 
-    ESP_LOGI("trace", "[内存] 堆=%u/%uB(%d%%) 最低=%uB | 内部=%u/%uB(%d%%) | PSRAM=%u/%uB(%d%%)",
+    ESP_LOGI("sys_mon", "[内存] 堆=%u/%uB(%d%%) 最低=%uB | 内部=%u/%uB(%d%%) | PSRAM=%u/%uB(%d%%)",
         (unsigned)free_heap, (unsigned)(total_internal + total_spiram), pct_heap, (unsigned)min_free_heap,
         (unsigned)free_internal, (unsigned)total_internal, pct_internal,
         (unsigned)free_spiram, (unsigned)total_spiram, pct_spiram);
@@ -195,13 +195,13 @@ static void log_system_status(void)
 
     static const char *state_str[] = {"运行","就绪","阻塞","挂起","删除","未知"};
 
-    ESP_LOGI("trace", "[任务×%u] %-20s %-6s %-4s %-8s",
+    ESP_LOGI("sys_mon", "[任务×%u] %-20s %-6s %-4s %-8s",
              (unsigned)got, "名称", "状态", "优先", "栈剩(B)");
 
     for (UBaseType_t i = 0; i < got; i++) {
         int st = task_array[i].eCurrentState;
         if (st < 0 || st > 4) st = 5;
-        ESP_LOGI("trace", "  %-20s %-6s %-4u %-8u",
+        ESP_LOGI("sys_mon", "  %-20s %-6s %-4u %-8u",
                  task_array[i].pcTaskName,
                  state_str[st],
                  (unsigned)task_array[i].uxCurrentPriority,
