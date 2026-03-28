@@ -183,7 +183,8 @@ const {
   fetchDevices,
   getOrUpdateDevices,
   fetchDeviceHistoryData,
-  getOrUpdateDeviceHistoryData
+  getOrUpdateDeviceHistoryData,
+  fetchDeviceLogs
 } = useDeviceStore();
 
 // 检测是否为移动设备
@@ -208,14 +209,17 @@ const deviceStats = computed(() => {
 // 计算错误数量
 const errorCount = computed(() => {
   const allLogs = getDeviceLogs();
-  return allLogs.filter(log => log.level === 'warning' || log.level === 'error').length;
+  return allLogs.filter(log => log.level === 'WARNING' || log.level === 'ERROR').length;
 });
 
 // 获取最近两条错误日志
 const recentErrorLogs = computed(() => {
   const allLogs = getDeviceLogs();
-  const errorLogs = allLogs.filter(log => log.level === 'warning' || log.level === 'error');
-  return errorLogs.slice(0, 2);
+  const errorLogs = allLogs.filter(log => log.level === 'WARNING' || log.level === 'ERROR');
+  return errorLogs.slice(0, 2).map(log => ({
+    deviceName: `设备${log.device_id}`,
+    message: log.content
+  }));
 });
 
 // 计算在线率
@@ -327,10 +331,10 @@ const goToDeviceLogs = () => {
 onMounted(async () => {
   window.addEventListener('resize', handleWindowResize);
   window.addEventListener('resize', handleResize);
-  
+
   // 获取设备数据
   await getOrUpdateDevices();
-  
+
   // 获取所有设备的历史数据
   if (devices.value.length > 0) {
     if (isMobile.value) {
@@ -343,10 +347,65 @@ onMounted(async () => {
       await fetchDeviceHistoryData();
     }
   }
-  
+
   // 初始化图表
   initChart();
+
+  // 自动查询24小时内所有设备的WARNING、ERROR等级日志
+  await fetchRecentWarningErrorLogs();
 });
+
+// 格式化日期为与deviceStore一致的格式
+const formatLocalISO = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  const ms = String(date.getMilliseconds()).padStart(3, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${ms}`;
+};
+
+// 查询24小时内WARNING、ERROR等级日志
+const fetchRecentWarningErrorLogs = async () => {
+  if (devices.value.length === 0) {
+    console.log('没有设备，跳过查询日志');
+    return;
+  }
+
+  const now = new Date();
+  const startTimeDate = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 24小时前
+  const startTime = formatLocalISO(startTimeDate);
+  const endTime = formatLocalISO(now); // 当前时间
+
+  const deviceIds = devices.value.map(d => d.id);
+
+  console.log('========== 总览页面自动查询日志 ==========');
+  console.log('设备数量:', devices.value.length);
+  console.log('设备ID列表:', deviceIds);
+  console.log('查询等级:', ['WARNING', 'ERROR']);
+  console.log('时间范围:', startTime, '至', endTime);
+  console.log('开始查询...');
+
+  try {
+    const result = await fetchDeviceLogs(
+      deviceIds, // 所有设备ID
+      0, // skip
+      100, // limit
+      ['WARNING', 'ERROR'], // 只查询WARNING和ERROR等级
+      startTime,
+      endTime
+    );
+
+    console.log('查询完成');
+    console.log('获取到的日志总数:', result.total);
+    console.log('当前错误数量:', errorCount.value);
+    console.log('==========================================');
+  } catch (error) {
+    console.error('获取24小时内警告和错误日志失败:', error);
+  }
+};
 
 // 监听设备数据变化
 watch(devices, () => {
