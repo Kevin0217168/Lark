@@ -341,14 +341,13 @@ const handleLogin = async () => {
 }
 
 .mobile-login .login-header {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  padding: 40px 24px;
+  justify-content: flex-end;
+  padding: 30px 24px 20px;
   text-align: center;
   color: white;
-  min-height: 200px;
+  min-height: 120px;
 }
 
 .mobile-login .login-header h1 {
