@@ -51,6 +51,11 @@
                   <span class="cell-label">湿度</span>
                   <span class="cell-value highlight">{{ selectedDevice.humidity }}%</span>
                 </div>
+                <div class="data-cell">
+                  <el-icon><Monitor /></el-icon>
+                  <span class="cell-label">类型</span>
+                  <span class="cell-value">{{ selectedDevice.device_type || '未设置' }}</span>
+                </div>
               </div>
               <div class="data-row full">
                 <div class="data-cell">
@@ -205,13 +210,17 @@
               <h3>设备信息</h3>
               <div class="info-card">
                 <div class="info-item">
-                  <span class="info-label">设备名称:</span>
-                  <span class="info-value">{{ selectedHistoryDevice?.name }}</span>
-                </div>
-                <div class="info-item">
-                  <span class="info-label">设备ID:</span>
-                  <span class="info-value">{{ selectedHistoryDevice?.id }}</span>
-                </div>
+                <span class="info-label">设备名称:</span>
+                <span class="info-value">{{ selectedHistoryDevice?.name }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">设备ID:</span>
+                <span class="info-value">{{ selectedHistoryDevice?.id }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">设备类型:</span>
+                <span class="info-value">{{ selectedHistoryDevice?.device_type || '未设置' }}</span>
+              </div>
               </div>
             </div>
           </div>
@@ -221,6 +230,7 @@
             <el-table :data="paginatedHistoryData" stripe style="width: 100%;" max-height="400" border>
               <el-table-column prop="deviceName" label="设备名称" min-width="150" align="left" />
               <el-table-column prop="deviceId" label="设备ID" min-width="100" align="center" />
+              <el-table-column prop="device_type" label="设备类型" min-width="120" align="center" />
               <el-table-column prop="timestamp" label="时间" min-width="180" align="left" />
               <el-table-column prop="temperature" label="温度 (℃)" min-width="120" align="center" />
               <el-table-column prop="humidity" label="湿度 (%)" min-width="120" align="center" />

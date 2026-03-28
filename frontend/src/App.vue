@@ -63,11 +63,64 @@ import Sider from "./components/Sider.vue";
 import MobilePage from "./pages/MobilePage.vue";
 import { shouldUseMobilePage } from "./utils/mobileAdapter";
 
-import { RouterView, RouterLink, useRoute } from "vue-router";
+import { RouterView, useRoute, useRouter } from "vue-router";
+import { ElMessage } from "element-plus";
 
 const route = useRoute();
+const router = useRouter();
 const activeTab = ref<string>('realtime');
 const isMobile = ref<boolean>(false);
+
+// 全局401错误处理
+const handle401Error = () => {
+  ElMessage.error('登录已过期，请重新登录');
+  // 清除本地存储的token
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+  // 同步清理登录状态相关字段
+  localStorage.removeItem('isAuthenticated');
+  localStorage.removeItem('username');
+  localStorage.removeItem('role');
+  // 通知其它组件登录状态已变更
+  window.dispatchEvent(new Event('loginStatusChanged'));
+  // 跳转到登录页面
+  router.push('/Login');
+};
+
+// 监听所有fetch请求的401错误
+const originalFetch: typeof window.fetch = window.fetch;
+const wrappedFetch: typeof window.fetch = async (...args) => {
+  const response = await originalFetch(...args as Parameters<typeof originalFetch>);
+  
+  // 排除登录、注册和刷新接口的401处理
+  const url = args[0] as string;
+  const isAuthPage = route.path === '/Login' || route.path === '/Register';
+  const isAuthApi = url.includes('/api/login') || url.includes('/api/register') || url.includes('/api/refresh');
+  
+  if (response.status === 401 && !isAuthPage && !isAuthApi) {
+    handle401Error();
+  }
+  
+  return response;
+};
+window.fetch = wrappedFetch;
+
+// 在组件卸载时恢复原fetch实现
+onUnmounted(() => {
+  // 仅当当前fetch仍为本组件包裹的实现时才恢复
+  if (window.fetch === wrappedFetch) {
+    window.fetch = originalFetch;
+  }
+});
+
+// 在HMR时恢复原fetch实现
+if ((import.meta as any).hot) {
+  (import.meta as any).hot.dispose(() => {
+    if (window.fetch === wrappedFetch) {
+      window.fetch = originalFetch;
+    }
+  });
+}
 
 // 检查是否是登录或注册页面
 const isAuthPage = computed(() => {
@@ -132,7 +185,7 @@ footer {
 
 footer {
   flex-direction: column;
-  padding: 20px;
+  padding: 40px 20px 20px;
   background: transparent;
 }
 

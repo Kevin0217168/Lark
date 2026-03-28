@@ -8,6 +8,7 @@ export interface Device {
   createTime: string;
   area?: string; // 所属区域
   number?: number; // 设备编号
+  device_type?: string; // 设备类型
   temperature?: number; // 温度数据
   humidity?: number; // 湿度数据
   videoStreamUrl?: string; // 视频流数据
@@ -15,6 +16,8 @@ export interface Device {
 
 export interface DeviceHistoryData {
   deviceId: number;
+  deviceName: string;
+  device_type?: string;
   timestamp: string;
   temperature: number;
   humidity: number;
@@ -217,6 +220,8 @@ const getOrUpdateDevices = async () => {
                 data.data.forEach((item: any) => {
                   deviceHistoryData.value.push({
                     deviceId: device.id,
+                    deviceName: device.name,
+                    device_type: device.device_type,
                     timestamp: item.timestamp,
                     temperature: item.temperature,
                     humidity: item.humidity
@@ -270,6 +275,8 @@ const generateDeviceHistoryData = () => {
       
       history.push({
         deviceId: device.id,
+        deviceName: device.name,
+        device_type: device.device_type,
         timestamp: date.toLocaleString('zh-CN'),
         temperature,
         humidity
@@ -425,9 +432,12 @@ const fetchDeviceHistoryData = async (deviceId?: number) => {
           // 清空该设备的旧数据
           deviceHistoryData.value = deviceHistoryData.value.filter(d => d.deviceId !== deviceId);
           // 添加新数据
+          const device = devices.value.find(d => d.id === deviceId);
           data.data.forEach((item: any) => {
             deviceHistoryData.value.push({
               deviceId: deviceId,
+              deviceName: device?.name || `设备${deviceId}`,
+              device_type: device?.device_type,
               timestamp: item.end_time,
               temperature: Number(item.avg_temperature.toFixed(2)),
               humidity: Number(item.avg_humidity.toFixed(2))
@@ -443,8 +453,11 @@ const fetchDeviceHistoryData = async (deviceId?: number) => {
           data.data.forEach((item: any) => {
             // 如果返回的数据包含设备ID，使用它；否则使用0作为默认值
             const itemDeviceId = item.device_id || 0;
+            const device = devices.value.find(d => d.id === itemDeviceId);
             deviceHistoryData.value.push({
               deviceId: itemDeviceId,
+              deviceName: device?.name || `设备${itemDeviceId}`,
+              device_type: device?.device_type,
               timestamp: item.end_time,
               temperature: Number(item.avg_temperature.toFixed(2)),
               humidity: Number(item.avg_humidity.toFixed(2))
