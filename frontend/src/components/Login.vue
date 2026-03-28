@@ -27,6 +27,7 @@
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
+import { api } from '../utils/api';
 
 const router = useRouter();
 const formRef = ref();
@@ -64,34 +65,25 @@ const tryAutoLogin = async (): Promise<boolean> => {
       return false;
     }
     
-    const response = await fetch(`${API_BASE_URL}/api/refresh`, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-      },
-      credentials: 'include', // 携带cookie
-    });
+    const data = await api.post('/api/refresh');
 
-    if (response.ok) {
-      const data = await response.json();
-      if (data.access_token) {
-        // 自动登录成功，保存token
-        localStorage.setItem('isAuthenticated', 'true');
-        localStorage.setItem('accessToken', data.access_token);
-        localStorage.setItem('tokenType', data.token_type || 'bearer');
-        // 保留现有的用户名和头像信息
-        if (!localStorage.getItem('username')) {
-          // 如果没有用户名，尝试从某处获取（这里可能需要根据实际情况调整）
-          localStorage.setItem('username', '');
-        }
-        if (!localStorage.getItem('avatar')) {
-          localStorage.setItem('avatar', '');
-        }
-        
-        // 设置全局请求头（实际项目中应在请求拦截器中设置）
-        console.log('自动登录成功，token已更新');
-        return true;
+    if (data.access_token) {
+      // 自动登录成功，保存token
+      localStorage.setItem('isAuthenticated', 'true');
+      localStorage.setItem('accessToken', data.access_token);
+      localStorage.setItem('tokenType', data.token_type || 'bearer');
+      // 保留现有的用户名和头像信息
+      if (!localStorage.getItem('username')) {
+        // 如果没有用户名，尝试从某处获取（这里可能需要根据实际情况调整）
+        localStorage.setItem('username', '');
       }
+      if (!localStorage.getItem('avatar')) {
+        localStorage.setItem('avatar', '');
+      }
+      
+      // 设置全局请求头（实际项目中应在请求拦截器中设置）
+      console.log('自动登录成功，token已更新');
+      return true;
     }
     
     // 自动登录失败（401或其他状态码）
@@ -171,18 +163,13 @@ const handleLogin = async () => {
     params.append('client_secret', '');
     
     // 给后端发送登录请求
-    const response = await fetch(`${API_BASE_URL}/api/login`, {
-      method: 'POST',
+    const data = await api.post('/api/login', params.toString(), {
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
-      },
-      body: params.toString(),
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
     });
     
-    const data = await response.json();
-    
-    if (response.ok && data.access_token) {
+    if (data.access_token) {
       ElMessage.success("登录成功");
       
       // 设置登录状态
@@ -196,22 +183,11 @@ const handleLogin = async () => {
       // 立即获取用户信息以获取角色（如果登录接口没有返回角色）
       if (!data.role) {
         try {
-          const userResponse = await fetch(`${API_BASE_URL}/api/users/me`, {
-            method: 'GET',
-            headers: {
-              'Accept': 'application/json',
-              'Authorization': `Bearer ${data.access_token}`
-            },
-            credentials: 'include'
-          });
-          
-          if (userResponse.ok) {
-            const userData = await userResponse.json();
-            if (userData.code === 200 && userData.data) {
-              localStorage.setItem('role', userData.data.role || '');
-              localStorage.setItem('avatar', userData.data.avatar || '');
-              localStorage.setItem('userId', userData.data.id || '');
-            }
+          const userData = await api.get('/api/users/me');
+          if (userData.code === 200 && userData.data) {
+            localStorage.setItem('role', userData.data.role || '');
+            localStorage.setItem('avatar', userData.data.avatar || '');
+            localStorage.setItem('userId', userData.data.id || '');
           }
         } catch (err) {
           console.error('获取用户信息失败:', err);
@@ -223,23 +199,6 @@ const handleLogin = async () => {
       
       // 跳转到首页
       router.push('/Home');
-    } else {
-      // 处理错误响应
-      if (response.status === 422 && data.detail && Array.isArray(data.detail) && data.detail.length > 0) {
-        // 处理 [{ loc: [...], msg: "...", type: "..." }] 格式的错误
-        const errorMessages = data.detail
-          .map((err: any) => {
-            const msg = err.msg || '';
-            // 移除 "Value error, " 前缀
-            return msg.replace(/^Value error,\s*/, '');
-          })
-          .filter((msg: string) => msg.length > 0)
-          .join('\n');
-        ElMessage.error(errorMessages || '登录失败');
-      } else {
-        const errorMsg = data.detail || data.msg || '登录失败，请检查用户名和密码';
-        ElMessage.error(errorMsg);
-      }
     }
   } catch (error) {
     console.error('登录错误:', error);

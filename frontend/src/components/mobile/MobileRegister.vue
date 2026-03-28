@@ -91,6 +91,7 @@
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
+import { api } from '../../utils/api';
 
 const router = useRouter();
 const formRef = ref();
@@ -155,51 +156,16 @@ const handleRegister = async () => {
     
     loading.value = true;
     
-    const response = await fetch(`${API_BASE_URL}/api/users`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify({
-        username: form.value.username,
-        password: form.value.password,
-        nickname: form.value.nickname,
-        role: form.value.role,
-        avatar: form.value.avatar,
-      }),
+    const data = await api.post('/api/users', {
+      username: form.value.username,
+      password: form.value.password,
+      nickname: form.value.nickname,
+      role: form.value.role,
+      avatar: form.value.avatar,
     });
     
-    const data = await response.json();
-    
-    if (response.ok) {
-      ElMessage.success("注册成功，请登录");
-      router.push('/Login');
-    } else {
-      if (response.status === 400) {
-        ElMessage.error(data.detail || '注册失败，用户名已存在');
-      } else if (response.status === 422) {
-        if (data.detail && Array.isArray(data.detail) && data.detail.length > 0) {
-          const errorMessages = data.detail
-            .map((err: any) => {
-              const msg = err.msg || '';
-              return msg.replace(/^Value error,\s*/, '');
-            })
-            .filter((msg: string) => msg.length > 0)
-            .join('\n');
-          ElMessage.error(errorMessages || '注册信息验证失败');
-        } else if (data.errors) {
-          const errorMessages = Object.values(data.errors).flat().join('\n');
-          ElMessage.error(errorMessages || '注册信息验证失败');
-        } else if (data.msg) {
-          ElMessage.error(data.msg);
-        } else {
-          ElMessage.error('注册信息验证失败');
-        }
-      } else {
-        ElMessage.error(data.detail || data.msg || '注册失败，请稍后重试');
-      }
-    }
+    ElMessage.success("注册成功，请登录");
+    router.push('/Login');
   } catch (error) {
     console.error('注册错误:', error);
     const errorMessage = (error as Error).message;

@@ -1,4 +1,5 @@
 import { ref, computed } from 'vue';
+import { api } from '@/utils/api';
 
 export interface Device {
   id: number;
@@ -64,21 +65,10 @@ const formatLocalISO = (date: Date): string => {
 // 从后端获取设备数据
 const fetchDevices = async () => {
   try {
-    const token = localStorage.getItem('accessToken');
-    const response = await fetch('/api/devices', {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
-    });
-    
-    if (response.ok) {
-      const data = await response.json();
-      if (data.code === 200 && Array.isArray(data.data)) {
-        devices.value = data.data;
-        lastUpdateTime.value = new Date();
-      }
+    const data = await api.get('/api/devices');
+    if (data.code === 200 && Array.isArray(data.data)) {
+      devices.value = data.data;
+      lastUpdateTime.value = new Date();
     }
   } catch (error) {
     console.error('获取设备数据失败:', error);
@@ -122,16 +112,14 @@ const fetchAllSensorsData = async () => {
         });
         
         // 发送请求到后端接口
-        const response = await fetch(`/api/sensors/${device.id}?${params.toString()}`, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
+        try {
+          const data = await api.get(`/api/sensors/${device.id}`, {
+            start_time: startISO,
+            end_time: endISO,
+            skip: '0',
+            limit: '1'
+          });
+          
           if (data.code === 200 && data.data && Array.isArray(data.data) && data.data.length > 0) {
             // 更新设备的温度和湿度
             const latestData = data.data[data.data.length - 1];
@@ -146,6 +134,8 @@ const fetchAllSensorsData = async () => {
               }
             }
           }
+        } catch (error) {
+          console.error(`获取设备 ${device.id} 传感器数据失败:`, error);
         }
       }
     });
@@ -193,42 +183,31 @@ const getOrUpdateDevices = async () => {
           });
           
           // 发送请求到后端接口
-          const token = localStorage.getItem('accessToken');
-          if (true) {
-            console.log('向后端发送的请求信息:', {
-              url: `/api/sensors/${device.id}?${params.toString()}`,
-              method: 'GET',
-              headers: {
-                'Accept': 'application/json',
-                'Authorization': `Bearer ${token}`
-              }
-            });
-            const response = await fetch(`/api/sensors/${device.id}?${params.toString()}`, {
-              method: 'GET',
-              headers: {
-                'Accept': 'application/json',
-                'Authorization': `Bearer ${token}`
-              }
+          try {
+            const data = await api.get(`/api/sensors/${device.id}`, {
+              start_time: startISO,
+              end_time: endISO,
+              skip: '0',
+              limit: '1000'
             });
             
-            if (response.ok) {
-              const data = await response.json();
-              if (data.code === 200 && data.data && Array.isArray(data.data)) {
-                // 清空旧数据
-                deviceHistoryData.value = deviceHistoryData.value.filter(d => d.deviceId !== device.id);
-                // 添加新数据
-                data.data.forEach((item: any) => {
-                  deviceHistoryData.value.push({
-                    deviceId: device.id,
-                    deviceName: device.name,
-                    device_type: device.device_type,
-                    timestamp: item.timestamp,
-                    temperature: item.temperature,
-                    humidity: item.humidity
-                  });
+            if (data.code === 200 && data.data && Array.isArray(data.data)) {
+              // 清空旧数据
+              deviceHistoryData.value = deviceHistoryData.value.filter(d => d.deviceId !== device.id);
+              // 添加新数据
+              data.data.forEach((item: any) => {
+                deviceHistoryData.value.push({
+                  deviceId: device.id,
+                  deviceName: device.name,
+                  device_type: device.device_type,
+                  timestamp: item.timestamp,
+                  temperature: item.temperature,
+                  humidity: item.humidity
                 });
-              }
+              });
             }
+          } catch (error) {
+            console.error(`获取设备 ${device.id} 历史数据失败:`, error);
           }
         }
       }
@@ -402,74 +381,62 @@ export const useDeviceStore = () => {
   // 从后端获取设备历史数据（支持获取单个设备或所有设备）
 const fetchDeviceHistoryData = async (deviceId?: number) => {
   try {
-    const token = localStorage.getItem('accessToken');
     // 使用新的分组统计接口，24小时内分成48组
-    const params = new URLSearchParams({
-      period: '86400', // 24小时（秒）
-      group: '48'      // 分成48组
-    });
-    
     // 如果指定了设备ID，添加到参数中
     if (deviceId !== undefined) {
-      params.append('device_id', deviceId.toString());
       console.log(`[fetchDeviceHistoryData] 设备 ${deviceId} 请求分组统计数据`);
     } else {
       console.log(`[fetchDeviceHistoryData] 请求所有设备的分组统计数据`);
     }
     
-    const response = await fetch(`/api/sensors/grouped?${params.toString()}`, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
+    const data = await api.get('/api/sensors/grouped', {
+      period: '86400',
+      group: '48',
+      device_id: deviceId?.toString()
     });
     
-    if (response.ok) {
-      const data = await response.json();
-      if (data.code === 200 && Array.isArray(data.data)) {
-        if (deviceId !== undefined) {
-          // 清空该设备的旧数据
-          deviceHistoryData.value = deviceHistoryData.value.filter(d => d.deviceId !== deviceId);
-          // 添加新数据
-          const device = devices.value.find(d => d.id === deviceId);
-          data.data.forEach((item: any) => {
-            deviceHistoryData.value.push({
-              deviceId: deviceId,
-              deviceName: device?.name || `设备${deviceId}`,
-              device_type: device?.device_type,
-              timestamp: item.end_time,
-              temperature: Number(item.avg_temperature.toFixed(2)),
-              humidity: Number(item.avg_humidity.toFixed(2))
-            });
+    if (data.code === 200 && Array.isArray(data.data)) {
+      if (deviceId !== undefined) {
+        // 清空该设备的旧数据
+        deviceHistoryData.value = deviceHistoryData.value.filter(d => d.deviceId !== deviceId);
+        // 添加新数据
+        const device = devices.value.find(d => d.id === deviceId);
+        data.data.forEach((item: any) => {
+          deviceHistoryData.value.push({
+            deviceId: deviceId,
+            deviceName: device?.name || `设备${deviceId}`,
+            device_type: device?.device_type,
+            timestamp: item.end_time,
+            temperature: Number(item.avg_temperature.toFixed(2)),
+            humidity: Number(item.avg_humidity.toFixed(2))
           });
-          // 更新该设备的历史数据更新时间
-          lastHistoryUpdateTime.value.set(deviceId, new Date());
-          console.log(`[fetchDeviceHistoryData] 设备 ${deviceId} 历史数据已更新，共 ${data.data.length} 条记录`);
-        } else {
-          // 获取所有设备数据时，清空所有旧数据
-          deviceHistoryData.value = [];
-          // 添加新数据（需要从响应中获取设备ID）
-          data.data.forEach((item: any) => {
-            // 如果返回的数据包含设备ID，使用它；否则使用0作为默认值
-            const itemDeviceId = item.device_id || 0;
-            const device = devices.value.find(d => d.id === itemDeviceId);
-            deviceHistoryData.value.push({
-              deviceId: itemDeviceId,
-              deviceName: device?.name || `设备${itemDeviceId}`,
-              device_type: device?.device_type,
-              timestamp: item.end_time,
-              temperature: Number(item.avg_temperature.toFixed(2)),
-              humidity: Number(item.avg_humidity.toFixed(2))
-            });
+        });
+        // 更新该设备的历史数据更新时间
+        lastHistoryUpdateTime.value.set(deviceId, new Date());
+        console.log(`[fetchDeviceHistoryData] 设备 ${deviceId} 历史数据已更新，共 ${data.data.length} 条记录`);
+      } else {
+        // 获取所有设备数据时，清空所有旧数据
+        deviceHistoryData.value = [];
+        // 添加新数据（需要从响应中获取设备ID）
+        data.data.forEach((item: any) => {
+          // 如果返回的数据包含设备ID，使用它；否则使用0作为默认值
+          const itemDeviceId = item.device_id || 0;
+          const device = devices.value.find(d => d.id === itemDeviceId);
+          deviceHistoryData.value.push({
+            deviceId: itemDeviceId,
+            deviceName: device?.name || `设备${itemDeviceId}`,
+            device_type: device?.device_type,
+            timestamp: item.end_time,
+            temperature: Number(item.avg_temperature.toFixed(2)),
+            humidity: Number(item.avg_humidity.toFixed(2))
           });
-          // 更新所有设备的历史数据更新时间
-          const now = new Date();
-          devices.value.forEach(device => {
-            lastHistoryUpdateTime.value.set(device.id, now);
-          });
-          console.log(`[fetchDeviceHistoryData] 所有设备历史数据已更新，共 ${data.data.length} 条记录`);
-        }
+        });
+        // 更新所有设备的历史数据更新时间
+        const now = new Date();
+        devices.value.forEach(device => {
+          lastHistoryUpdateTime.value.set(device.id, now);
+        });
+        console.log(`[fetchDeviceHistoryData] 所有设备历史数据已更新，共 ${data.data.length} 条记录`);
       }
     }
   } catch (error) {
@@ -534,27 +501,12 @@ const fetchSensorData = async (deviceId: number) => {
       return { times, temperatureValues, humidityValues };
     }
     
-    // 使用新的分组统计接口，24小时内分成48组
-    const params = new URLSearchParams({
-      period: '86400', // 24小时（秒）
-      group: '48',     // 分成48组
+    // 发送请求到后端接口
+    const data = await api.get('/api/sensors/grouped', {
+      period: '86400',
+      group: '48',
       device_id: deviceId.toString()
     });
-    
-    // 发送请求到后端接口
-    const response = await fetch(`/api/sensors/grouped?${params.toString()}`, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
-    });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    
-    const data = await response.json();
     
     // 处理响应数据
     if (data.code === 200 && data.data && Array.isArray(data.data)) {
@@ -689,32 +641,12 @@ const fetchSensorData = async (deviceId: number) => {
   // 获取实时温湿度数据（2分钟内，1组）
   const fetchRealtimeSensorData = async (deviceId: number) => {
     try {
-      const token = localStorage.getItem('accessToken');
-      if (!token) {
-        console.error('未登录，无法获取实时传感器数据');
-        return null;
-      }
-
       // 使用分组统计接口，2分钟内，1组
-      const params = new URLSearchParams({
-        period: '120', // 2分钟（秒）
-        group: '1',    // 1组
+      const data = await api.get('/api/sensors/grouped', {
+        period: '120',
+        group: '1',
         device_id: deviceId.toString()
       });
-
-      const response = await fetch(`/api/sensors/grouped?${params.toString()}`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
 
       if (data.code === 200 && data.data && Array.isArray(data.data) && data.data.length > 0) {
         const item = data.data[0];

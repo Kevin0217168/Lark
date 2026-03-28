@@ -206,6 +206,7 @@ import { ref, onMounted, computed } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Loading, Warning, Plus, Search, Delete } from "@element-plus/icons-vue";
 import MobileBeian from './MobileBeian.vue';
+import { api } from '../../utils/api';
 
 const API_BASE_URL = '';
 
@@ -302,36 +303,14 @@ const handleBatchDelete = async () => {
       }
     );
 
-    const accessToken = localStorage.getItem('accessToken');
-    if (!accessToken) {
-      throw new Error('未登录，请先登录');
-    }
-
     // 逐个删除用户
     let successCount = 0;
     let failCount = 0;
 
     for (const user of selectedUsers.value) {
       try {
-        const currentToken = localStorage.getItem('accessToken');
-        if (!currentToken) {
-          throw new Error('登录已过期，请重新登录');
-        }
-
-        const response = await fetch(`${API_BASE_URL}/api/users/${user.id}`, {
-          method: 'DELETE',
-          headers: {
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${currentToken}`
-          },
-          credentials: 'include'
-        });
-
-        if (response.ok) {
-          successCount++;
-        } else {
-          failCount++;
-        }
+        await api.delete(`/api/users/${user.id}`);
+        successCount++;
       } catch (err) {
         failCount++;
       }
@@ -503,25 +482,7 @@ const fetchUsers = async () => {
     loading.value = true;
     error.value = '';
 
-    const accessToken = localStorage.getItem('accessToken');
-    if (!accessToken) {
-      throw new Error('未登录，请先登录');
-    }
-
-    const response = await fetch(`${API_BASE_URL}/api/users`, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${accessToken}`
-      },
-      credentials: 'include'
-    });
-
-    if (!response.ok) {
-      throw new Error('获取用户列表失败');
-    }
-
-    const data = await response.json();
+    const data = await api.get('/api/users');
     if (data.code === 200 && data.data) {
       users.value = data.data;
     } else {
@@ -569,11 +530,6 @@ const saveUserChanges = async () => {
 
     saving.value = true;
 
-    const accessToken = localStorage.getItem('accessToken');
-    if (!accessToken) {
-      throw new Error('未登录，请先登录');
-    }
-
     // 构建请求数据，只包含用户实际修改的字段
     const requestData: Record<string, any> = {};
     
@@ -608,25 +564,14 @@ const saveUserChanges = async () => {
       return;
     }
 
-    const response = await fetch(`${API_BASE_URL}/api/users/${editForm.value.id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${accessToken}`
-      },
-      body: JSON.stringify(requestData),
-      credentials: 'include'
-    });
-
-    const responseData = await response.json();
+    const responseData = await api.put(`/api/users/${editForm.value.id}`, requestData);
     
-    if (response.ok && responseData.code === 200) {
+    if (responseData.code === 200) {
       ElMessage.success('用户更新成功');
       editDialogVisible.value = false;
       await fetchUsers();
     } else {
-      if (response.status === 422 && responseData.detail && Array.isArray(responseData.detail) && responseData.detail.length > 0) {
+      if (responseData.detail && Array.isArray(responseData.detail) && responseData.detail.length > 0) {
         const errorMessages = responseData.detail
           .map((err: any) => {
             const msg = err.msg || '';
@@ -635,7 +580,7 @@ const saveUserChanges = async () => {
           .filter((msg: string) => msg.length > 0)
           .join('\n');
         throw new Error(errorMessages || '更新用户失败');
-      } else if (response.status === 422 && responseData.errors) {
+      } else if (responseData.errors) {
         const errorMessages = Object.values(responseData.errors).flat().join('\n');
         throw new Error(errorMessages || '更新用户失败');
       } else {
@@ -670,25 +615,7 @@ const handleDeleteUser = async (user: any) => {
       }
     );
 
-    const accessToken = localStorage.getItem('accessToken');
-    if (!accessToken) {
-      throw new Error('未登录，请先登录');
-    }
-
-    const response = await fetch(`${API_BASE_URL}/api/users/${user.id}`, {
-      method: 'DELETE',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${accessToken}`
-      },
-      credentials: 'include'
-    });
-
-    if (!response.ok) {
-      throw new Error('删除用户失败');
-    }
-
-    const data = await response.json();
+    const data = await api.delete(`/api/users/${user.id}`);
     if (data.code === 200) {
       ElMessage.success('用户删除成功');
       await fetchUsers();
@@ -733,11 +660,6 @@ const handleAddUser = async () => {
 
     adding.value = true;
 
-    const accessToken = localStorage.getItem('accessToken');
-    if (!accessToken) {
-      throw new Error('未登录，请先登录');
-    }
-
     // 构建请求数据
     const requestData: any = {
       username: addForm.value.username,
@@ -754,27 +676,14 @@ const handleAddUser = async () => {
       requestData.avatar = addForm.value.avatar;
     }
 
-    const response = await fetch(`${API_BASE_URL}/api/users`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${accessToken}`
-      },
-      body: JSON.stringify(requestData),
-      credentials: 'include'
-    });
-
-    const responseData = await response.json();
+    const responseData = await api.post('/api/users', requestData);
     
-    if (response.ok && responseData.code === 200) {
+    if (responseData.code === 200) {
       ElMessage.success('用户创建成功');
       addDialogVisible.value = false;
       await fetchUsers();
     } else {
-      if (response.status === 400) {
-        throw new Error(responseData.detail || '用户名已存在');
-      } else if (response.status === 422 && responseData.detail && Array.isArray(responseData.detail) && responseData.detail.length > 0) {
+      if (responseData.detail && Array.isArray(responseData.detail) && responseData.detail.length > 0) {
         const errorMessages = responseData.detail
           .map((err: any) => {
             const msg = err.msg || '';
@@ -783,7 +692,7 @@ const handleAddUser = async () => {
           .filter((msg: string) => msg.length > 0)
           .join('\n');
         throw new Error(errorMessages || '创建用户失败');
-      } else if (response.status === 422 && responseData.errors) {
+      } else if (responseData.errors) {
         const errorMessages = Object.values(responseData.errors).flat().join('\n');
         throw new Error(errorMessages || '创建用户失败');
       } else {

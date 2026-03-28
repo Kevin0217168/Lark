@@ -63,6 +63,7 @@
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
+import { api } from '../../utils/api';
 
 const router = useRouter();
 const formRef = ref();
@@ -95,28 +96,23 @@ const tryAutoLogin = async (): Promise<boolean> => {
       return false;
     }
     
-    const response = await fetch(`${API_BASE_URL}/api/refresh`, {
-      method: 'POST',
+    const data = await api.post('/api/refresh', {}, {
       headers: {
         'Accept': 'application/json',
-      },
-      credentials: 'include',
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      if (data.access_token) {
-        localStorage.setItem('isAuthenticated', 'true');
-        localStorage.setItem('accessToken', data.access_token);
-        localStorage.setItem('tokenType', data.token_type || 'bearer');
-        if (!localStorage.getItem('username')) {
-          localStorage.setItem('username', '');
-        }
-        if (!localStorage.getItem('avatar')) {
-          localStorage.setItem('avatar', '');
-        }
-        return true;
       }
+    });
+    
+    if (data.access_token) {
+      localStorage.setItem('isAuthenticated', 'true');
+      localStorage.setItem('accessToken', data.access_token);
+      localStorage.setItem('tokenType', data.token_type || 'bearer');
+      if (!localStorage.getItem('username')) {
+        localStorage.setItem('username', '');
+      }
+      if (!localStorage.getItem('avatar')) {
+        localStorage.setItem('avatar', '');
+      }
+      return true;
     }
     
     localStorage.removeItem('isAuthenticated');
@@ -179,68 +175,43 @@ const handleLogin = async () => {
     params.append('client_id', '');
     params.append('client_secret', '');
     
-    const response = await fetch(`${API_BASE_URL}/api/login`, {
-      method: 'POST',
+    const data = await api.post('/api/login', params.toString(), {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json',
-      },
-      body: params.toString(),
+      }
     });
     
-    const data = await response.json();
+    ElMessage.success("登录成功");
     
-    if (response.ok && data.access_token) {
-      ElMessage.success("登录成功");
-      
-      localStorage.setItem('isAuthenticated', 'true');
-      localStorage.setItem('username', form.value.username);
-      localStorage.setItem('accessToken', data.access_token);
-      localStorage.setItem('tokenType', data.token_type || 'bearer');
-      localStorage.setItem('avatar', data.avatar || '');
-      localStorage.setItem('role', data.role || '');
-      
-      if (!data.role) {
-        try {
-          const userResponse = await fetch(`${API_BASE_URL}/api/users/me`, {
-            method: 'GET',
-            headers: {
-              'Accept': 'application/json',
-              'Authorization': `Bearer ${data.access_token}`
-            },
-            credentials: 'include'
-          });
-          
-          if (userResponse.ok) {
-            const userData = await userResponse.json();
-            if (userData.code === 200 && userData.data) {
-              localStorage.setItem('role', userData.data.role || '');
-              localStorage.setItem('avatar', userData.data.avatar || '');
-              localStorage.setItem('userId', userData.data.id || '');
-            }
+    localStorage.setItem('isAuthenticated', 'true');
+    localStorage.setItem('username', form.value.username);
+    localStorage.setItem('accessToken', data.access_token);
+    localStorage.setItem('tokenType', data.token_type || 'bearer');
+    localStorage.setItem('avatar', data.avatar || '');
+    localStorage.setItem('role', data.role || '');
+    
+    if (!data.role) {
+      try {
+        const userData = await api.get('/api/users/me', {
+          headers: {
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${data.access_token}`
           }
-        } catch (err) {
-          console.error('获取用户信息失败:', err);
+        });
+        
+        if (userData.code === 200 && userData.data) {
+          localStorage.setItem('role', userData.data.role || '');
+          localStorage.setItem('avatar', userData.data.avatar || '');
+          localStorage.setItem('userId', userData.data.id || '');
         }
-      }
-      
-      window.dispatchEvent(new CustomEvent('loginStatusChanged'));
-      router.push('/Home');
-    } else {
-      if (response.status === 422 && data.detail && Array.isArray(data.detail) && data.detail.length > 0) {
-        const errorMessages = data.detail
-          .map((err: any) => {
-            const msg = err.msg || '';
-            return msg.replace(/^Value error,\s*/, '');
-          })
-          .filter((msg: string) => msg.length > 0)
-          .join('\n');
-        ElMessage.error(errorMessages || '登录失败');
-      } else {
-        const errorMsg = data.detail || data.msg || '登录失败，请检查用户名和密码';
-        ElMessage.error(errorMsg);
+      } catch (err) {
+        console.error('获取用户信息失败:', err);
       }
     }
+    
+    window.dispatchEvent(new CustomEvent('loginStatusChanged'));
+    router.push('/');
   } catch (error) {
     console.error('登录错误:', error);
     const errorMessage = (error as Error).message;
