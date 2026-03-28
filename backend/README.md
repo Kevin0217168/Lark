@@ -2,6 +2,16 @@
 ## 主要技术栈
 FastAPI + SQLite
 大部分接口遵循 RESTful 风格开发
+
+## 参考文档
+- [Stream 模块文档](app/stream/README.md)
+- [Firmware 固件管理模块文档](app/firmwareapi/README.md)
+- [异步获取设备版本号 — 实现解析](app/deviceapi/README.md)
+
+## 学习笔记
+- [基于 asyncio.Future 实现 WebSocket 请求-响应模式：异步获取 IoT 设备版本号](app/docs/async-device-version.md)
+- [SQLite 性能优化实战：从 70ms 到 1ms 的日志写入之旅](./SQLite-WAL优化总结.md)
+
 ## 项目文件树结构
 ```
 .
