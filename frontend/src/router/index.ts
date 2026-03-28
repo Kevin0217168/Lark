@@ -3,9 +3,9 @@
 import { createRouter, createWebHistory } from "vue-router";
 import LoginView from "@/views/LoginView.vue";
 import RegisterView from "@/views/RegisterView.vue";
-import Home from "@/components/Home.vue";
+import Home from "@/components/HomePage.vue";
 import Stream from "@/components/Stream.vue";
-import Device from "@/components/Device.vue";
+import Device from "@/components/DevicePage.vue";
 import Data from "@/components/Data.vue";
 import Profile from "@/components/Profile.vue";
 import UserManage from "@/components/UserManage.vue";

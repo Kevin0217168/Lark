@@ -247,6 +247,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { Warning, Switch, Sort, Refresh } from '@element-plus/icons-vue';
 import * as echarts from 'echarts';
 import MobileBeian from './MobileBeian.vue';
+import { api } from '../../utils/api';
 
 const getToken = () => {
   return localStorage.getItem('accessToken');
@@ -650,38 +651,14 @@ const reconnectWebSocket = () => {
 
 const refreshToken = async () => {
   try {
-    const token = getToken();
-    if (!token) {
-      console.log('没有token，无法刷新');
-      return null;
+    const data = await api.post('/api/refresh');
+    if (data.access_token) {
+      localStorage.setItem('accessToken', data.access_token);
+      console.log('Token刷新成功');
+      return data.access_token;
     }
-    
-    console.log('开始刷新token');
-    const response = await fetch('/api/refresh', {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
-    });
-    
-    console.log('刷新token响应状态:', response.status);
-    if (response.ok) {
-      const data = await response.json();
-      console.log('刷新token响应数据:', data);
-      if (data.access_token) {
-        localStorage.setItem('accessToken', data.access_token);
-        console.log('Token刷新成功');
-        return data.access_token;
-      } else {
-        console.log('Token刷新失败，响应数据格式不正确');
-      }
-    } else {
-      console.log('Token刷新失败，HTTP状态码:', response.status);
-    }
-    
-    console.log('使用原token');
-    return token;
+    console.log('Token刷新失败，响应数据格式不正确');
+    return getToken();
   } catch (error) {
     console.error('刷新token失败:', error);
     return getToken();
@@ -692,25 +669,11 @@ const startDeviceStreaming = async () => {
   if (!selectedDeviceId.value) return;
   
   try {
-    const token = getToken();
-    if (!token) {
-      connectionError.value = '未登录，请先登录';
-      return;
-    }
-    
-    const response = await fetch(`/api/stream/viewer/following/${selectedDeviceId.value}`, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
-    });
-    
-    const data = await response.json();
+    const data = await api.post(`/api/stream/viewer/following/${selectedDeviceId.value}`);
     
     await new Promise(resolve => setTimeout(resolve, 4000));
     
-    const isSuccess = response.ok && (data.code === 1 || 
+    const isSuccess = (data.code === 1 || 
       (data.msg && (data.msg.includes('OK') || data.msg.includes('success') || data.msg.includes('成功'))));
     
     if (isSuccess) {
@@ -721,9 +684,6 @@ const startDeviceStreaming = async () => {
       connectionError.value = '';
     } else if (data.msg && data.msg.toLowerCase().includes('viewer has not registerd')) {
       console.log('Viewer未注册，但WebSocket可能已经成功连接');
-      connectionError.value = '';
-    } else if (response.status === 401) {
-      console.log('认证失败，但WebSocket可能已经成功连接');
       connectionError.value = '';
     } else {
       console.error('设备推流开启失败:', data.msg || '未知错误');

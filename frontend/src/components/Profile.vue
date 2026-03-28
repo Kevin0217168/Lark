@@ -147,6 +147,7 @@
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
+import { api } from '../utils/api';
 
 const router = useRouter();
 const loading = ref(false);
@@ -261,31 +262,13 @@ const fetchUserInfo = async () => {
       throw new Error('未登录，请先登录');
     }
 
-    const response = await fetch(`${API_BASE_URL}/api/users/me`, {
-      method: 'GET',
+    const responseData = await api.get('/api/users/me', {
       headers: {
         'Accept': 'application/json',
         'Authorization': `Bearer ${accessToken}`
-      },
-      credentials: 'include'
-    });
-
-    if (response.status === 401) {
-      // Token过期，尝试刷新
-      const refreshed = await tryRefreshToken();
-      if (refreshed) {
-        // 刷新成功，重新获取用户信息
-        return fetchUserInfo();
-      } else {
-        throw new Error('登录已过期，请重新登录');
       }
-    }
-
-    if (!response.ok) {
-      throw new Error('获取用户信息失败');
-    }
-
-    const responseData = await response.json();
+    });
+    
     if (responseData.code === 200 && responseData.data) {
       userInfo.value = responseData.data;
       // 更新localStorage中的用户名和头像信息，确保Header中的头像同步更新
@@ -306,21 +289,16 @@ const fetchUserInfo = async () => {
 // 尝试刷新token
 const tryRefreshToken = async (): Promise<boolean> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/refresh`, {
-      method: 'POST',
+    const data = await api.post('/api/refresh', {}, {
       headers: {
         'Accept': 'application/json',
-      },
-      credentials: 'include',
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      if (data.access_token) {
-        localStorage.setItem('accessToken', data.access_token);
-        localStorage.setItem('tokenType', data.token_type || 'bearer');
-        return true;
       }
+    });
+    
+    if (data.access_token) {
+      localStorage.setItem('accessToken', data.access_token);
+      localStorage.setItem('tokenType', data.token_type || 'bearer');
+      return true;
     }
     return false;
   } catch (error) {
@@ -340,26 +318,21 @@ const openDeleteAccountDialog = async () => {
         return;
       }
 
-      const usersResponse = await fetch(`${API_BASE_URL}/api/users`, {
-        method: 'GET',
+      const usersData = await api.get('/api/users', {
         headers: {
           'Accept': 'application/json',
           'Authorization': `Bearer ${accessToken}`
-        },
-        credentials: 'include'
+        }
       });
-
-      if (usersResponse.ok) {
-        const usersData = await usersResponse.json();
-        if (usersData.code === 200 && usersData.data) {
-          // 统计管理员账号数量
-          const adminCount = usersData.data.filter((user: any) => user.role === 'root').length;
-          
-          // 如果只有一个管理员账号，不允许注销
-          if (adminCount <= 1) {
-            ElMessage.error('系统中只有一个管理员账号，无法注销。请先创建其他管理员账号。');
-            return;
-          }
+      
+      if (usersData.code === 200 && usersData.data) {
+        // 统计管理员账号数量
+        const adminCount = usersData.data.filter((user: any) => user.role === 'root').length;
+        
+        // 如果只有一个管理员账号，不允许注销
+        if (adminCount <= 1) {
+          ElMessage.error('系统中只有一个管理员账号，无法注销。请先创建其他管理员账号。');
+          return;
         }
       }
     }
@@ -388,26 +361,19 @@ const verifyPasswordAndConfirmDelete = async () => {
     params.append('client_id', '');
     params.append('client_secret', '');
 
-    const response = await fetch(`${API_BASE_URL}/api/login`, {
-      method: 'POST',
+    const data = await api.post('/api/login', params.toString(), {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json',
-      },
-      body: params.toString(),
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      if (data.access_token) {
-        // 密码验证成功，关闭验证对话框，打开确认对话框
-        verifyPasswordDialogVisible.value = false;
-        confirmDeleteDialogVisible.value = true;
-      } else {
-        throw new Error('密码验证失败');
       }
+    });
+    
+    if (data.access_token) {
+      // 密码验证成功，关闭验证对话框，打开确认对话框
+      verifyPasswordDialogVisible.value = false;
+      confirmDeleteDialogVisible.value = true;
     } else {
-      throw new Error('密码不正确');
+      throw new Error('密码验证失败');
     }
   } catch (err) {
     ElMessage.error((err as Error).message || '密码验证失败');
@@ -422,20 +388,13 @@ const handleDeleteAccount = async () => {
     deletingAccount.value = true;
 
     // 先调用 /api/users/me 获取当前账号id
-    const meResponse = await fetch(`${API_BASE_URL}/api/users/me`, {
-      method: 'GET',
+    const meResponseData = await api.get('/api/users/me', {
       headers: {
         'Accept': 'application/json',
         'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
-      },
-      credentials: 'include'
+      }
     });
-
-    if (!meResponse.ok) {
-      throw new Error('获取账号信息失败');
-    }
-
-    const meResponseData = await meResponse.json();
+    
     if (meResponseData.code !== 200 || !meResponseData.data) {
       throw new Error('获取账号信息失败');
     }
@@ -443,20 +402,7 @@ const handleDeleteAccount = async () => {
     const userId = meResponseData.data.id;
 
     // 再调用 /api/users/{id} 删除账号
-    const deleteResponse = await fetch(`${API_BASE_URL}/api/users/${userId}`, {
-      method: 'DELETE',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
-      },
-      credentials: 'include'
-    });
-
-    if (!deleteResponse.ok) {
-      throw new Error('注销账号失败');
-    }
-
-    const deleteResponseData = await deleteResponse.json();
+    const deleteResponseData = await api.delete(`/api/users/${userId}`);
     if (deleteResponseData.code === 200) {
       ElMessage.success('账号已注销');
       // 清除登录状态和token信息
@@ -502,22 +448,14 @@ const handleDeleteAccount = async () => {
 // 退出登录
 const handleLogout = async () => {
   try {
-    // 向后端发送退出登录请求
     const token = localStorage.getItem('accessToken');
-    const response = await fetch('/api/logout', {
-      method: 'POST',
+    const data = await api.post('/api/logout', {}, {
       headers: {
         'Accept': 'application/json',
         'Authorization': token ? `Bearer ${token}` : ''
       }
     });
-    
-    if (response.ok) {
-      const data = await response.json();
-      console.log('退出登录成功:', data);
-    } else {
-      console.error('退出登录请求失败:', response.status);
-    }
+    console.log('退出登录成功:', data);
   } catch (error) {
     console.error('退出登录请求出错:', error);
   }
@@ -585,20 +523,14 @@ const verifyPassword = async (username: string, password: string): Promise<boole
     params.append('client_id', '');
     params.append('client_secret', '');
     
-    const response = await fetch(`${API_BASE_URL}/api/login`, {
-      method: 'POST',
+    const data = await api.post('/api/login', params.toString(), {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json',
-      },
-      body: params.toString(),
+      }
     });
-
-    if (response.ok) {
-      const data = await response.json();
-      return data.access_token !== undefined;
-    }
-    return false;
+    
+    return data.access_token !== undefined;
   } catch (error) {
     console.error('验证密码失败:', error);
     return false;
@@ -659,20 +591,9 @@ const saveChanges = async () => {
     }
 
     // 发送请求
-    const response = await fetch(`${API_BASE_URL}/api/users/${userInfo.value.id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
-      },
-      body: JSON.stringify(requestData),
-      credentials: 'include'
-    });
-
-    const responseData = await response.json();
+    const responseData = await api.put(`/api/users/${userInfo.value.id}`, requestData);
     
-    if (response.ok && responseData.code === 200) {
+    if (responseData.code === 200) {
       ElMessage.success('修改账号信息成功');
       editDialogVisible.value = false;
       // 重新获取用户信息
@@ -683,25 +604,7 @@ const saveChanges = async () => {
       // 触发登录状态变化事件，通知Header组件更新
       window.dispatchEvent(new CustomEvent('loginStatusChanged'));
     } else {
-      // 处理422错误，显示详细错误信息
-      if (response.status === 422 && responseData.detail && Array.isArray(responseData.detail) && responseData.detail.length > 0) {
-        // 处理 [{ loc: [...], msg: "...", type: "..." }] 格式的错误
-        const errorMessages = responseData.detail
-          .map((err: any) => {
-            const msg = err.msg || '';
-            // 移除 "Value error, " 前缀
-            return msg.replace(/^Value error,\s*/, '');
-          })
-          .filter((msg: string) => msg.length > 0)
-          .join('\n');
-        throw new Error(errorMessages || '修改账号信息失败');
-      } else if (response.status === 422 && responseData.errors) {
-        // 提取错误信息并显示
-        const errorMessages = Object.values(responseData.errors).flat().join('\n');
-        throw new Error(errorMessages || '修改账号信息失败');
-      } else {
-        throw new Error(responseData.msg || '修改账号信息失败');
-      }
+      throw new Error(responseData.msg || '修改账号信息失败');
     }
   } catch (err) {
     const errorMessage = (err as Error).message;

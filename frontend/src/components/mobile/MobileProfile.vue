@@ -131,6 +131,7 @@ import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { Edit, SwitchButton, Delete, Loading, Warning, User } from '@element-plus/icons-vue';
 import MobileBeian from './MobileBeian.vue';
+import { api } from '../../utils/api';
 
 const router = useRouter();
 const loading = ref(false);
@@ -241,34 +242,7 @@ const fetchUserInfo = async () => {
     loading.value = true;
     error.value = '';
 
-    const accessToken = localStorage.getItem('accessToken');
-    if (!accessToken) {
-      throw new Error('未登录，请先登录');
-    }
-
-    const response = await fetch('/api/users/me', {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${accessToken}`
-      },
-      credentials: 'include'
-    });
-
-    if (response.status === 401) {
-      const refreshed = await tryRefreshToken();
-      if (refreshed) {
-        return fetchUserInfo();
-      } else {
-        throw new Error('登录已过期，请重新登录');
-      }
-    }
-
-    if (!response.ok) {
-      throw new Error('获取用户信息失败');
-    }
-
-    const responseData = await response.json();
+    const responseData = await api.get('/api/users/me');
     if (responseData.code === 200 && responseData.data) {
       userInfo.value = responseData.data;
       localStorage.setItem('username', userInfo.value.username || '');
@@ -286,21 +260,11 @@ const fetchUserInfo = async () => {
 
 const tryRefreshToken = async (): Promise<boolean> => {
   try {
-    const response = await fetch('/api/refresh', {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-      },
-      credentials: 'include',
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      if (data.access_token) {
-        localStorage.setItem('accessToken', data.access_token);
-        localStorage.setItem('tokenType', data.token_type || 'bearer');
-        return true;
-      }
+    const data = await api.post('/api/refresh');
+    if (data.access_token) {
+      localStorage.setItem('accessToken', data.access_token);
+      localStorage.setItem('tokenType', data.token_type || 'bearer');
+      return true;
     }
     return false;
   } catch (error) {
@@ -318,24 +282,13 @@ const openDeleteAccountDialog = async () => {
         return;
       }
 
-      const usersResponse = await fetch('/api/users', {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
-        },
-        credentials: 'include'
-      });
-
-      if (usersResponse.ok) {
-        const usersData = await usersResponse.json();
-        if (usersData.code === 200 && usersData.data) {
-          const adminCount = usersData.data.filter((user: any) => user.role === 'root').length;
-          
-          if (adminCount <= 1) {
-            ElMessage.error('系统中只有一个管理员账号，无法注销。请先创建其他管理员账号。');
-            return;
-          }
+      const usersData = await api.get('/api/users');
+      if (usersData.code === 200 && usersData.data) {
+        const adminCount = usersData.data.filter((user: any) => user.role === 'root').length;
+        
+        if (adminCount <= 1) {
+          ElMessage.error('系统中只有一个管理员账号，无法注销。请先创建其他管理员账号。');
+          return;
         }
       }
     }
@@ -361,25 +314,17 @@ const verifyPasswordAndConfirmDelete = async () => {
     params.append('client_id', '');
     params.append('client_secret', '');
 
-    const response = await fetch('/api/login', {
-      method: 'POST',
+    const data = await api.post('/api/login', params.toString(), {
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
-      },
-      body: params.toString(),
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
     });
 
-    if (response.ok) {
-      const data = await response.json();
-      if (data.access_token) {
-        verifyPasswordDialogVisible.value = false;
-        confirmDeleteDialogVisible.value = true;
-      } else {
-        throw new Error('密码验证失败');
-      }
+    if (data.access_token) {
+      verifyPasswordDialogVisible.value = false;
+      confirmDeleteDialogVisible.value = true;
     } else {
-      throw new Error('密码不正确');
+      throw new Error('密码验证失败');
     }
   } catch (err) {
     ElMessage.error((err as Error).message || '密码验证失败');
@@ -392,40 +337,14 @@ const handleDeleteAccount = async () => {
   try {
     deletingAccount.value = true;
 
-    const meResponse = await fetch('/api/users/me', {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
-      },
-      credentials: 'include'
-    });
-
-    if (!meResponse.ok) {
-      throw new Error('获取账号信息失败');
-    }
-
-    const meResponseData = await meResponse.json();
+    const meResponseData = await api.get('/api/users/me');
     if (meResponseData.code !== 200 || !meResponseData.data) {
       throw new Error('获取账号信息失败');
     }
 
     const userId = meResponseData.data.id;
 
-    const deleteResponse = await fetch(`/api/users/${userId}`, {
-      method: 'DELETE',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
-      },
-      credentials: 'include'
-    });
-
-    if (!deleteResponse.ok) {
-      throw new Error('注销账号失败');
-    }
-
-    const deleteResponseData = await deleteResponse.json();
+    const deleteResponseData = await api.delete(`/api/users/${userId}`);
     if (deleteResponseData.code === 200) {
       ElMessage.success('账号已注销');
       localStorage.removeItem('isAuthenticated');
@@ -464,21 +383,8 @@ const handleDeleteAccount = async () => {
 
 const handleLogout = async () => {
   try {
-    const token = localStorage.getItem('accessToken');
-    const response = await fetch('/api/logout', {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': token ? `Bearer ${token}` : ''
-      }
-    });
-    
-    if (response.ok) {
-      const data = await response.json();
-      console.log('退出登录成功:', data);
-    } else {
-      console.error('退出登录请求失败:', response.status);
-    }
+    const data = await api.post('/api/logout');
+    console.log('退出登录成功:', data);
   } catch (error) {
     console.error('退出登录请求出错:', error);
   }
@@ -534,20 +440,14 @@ const verifyPassword = async (username: string, password: string): Promise<boole
     params.append('client_id', '');
     params.append('client_secret', '');
     
-    const response = await fetch('/api/login', {
-      method: 'POST',
+    const data = await api.post('/api/login', params.toString(), {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json',
-      },
-      body: params.toString(),
+      }
     });
-
-    if (response.ok) {
-      const data = await response.json();
-      return data.access_token !== undefined;
-    }
-    return false;
+    
+    return data.access_token !== undefined;
   } catch (error) {
     console.error('验证密码失败:', error);
     return false;
@@ -599,20 +499,9 @@ const saveChanges = async () => {
       requestData["password"] = editForm.value.newPassword || "";
     }
 
-    const response = await fetch(`/api/users/${userInfo.value.id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
-      },
-      body: JSON.stringify(requestData),
-      credentials: 'include'
-    });
-
-    const responseData = await response.json();
+    const responseData = await api.put(`/api/users/${userInfo.value.id}`, requestData);
     
-    if (response.ok && responseData.code === 200) {
+    if (responseData.code === 200) {
       ElMessage.success('修改账号信息成功');
       editDialogVisible.value = false;
       await fetchUserInfo();
@@ -620,7 +509,7 @@ const saveChanges = async () => {
       localStorage.setItem('avatar', editForm.value.avatar || '');
       window.dispatchEvent(new CustomEvent('loginStatusChanged'));
     } else {
-      if (response.status === 422 && responseData.detail && Array.isArray(responseData.detail) && responseData.detail.length > 0) {
+      if (responseData.detail && Array.isArray(responseData.detail) && responseData.detail.length > 0) {
         const errorMessages = responseData.detail.map((error: any) => error.msg).join(', ');
         throw new Error(errorMessages);
       } else {
