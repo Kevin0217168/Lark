@@ -84,7 +84,7 @@
     <!-- 移动端内容 -->
     <div class="mobile-content">
       <!-- 根据路由显示不同的移动端组件 -->
-      <MobileHome v-if="route.path === '/Home'" />
+      <HomePage v-if="route.path === '/Home'" />
       <MobileData v-else-if="route.path === '/Data' || route.path === '/Stream'" :activeTab="activeTab" />
       <MobileDevice v-else-if="route.path === '/Device'" :activeTab="activeTab" />
       <MobileProfile v-else-if="route.path === '/Profile'" />
@@ -144,7 +144,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { HomeFilled, DataAnalysis, Monitor, User, Grid } from '@element-plus/icons-vue';
-import MobileHome from '../components/mobile/MobileHome.vue';
+import HomePage from '../components/HomePage.vue';
 import MobileData from '../components/mobile/MobileData.vue';
 import MobileDevice from '../components/mobile/MobileDevice.vue';
 import MobileProfile from '../components/mobile/MobileProfile.vue';
