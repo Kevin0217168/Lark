@@ -7,15 +7,15 @@
 #include "esp_app_format.h"
 #include <errno.h>
 
-static const char *TAG = "OTA";
+static const char *TAG = "ota";
 
 // ===================== OTA 服务器配置 =====================
 // 生产环境
-// #define OTA_API_LATEST   "https://lark.mintlab.top/api/firmwares/latest"
-// #define OTA_API_DOWNLOAD "https://lark.mintlab.top/api/firmwares/download"
+#define OTA_API_LATEST   "https://lark.mintlab.top/api/firmwares/latest"
+#define OTA_API_DOWNLOAD "https://lark.mintlab.top/api/firmwares/download"
 // 本地调试（取消注释并注释上面两行即可切换）
-#define OTA_API_LATEST   "http://192.168.1.200:8080/api/firmwares/latest"
-#define OTA_API_DOWNLOAD "http://192.168.1.200:8080/api/firmwares/download"
+// #define OTA_API_LATEST   "http://192.168.1.200:8080/api/firmwares/latest"
+// #define OTA_API_DOWNLOAD "http://192.168.1.200:8080/api/firmwares/download"
 
 #define OTA_RECV_TIMEOUT       30000
 
