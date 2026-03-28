@@ -3,6 +3,7 @@
 #include <time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_heap_caps.h"
@@ -23,6 +24,15 @@ static const char *TAG = "tasks";
 
 extern Device_t device;
 extern bool Wifi_isConnected;
+
+/* ───── 摄像头推流信号量 ───── */
+SemaphoreHandle_t camera_stream_sem = NULL;
+
+void camera_stream_sem_init(void)
+{
+    camera_stream_sem = xSemaphoreCreateBinary();
+    configASSERT(camera_stream_sem);
+}
 
 /* ───────────────── 诊断 ───────────────── */
 
@@ -66,15 +76,17 @@ void camera_transmit_task(void *pvParameter)
     (void)pvParameter;
     while (1)
     {
-        if (device.status == DEVICE_ON_STREAM)
+        /* 阻塞等待信号量，直到被唤醒才开始推流，不占用 CPU */
+        ESP_LOGI(TAG, "摄像头待机模式，等待推流信号量...");
+        xSemaphoreTake(camera_stream_sem, portMAX_DELAY);
+
+        ESP_LOGI(TAG, "收到推流信号，开始图像传输");
+        /* 持续推流，直到状态不再是 DEVICE_ON_STREAM */
+        while (device.status == DEVICE_ON_STREAM)
         {
             CameraTakePhoto(PhotoTransmit);
         }
-        else
-        {
-            ESP_LOGI(TAG, "摄像头待机模式");
-            vTaskDelay(3000 / portTICK_PERIOD_MS);
-        }
+        /* 状态已切换，回到外层循环重新等待信号量 */
     }
 }
 

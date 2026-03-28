@@ -188,6 +188,7 @@ void app_main(void)
     // -------------------------开启任务-------------------------------
 
     // 开启图像传输任务
+    camera_stream_sem_init();   // 必须在创建任务之前初始化信号量
     static uint8_t ucParameterToPass;
     TaskHandle_t xHandle = NULL;
     xTaskCreate(camera_transmit_task, "camera_transmit_task", 4096, &ucParameterToPass, 1, &xHandle);

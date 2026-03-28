@@ -6,6 +6,7 @@
 #include "esp_ota_ops.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "tasks.h"
 
 static const char *TAG = "ws_text_process";
 
@@ -128,6 +129,7 @@ static void set_status(const char *key, cJSON *values_item)
     if (val && strcasecmp(val, "stream") == 0) {
         ESP_LOGI(TAG, "进入推流模式");
         device.status = DEVICE_ON_STREAM;
+        xSemaphoreGive(camera_stream_sem);   // 唤醒 camera_transmit_task
         ws_reply(1, "进入推流模式.", key, "stream");
     } else if (val && strcasecmp(val, "standby") == 0) {
         ESP_LOGI(TAG, "进入待机模式");
