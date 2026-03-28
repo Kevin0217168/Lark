@@ -135,8 +135,8 @@ void app_main(void)
 
     // ----------------------远程日志 阶段二：启动 POST 上传--------------------------
     // 网络已就绪，启动 flush 任务，通过独立 HTTP POST 批量上传日志
-    // remote_log_start("https://lark.mintlab.top", "/api/logs", 443, secret);
-    remote_log_start("http://192.168.1.200", "/api/logs", 8080, secret);
+    remote_log_start("https://lark.mintlab.top", "/api/logs", 443, secret);
+    // remote_log_start("http://192.168.1.200", "/api/logs", 8080, secret);
 
     // ----------------------初始化传感器-----------------------------
     // 如果不是第一次 OTA 运行（或者已经诊断过），则在这里正常初始化

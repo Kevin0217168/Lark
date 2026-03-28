@@ -200,6 +200,10 @@ static void remote_log_flush_task(void *pvParameters)
             vRingbufferReturnItem(s_ringbuf, item);
         }
 
+        /* 记录发送前的缓冲区使用量（用于统计） */
+        size_t pre_flush_free = xRingbufferGetCurFreeSize(s_ringbuf);
+        size_t pre_flush_used = RLOG_RINGBUF_SIZE - pre_flush_free;
+
         if (total_len > 0) {
             flush_buf[total_len] = '\0';
             esp_err_t err = remote_log_http_post(flush_buf, total_len);
@@ -219,11 +223,10 @@ static void remote_log_flush_task(void *pvParameters)
         stats_counter++;
         if (stats_counter >= RLOG_STATS_INTERVAL) {
             stats_counter = 0;
-            size_t free_size = xRingbufferGetCurFreeSize(s_ringbuf);
-            size_t used_size = RLOG_RINGBUF_SIZE - free_size;
-            ESP_LOGI(TAG, "[stats] buf=%u/%u bytes (%.0f%%), sent=%u B, drop=%u B (%u times), send_fail=%u B, consec_fail=%u",
-                     (unsigned)used_size, RLOG_RINGBUF_SIZE,
-                     (float)used_size / RLOG_RINGBUF_SIZE * 100.0f,
+            ESP_LOGI(TAG, "[stats] flushed=%d B, pending=%u/%u bytes (%.0f%%), sent=%u B, drop=%u B (%u times), send_fail=%u B, consec_fail=%u",
+                     total_len,
+                     (unsigned)(pre_flush_used + total_len), RLOG_RINGBUF_SIZE,
+                     (float)(pre_flush_used + total_len) / RLOG_RINGBUF_SIZE * 100.0f,
                      (unsigned)s_total_bytes_sent,
                      (unsigned)s_total_bytes_dropped, (unsigned)s_drop_count,
                      (unsigned)s_total_bytes_send_fail,

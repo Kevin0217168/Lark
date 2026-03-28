@@ -6,3 +6,4 @@
 
 ## 学习笔记
 - [嵌入式 WebSocket 命令处理的扁平化设计：映射表 + 分发表实战](docs/ws_process_design.md)
+- [ESP32 日志远程传输系统：从设计到实现](docs/remote-log-design.md)
