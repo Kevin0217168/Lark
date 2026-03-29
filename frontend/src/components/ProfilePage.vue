@@ -115,9 +115,6 @@
           </el-button>
         </div>
       </div>
-
-      <!-- 备案信息 -->
-      <MobileBeian v-if="isMobile" />
     </div>
 
     <!-- 验证密码对话框 -->
@@ -221,7 +218,6 @@ import { ref, onMounted, onUnmounted, computed } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { Edit, SwitchButton, Delete, Loading, Warning, User } from '@element-plus/icons-vue';
-import MobileBeian from './mobile/MobileBeian.vue';
 import { api } from '../utils/api';
 
 const router = useRouter();

@@ -158,9 +158,6 @@
         <div ref="averageChartRef" class="chart"></div>
       </div>
     </div>
-    
-    <!-- 备案信息 (仅移动端显示) -->
-    <MobileBeian v-if="isMobile" />
   </div>
 </template>
 
@@ -171,7 +168,6 @@ import { useDeviceStore } from '../stores/deviceStore';
 import { ElMessage, ElIcon } from 'element-plus';
 import { Monitor, DataAnalysis, Warning, ArrowRight } from '@element-plus/icons-vue';
 import * as echarts from 'echarts';
-import MobileBeian from './mobile/MobileBeian.vue';
 
 const router = useRouter();
 const { 

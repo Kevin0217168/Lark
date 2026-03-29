@@ -528,9 +528,6 @@
           description="暂无日志数据" 
         />
       </div>
-
-      <!-- 备案信息 -->
-      <MobileBeian />
     </div>
   </div>
 
@@ -569,7 +566,6 @@ import { ref, computed, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Loading } from '@element-plus/icons-vue';
 import { useDeviceStore, type Device, type DeviceLog } from '../stores/deviceStore';
-import MobileBeian from './mobile/MobileBeian.vue';
 import { api } from '../utils/api';
 
 // 检测是否为移动设备

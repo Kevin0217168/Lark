@@ -238,9 +238,6 @@
       <div v-if="filteredUsers.length === 0 && !loading && !error" class="empty-state">
         <el-empty description="暂无用户数据" />
       </div>
-
-      <!-- 备案信息 -->
-      <MobileBeian />
     </div>
 
     <!-- 编辑用户对话框 -->
@@ -357,7 +354,6 @@ import { ref, computed, onMounted } from 'vue';
 import { ElMessage, ElMessageBox, ElIcon } from 'element-plus';
 import { Plus, Loading, Warning, Search, Delete } from '@element-plus/icons-vue';
 import { api } from '@/utils/api';
-import MobileBeian from './mobile/MobileBeian.vue';
 
 // 检测是否为移动设备
 const isMobile = ref(window.innerWidth < 768);

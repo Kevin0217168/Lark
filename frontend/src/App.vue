@@ -11,6 +11,7 @@
     <template v-else>
       <MobilePage @tabChange="handleTabChange" :activeTab="activeTab" />
     </template>
+
   </div>
   
   <!-- 桌面端界面 -->
@@ -271,5 +272,9 @@ header {
 .mobile-app {
   width: 100%;
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
+
+
 </style>
