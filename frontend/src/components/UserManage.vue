@@ -1,31 +1,156 @@
 <template>
-  <el-card class="user-manage-card">
-    <div class="header-section">
-      <div class="header-left">
-        <el-button type="primary" @click="openAddUserDialog">
+  <div class="user-manage-container" :class="{ 'mobile': isMobile }">
+    <!-- 桌面端：使用 el-card 包装 -->
+    <el-card v-if="!isMobile" class="user-manage-card">
+      <div class="header-section desktop-header">
+        <div class="header-left">
+          <el-button type="primary" @click="openAddUserDialog">
+            <el-icon><Plus /></el-icon>
+            新增用户
+          </el-button>
+        </div>
+        <h3 class="title">用户管理</h3>
+        <div class="header-right"></div>
+      </div>
+
+      <div class="filter-section desktop-filter">
+        <div class="filter-left">
+          <el-select
+            v-model="filterRole"
+            placeholder="筛选角色"
+            clearable
+            style="width: 150px"
+            @change="handleFilterChange"
+          >
+            <el-option label="全部角色" value="" />
+            <el-option label="管理员" value="root" />
+            <el-option label="普通用户" value="user" />
+          </el-select>
+          <el-button 
+            type="danger" 
+            :disabled="selectedUsers.length === 0"
+            @click="handleBatchDelete"
+          >
+            <el-icon><Delete /></el-icon>
+            批量删除 ({{ selectedUsers.length }})
+          </el-button>
+        </div>
+        <div class="filter-right">
+          <el-input
+            v-model="searchUsername"
+            placeholder="搜索用户名/昵称/邮箱"
+            clearable
+            style="width: 250px"
+            @input="handleSearchChange"
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+        </div>
+      </div>
+
+      <div v-if="loading" class="loading-container">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        <span>加载中...</span>
+      </div>
+
+      <div v-else-if="error" class="error-container">
+        <el-icon><Warning /></el-icon>
+        <span>{{ error }}</span>
+        <el-button type="primary" @click="fetchUsers">重新加载</el-button>
+      </div>
+
+      <div v-else>
+        <el-table 
+          :data="filteredUsers" 
+          style="width: 100%" 
+          v-loading="tableLoading"
+          @selection-change="handleSelectionChange"
+        >
+          <el-table-column type="selection" width="55" align="center" />
+          <el-table-column prop="id" label="ID" width="60" align="center" />
+          <el-table-column prop="avatar" label="头像" width="80" align="center">
+            <template #default="scope">
+              <el-avatar v-if="scope.row.avatar" :src="scope.row.avatar" :size="40" />
+              <el-avatar v-else :size="40">{{ scope.row.nickname ? scope.row.nickname.charAt(0) : '?' }}</el-avatar>
+            </template>
+          </el-table-column>
+          <el-table-column prop="username" label="用户名" min-width="100" />
+          <el-table-column prop="nickname" label="昵称" min-width="100" />
+          <el-table-column prop="role" label="角色" width="100" align="center">
+            <template #default="scope">
+              <el-tag :type="scope.row.role === 'root' ? 'danger' : 'info'">
+                {{ scope.row.role === 'root' ? '管理员' : '普通用户' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="email" label="邮箱" min-width="180" show-overflow-tooltip>
+            <template #default="scope">
+              {{ scope.row.email || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="160" align="center" fixed="right">
+            <template #default="scope">
+              <el-button 
+                type="primary" 
+                size="small" 
+                @click="handleEditUser(scope.row)"
+              >
+                编辑
+              </el-button>
+              <el-button 
+                type="danger" 
+                size="small" 
+                @click="handleDeleteUser(scope.row)"
+                :disabled="scope.row.id === currentUserId"
+              >
+                删除
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </el-card>
+
+    <!-- 移动端：不使用 el-card 包装 -->
+    <div v-else class="mobile-user-manage">
+      <!-- 头部 -->
+      <div class="header-section mobile-header">
+        <h3>用户管理</h3>
+        <el-button type="primary" size="small" @click="openAddUserDialog">
           <el-icon><Plus /></el-icon>
-          新增用户
+          新增
         </el-button>
       </div>
-      <h3 class="title">用户管理</h3>
-      <div class="header-right"></div>
-    </div>
 
-    <div class="filter-section">
-      <div class="filter-left">
+      <!-- 筛选 -->
+      <div class="filter-section mobile-filter">
         <el-select
           v-model="filterRole"
           placeholder="筛选角色"
           clearable
-          style="width: 150px"
+          class="filter-select"
           @change="handleFilterChange"
         >
           <el-option label="全部角色" value="" />
           <el-option label="管理员" value="root" />
           <el-option label="普通用户" value="user" />
         </el-select>
+        <el-input
+          v-model="searchUsername"
+          placeholder="搜索用户名/昵称/邮箱"
+          clearable
+          class="filter-input"
+          @input="handleSearchChange"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
         <el-button 
           type="danger" 
+          size="small"
           :disabled="selectedUsers.length === 0"
           @click="handleBatchDelete"
         >
@@ -33,88 +158,96 @@
           批量删除 ({{ selectedUsers.length }})
         </el-button>
       </div>
-      <div class="filter-right">
-        <el-input
-          v-model="searchUsername"
-          placeholder="搜索用户名/昵称/邮箱"
-          clearable
-          style="width: 250px"
-          @input="handleSearchChange"
-        >
-          <template #prefix>
-            <el-icon><Search /></el-icon>
-          </template>
-        </el-input>
+
+      <!-- 加载状态 -->
+      <div v-if="loading" class="loading-container">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        <span>加载中...</span>
       </div>
-    </div>
 
-    <div v-if="loading" class="loading-container">
-      <el-icon class="is-loading"><Loading /></el-icon>
-      <span>加载中...</span>
-    </div>
+      <!-- 错误状态 -->
+      <div v-else-if="error" class="error-container">
+        <el-icon><Warning /></el-icon>
+        <span>{{ error }}</span>
+        <el-button type="primary" size="small" @click="fetchUsers">重新加载</el-button>
+      </div>
 
-    <div v-else-if="error" class="error-container">
-      <el-icon><Warning /></el-icon>
-      <span>{{ error }}</span>
-      <el-button type="primary" @click="fetchUsers">重新加载</el-button>
-    </div>
-
-    <div v-else>
-      <el-table 
-        :data="filteredUsers" 
-        style="width: 100%" 
-        v-loading="tableLoading"
-        @selection-change="handleSelectionChange"
-      >
-        <el-table-column type="selection" width="55" align="center" />
-        <el-table-column prop="id" label="ID" width="60" align="center" />
-        <el-table-column prop="avatar" label="头像" width="80" align="center">
-          <template #default="scope">
-            <el-avatar v-if="scope.row.avatar" :src="scope.row.avatar" :size="40" />
-            <el-avatar v-else :size="40">{{ scope.row.nickname ? scope.row.nickname.charAt(0) : '?' }}</el-avatar>
-          </template>
-        </el-table-column>
-        <el-table-column prop="username" label="用户名" min-width="100" />
-        <el-table-column prop="nickname" label="昵称" min-width="100" />
-        <el-table-column prop="role" label="角色" width="100" align="center">
-          <template #default="scope">
-            <el-tag :type="scope.row.role === 'root' ? 'danger' : 'info'">
-              {{ scope.row.role === 'root' ? '管理员' : '普通用户' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="email" label="邮箱" min-width="180" show-overflow-tooltip>
-          <template #default="scope">
-            {{ scope.row.email || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="160" align="center" fixed="right">
-          <template #default="scope">
+      <!-- 用户列表 -->
+      <div v-else class="user-list">
+        <div 
+          v-for="user in filteredUsers" 
+          :key="user.id" 
+          class="user-card"
+          :class="{ 'selected': selectedUsers.some(u => u.id === user.id) }"
+          @click="toggleUserSelection(user)"
+        >
+          <div class="user-header">
+            <div class="user-avatar">
+              <el-avatar v-if="user.avatar" :src="user.avatar" :size="40" />
+              <el-avatar v-else :size="40">{{ user.nickname ? user.nickname.charAt(0) : '?' }}</el-avatar>
+            </div>
+            <div class="user-info">
+              <h4>{{ user.nickname || user.username }}</h4>
+              <el-tag :type="user.role === 'root' ? 'danger' : 'info'" size="small">
+                {{ user.role === 'root' ? '管理员' : '普通用户' }}
+              </el-tag>
+            </div>
+            <div class="user-checkbox">
+              <el-checkbox 
+                :model-value="selectedUsers.some(u => u.id === user.id)"
+                @click.stop
+                @change="(val: boolean) => handleCheckboxChange(user, val)"
+              />
+            </div>
+          </div>
+          <div class="user-details">
+            <div class="detail-row">
+              <span class="label">ID</span>
+              <span class="value">{{ user.id }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="label">用户名</span>
+              <span class="value">{{ user.username }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="label">邮箱</span>
+              <span class="value">{{ user.email || '-' }}</span>
+            </div>
+          </div>
+          <div class="user-actions">
             <el-button 
               type="primary" 
               size="small" 
-              @click="handleEditUser(scope.row)"
+              @click.stop="handleEditUser(user)"
             >
               编辑
             </el-button>
             <el-button 
               type="danger" 
               size="small" 
-              @click="handleDeleteUser(scope.row)"
-              :disabled="scope.row.id === currentUserId"
+              @click.stop="handleDeleteUser(user)"
+              :disabled="user.id === currentUserId"
             >
               删除
             </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 空状态 -->
+      <div v-if="filteredUsers.length === 0 && !loading && !error" class="empty-state">
+        <el-empty description="暂无用户数据" />
+      </div>
+
+      <!-- 备案信息 -->
+      <MobileBeian />
     </div>
 
     <!-- 编辑用户对话框 -->
     <el-dialog
       v-model="editDialogVisible"
       title="编辑用户"
-      width="500px"
+      :width="isMobile ? '90%' : '500px'"
     >
       <el-form
         :model="editForm"
@@ -171,7 +304,7 @@
     <el-dialog
       v-model="addDialogVisible"
       title="新增用户"
-      width="500px"
+      :width="isMobile ? '90%' : '500px'"
     >
       <el-form
         :model="addForm"
@@ -212,140 +345,51 @@
       </el-form>
 
       <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="addDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="handleAddUser" :loading="adding">创建</el-button>
-        </span>
+        <el-button @click="addDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleAddUser" :loading="adding">创建</el-button>
       </template>
     </el-dialog>
-  </el-card>
+  </div>
 </template>
 
-<script lang="ts" setup>
-import { ref, onMounted, computed } from "vue";
-import { ElMessage, ElMessageBox } from "element-plus";
-import { Loading, Warning, Plus, Search, Delete } from "@element-plus/icons-vue";
-import { api } from '../utils/api';
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue';
+import { ElMessage, ElMessageBox, ElIcon } from 'element-plus';
+import { Plus, Loading, Warning, Search, Delete } from '@element-plus/icons-vue';
+import { api } from '@/utils/api';
+import MobileBeian from './mobile/MobileBeian.vue';
 
-const API_BASE_URL = '';
+// 检测是否为移动设备
+const isMobile = ref(window.innerWidth < 768);
 
-const loading = ref(false);
-const tableLoading = ref(false);
-const error = ref('');
+// 监听窗口大小变化
+const handleWindowResize = () => {
+  isMobile.value = window.innerWidth < 768;
+};
+
+onMounted(() => {
+  window.addEventListener('resize', handleWindowResize);
+  fetchUsers();
+  getCurrentUserId();
+});
+
+// 用户列表
 const users = ref<any[]>([]);
-const currentUserId = ref(0);
+const loading = ref(false);
+const error = ref('');
+const tableLoading = ref(false);
 
-// 筛选和搜索
+// 筛选条件
 const filterRole = ref('');
 const searchUsername = ref('');
 
-// 多选相关
+// 选中的用户
 const selectedUsers = ref<any[]>([]);
 
-// 过滤后的用户列表
-const filteredUsers = computed(() => {
-  let result = users.value;
+// 当前用户ID
+const currentUserId = ref(0);
 
-  // 根据角色筛选
-  if (filterRole.value) {
-    result = result.filter(user => user.role === filterRole.value);
-  }
-
-  // 模糊搜索：支持用户名、昵称、邮箱
-  if (searchUsername.value) {
-    const searchTerm = searchUsername.value.toLowerCase();
-    result = result.filter(user => {
-      const username = (user.username || '').toLowerCase();
-      const nickname = (user.nickname || '').toLowerCase();
-      const email = (user.email || '').toLowerCase();
-      return username.includes(searchTerm) || 
-             nickname.includes(searchTerm) || 
-             email.includes(searchTerm);
-    });
-  }
-
-  return result;
-});
-
-const handleFilterChange = () => {
-  // 筛选变化时，computed会自动更新
-};
-
-const handleSearchChange = () => {
-  // 搜索变化时，computed会自动更新
-};
-
-// 处理表格选择变化
-const handleSelectionChange = (selection: any[]) => {
-  selectedUsers.value = selection;
-};
-
-// 批量删除用户
-const handleBatchDelete = async () => {
-  if (selectedUsers.value.length === 0) {
-    ElMessage.warning('请先选择要删除的用户');
-    return;
-  }
-
-  // 检查是否包含当前用户
-  const containsCurrentUser = selectedUsers.value.some(user => user.id === currentUserId.value);
-  if (containsCurrentUser) {
-    ElMessage.error('不能删除自己的账号');
-    return;
-  }
-
-  const usernames = selectedUsers.value.map(user => user.username).join('、');
-  
-  try {
-    await ElMessageBox.confirm(
-      `确定要删除以下用户吗？此操作不可恢复。\n${usernames}`,
-      '确认批量删除',
-      {
-        confirmButtonText: '确认删除',
-        cancelButtonText: '取消',
-        type: 'warning',
-      }
-    );
-
-    // 逐个删除用户
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const user of selectedUsers.value) {
-      try {
-        console.log('批量删除用户 - 发送请求:', {
-          url: `/api/users/${user.id}`,
-          method: 'DELETE',
-          userId: user.id,
-          username: user.username
-        });
-
-        const response = await api.delete(`/api/users/${user.id}`);
-        console.log(`删除用户 ${user.username} (ID: ${user.id}) 响应:`, response);
-
-        successCount++;
-        console.log(`删除用户 ${user.username} (ID: ${user.id}) 成功`);
-      } catch (err) {
-        failCount++;
-        console.error(`删除用户 ${user.username} (ID: ${user.id}) 异常:`, err);
-      }
-    }
-    
-    if (failCount === 0) {
-      ElMessage.success(`成功删除 ${successCount} 个用户`);
-    } else {
-      ElMessage.warning(`成功删除 ${successCount} 个用户，失败 ${failCount} 个`);
-    }
-    
-    selectedUsers.value = [];
-    await fetchUsers();
-  } catch (err: any) {
-    if (err !== 'cancel') {
-      ElMessage.error(err.message || '批量删除失败');
-    }
-  }
-};
-
+// 编辑用户相关
 const editDialogVisible = ref(false);
 const saving = ref(false);
 const editFormRef = ref();
@@ -379,6 +423,7 @@ const addForm = ref({
   avatar: ''
 });
 
+// 编辑用户验证规则
 const editRules = {
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
@@ -496,177 +541,69 @@ const fetchUsers = async () => {
   try {
     loading.value = true;
     error.value = '';
-
-    const data = await api.get('/api/users');
-    if (data.code === 200 && data.data) {
-      users.value = data.data;
+    
+    const response = await api.get('/api/users');
+    console.log('获取用户列表响应:', response);
+    
+    if (response.code === 200 && Array.isArray(response.data)) {
+      users.value = response.data;
     } else {
-      throw new Error(data.msg || '获取用户列表失败');
+      error.value = '获取用户列表失败';
     }
-  } catch (err) {
-    error.value = (err as Error).message || '获取用户列表失败';
+  } catch (err: any) {
+    console.error('获取用户列表异常:', err);
+    error.value = err.message || '获取用户列表失败';
   } finally {
     loading.value = false;
   }
 };
 
-// 编辑用户
-const handleEditUser = (user: any) => {
-  // 保存原始用户数据
-  originalUserData.value = { ...user };
-  
-  editForm.value = {
-    id: user.id,
-    username: user.username,
-    nickname: user.nickname,
-    role: user.role,
-    email: user.email || '',
-    avatar: user.avatar || '',
-    changePassword: false,
-    newPassword: '',
-    confirmPassword: ''
-  };
-  editDialogVisible.value = true;
+// 筛选后的用户列表
+const filteredUsers = computed(() => {
+  return users.value.filter(user => {
+    const roleMatch = !filterRole.value || user.role === filterRole.value;
+    const searchMatch = !searchUsername.value || 
+      user.username.toLowerCase().includes(searchUsername.value.toLowerCase()) ||
+      (user.nickname && user.nickname.toLowerCase().includes(searchUsername.value.toLowerCase())) ||
+      (user.email && user.email.toLowerCase().includes(searchUsername.value.toLowerCase()));
+    return roleMatch && searchMatch;
+  });
+});
+
+// 处理筛选变化
+const handleFilterChange = () => {
+  // 筛选变化时清空选中
+  selectedUsers.value = [];
 };
 
-// 保存用户修改
-const saveUserChanges = async () => {
-  try {
-    await editFormRef.value.validate((valid: boolean, invalidFields: any) => {
-      if (!valid) {
-        const firstField = Object.keys(invalidFields)[0];
-        if (firstField && invalidFields[firstField][0]) {
-          ElMessage.error(invalidFields[firstField][0].message);
-        } else {
-          ElMessage.error('请检查输入信息是否符合要求');
-        }
-        throw new Error('表单验证失败');
-      }
-    });
+// 处理搜索变化
+const handleSearchChange = () => {
+  // 搜索变化时清空选中
+  selectedUsers.value = [];
+};
 
-    saving.value = true;
+// 处理表格选择变化（桌面端）
+const handleSelectionChange = (val: any[]) => {
+  selectedUsers.value = val;
+};
 
-    const accessToken = localStorage.getItem('accessToken');
-    if (!accessToken) {
-      throw new Error('未登录，请先登录');
-    }
-
-    // 构建请求数据，只包含用户实际修改的字段
-    const requestData: Record<string, any> = {};
-    
-    if (editForm.value.username !== originalUserData.value.username) {
-      requestData["username"] = editForm.value.username || "";
-    }
-    
-    if (editForm.value.nickname !== originalUserData.value.nickname) {
-      requestData["nickname"] = editForm.value.nickname || "";
-    }
-    
-    if (editForm.value.role !== originalUserData.value.role) {
-      requestData["role"] = editForm.value.role || "";
-    }
-    
-    if (editForm.value.email !== originalUserData.value.email) {
-      requestData["email"] = editForm.value.email || "";
-    }
-    
-    // 只有当头像URL有实际值且发生变化时才发送
-    if (editForm.value.avatar && editForm.value.avatar !== originalUserData.value.avatar) {
-      requestData["avatar"] = editForm.value.avatar;
-    }
-    
-    // 如果用户选择修改密码，才包含password字段（不需要验证当前密码）
-    if (editForm.value.changePassword) {
-      requestData["password"] = editForm.value.newPassword || "";
-    }
-
-    // 如果没有任何修改，提示用户
-    if (Object.keys(requestData).length === 0) {
-      ElMessage.warning('没有任何修改');
-      saving.value = false;
-      return;
-    }
-
-    // 显示发送到后端的数据格式
-    console.log('用户管理 - 向后端发送的数据:', JSON.stringify(requestData, null, 2));
-    console.log('用户管理 - 请求数据对象:', requestData);
-
-    // 发送请求
-    const responseData = await api.put(`/api/users/${editForm.value.id}`, requestData);
-    
-    if (responseData.code === 200) {
-      ElMessage.success('用户更新成功');
-      editDialogVisible.value = false;
-      // 重新加载用户列表
-      await fetchUsers();
-    } else {
-      // 处理422错误，显示详细错误信息
-      if (responseData.detail && Array.isArray(responseData.detail) && responseData.detail.length > 0) {
-        // 处理 [{ loc: [...], msg: "...", type: "..." }] 格式的错误
-        const errorMessages = responseData.detail
-          .map((err: any) => {
-            const msg = err.msg || '';
-            // 移除 "Value error, " 前缀
-            return msg.replace(/^Value error,\s*/, '');
-          })
-          .filter((msg: string) => msg.length > 0)
-          .join('\n');
-        throw new Error(errorMessages || '更新用户失败');
-      } else if (responseData.errors) {
-        // 提取错误信息并显示
-        const errorMessages = Object.values(responseData.errors).flat().join('\n');
-        throw new Error(errorMessages || '更新用户失败');
-      } else {
-        throw new Error(responseData.msg || '更新用户失败');
-      }
-    }
-  } catch (err: any) {
-    const errorMessage = err.message;
-    
-    // 根据错误类型显示不同的错误信息
-    if (errorMessage === '表单验证失败') {
-      // 表单验证失败已经在validate回调中处理过，这里不需要重复显示
-    } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
-      ElMessage.error('网络连接失败，请检查网络设置');
-    } else {
-      ElMessage.error(errorMessage || '更新用户失败');
-    }
-  } finally {
-    saving.value = false;
+// 切换用户选择（移动端）
+const toggleUserSelection = (user: any) => {
+  const index = selectedUsers.value.findIndex(u => u.id === user.id);
+  if (index !== -1) {
+    selectedUsers.value.splice(index, 1);
+  } else {
+    selectedUsers.value.push(user);
   }
 };
 
-// 删除用户
-const handleDeleteUser = async (user: any) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定要删除用户 "${user.username}" 吗？此操作不可恢复。`,
-      '确认删除',
-      {
-        confirmButtonText: '确认删除',
-        cancelButtonText: '取消',
-        type: 'warning',
-      }
-    );
-
-    const accessToken = localStorage.getItem('accessToken');
-    const currentRole = localStorage.getItem('role');
-    console.log('单个删除 - accessToken检查:', accessToken ? '存在' : '不存在');
-    console.log('单个删除 - 当前用户角色:', currentRole);
-    console.log('单个删除 - 目标用户角色:', user.role);
-
-    const data = await api.delete(`/api/users/${user.id}`);
-    if (data.code === 200) {
-      ElMessage.success('用户删除成功');
-      // 重新加载用户列表
-      await fetchUsers();
-    } else {
-      throw new Error(data.msg || '删除用户失败');
-    }
-  } catch (err: any) {
-    if (err !== 'cancel') {
-      ElMessage.error(err.message || '删除用户失败');
-    }
+// 处理复选框变化（移动端）
+const handleCheckboxChange = (user: any, val: boolean) => {
+  const index = selectedUsers.value.findIndex(u => u.id === user.id);
+  if (val && index === -1) {
+    selectedUsers.value.push(user);
+  } else if (!val && index !== -1) {
+    selectedUsers.value.splice(index, 1);
   }
 };
 
@@ -684,23 +621,16 @@ const openAddUserDialog = () => {
   addDialogVisible.value = true;
 };
 
-// 新增用户
+// 处理新增用户
 const handleAddUser = async () => {
   try {
-    await addFormRef.value.validate((valid: boolean, invalidFields: any) => {
-      if (!valid) {
-        const firstField = Object.keys(invalidFields)[0];
-        if (firstField && invalidFields[firstField][0]) {
-          ElMessage.error(invalidFields[firstField][0].message);
-        } else {
-          ElMessage.error('请检查输入信息是否符合要求');
-        }
-        throw new Error('表单验证失败');
-      }
-    });
-
+    if (!addFormRef.value) return;
+    
+    const valid = await addFormRef.value.validate();
+    if (!valid) return;
+    
     adding.value = true;
-
+    
     // 构建请求数据
     const requestData: any = {
       username: addForm.value.username,
@@ -717,19 +647,16 @@ const handleAddUser = async () => {
       requestData.avatar = addForm.value.avatar;
     }
 
-    // 发送请求
-    const responseData = await api.post('/api/users', requestData);
+    const response = await api.post('/api/users', requestData);
+    console.log('新增用户响应:', response);
     
-    if (responseData.code === 200) {
-      ElMessage.success('用户创建成功');
+    if (response.code === 200) {
+      ElMessage.success('新增用户成功');
       addDialogVisible.value = false;
-      // 重新加载用户列表
       await fetchUsers();
     } else {
-      // 处理错误响应
-      if (responseData.detail && Array.isArray(responseData.detail) && responseData.detail.length > 0) {
-        // 处理 [{ loc: [...], msg: "...", type: "..." }] 格式的错误
-        const errorMessages = responseData.detail
+      if (response.detail && Array.isArray(response.detail) && response.detail.length > 0) {
+        const errorMessages = response.detail
           .map((err: any) => {
             const msg = err.msg || '';
             return msg.replace(/^Value error,\s*/, '');
@@ -737,11 +664,11 @@ const handleAddUser = async () => {
           .filter((msg: string) => msg.length > 0)
           .join('\n');
         throw new Error(errorMessages || '创建用户失败');
-      } else if (responseData.errors) {
-        const errorMessages = Object.values(responseData.errors).flat().join('\n');
+      } else if (response.errors) {
+        const errorMessages = Object.values(response.errors).flat().join('\n');
         throw new Error(errorMessages || '创建用户失败');
       } else {
-        throw new Error(responseData.msg || '创建用户失败');
+        throw new Error(response.msg || '创建用户失败');
       }
     }
   } catch (err: any) {
@@ -752,93 +679,415 @@ const handleAddUser = async () => {
     } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
       ElMessage.error('网络连接失败，请检查网络设置');
     } else {
-      ElMessage.error(errorMessage || '创建用户失败');
+      ElMessage.error(errorMessage || '新增用户失败');
     }
   } finally {
     adding.value = false;
   }
 };
 
-// 组件挂载时获取用户列表
-onMounted(() => {
-  getCurrentUserId();
-  fetchUsers();
-});
+// 处理编辑用户
+const handleEditUser = (user: any) => {
+  editForm.value = {
+    id: user.id,
+    username: user.username,
+    nickname: user.nickname,
+    role: user.role,
+    email: user.email || '',
+    avatar: user.avatar || '',
+    changePassword: false,
+    newPassword: '',
+    confirmPassword: ''
+  };
+  originalUserData.value = { ...user };
+  editDialogVisible.value = true;
+};
+
+// 保存用户修改
+const saveUserChanges = async () => {
+  try {
+    if (!editFormRef.value) return;
+    
+    const valid = await editFormRef.value.validate();
+    if (!valid) return;
+    
+    saving.value = true;
+    
+    // 构建请求数据，只发送有变化的字段
+    const requestData: any = {};
+    
+    if (editForm.value.username !== originalUserData.value.username) {
+      requestData["username"] = editForm.value.username || "";
+    }
+    
+    if (editForm.value.nickname !== originalUserData.value.nickname) {
+      requestData["nickname"] = editForm.value.nickname || "";
+    }
+    
+    if (editForm.value.role !== originalUserData.value.role) {
+      requestData["role"] = editForm.value.role || "";
+    }
+    
+    if (editForm.value.email !== originalUserData.value.email) {
+      requestData["email"] = editForm.value.email || "";
+    }
+    
+    if (editForm.value.avatar && editForm.value.avatar !== originalUserData.value.avatar) {
+      requestData["avatar"] = editForm.value.avatar;
+    }
+    
+    if (editForm.value.changePassword) {
+      requestData["password"] = editForm.value.newPassword || "";
+    }
+
+    // 如果没有任何修改，提示用户
+    if (Object.keys(requestData).length === 0) {
+      ElMessage.warning('没有任何修改');
+      saving.value = false;
+      return;
+    }
+    
+    const response = await api.put(`/api/users/${editForm.value.id}`, requestData);
+    console.log('更新用户响应:', response);
+    
+    if (response.code === 200) {
+      ElMessage.success('用户信息更新成功');
+      editDialogVisible.value = false;
+      await fetchUsers();
+    } else {
+      if (response.detail && Array.isArray(response.detail) && response.detail.length > 0) {
+        const errorMessages = response.detail
+          .map((err: any) => {
+            const msg = err.msg || '';
+            return msg.replace(/^Value error,\s*/, '');
+          })
+          .filter((msg: string) => msg.length > 0)
+          .join('\n');
+        throw new Error(errorMessages || '更新用户失败');
+      } else if (response.errors) {
+        const errorMessages = Object.values(response.errors).flat().join('\n');
+        throw new Error(errorMessages || '更新用户失败');
+      } else {
+        throw new Error(response.msg || '更新用户失败');
+      }
+    }
+  } catch (err: any) {
+    const errorMessage = err.message;
+    
+    if (errorMessage === '表单验证失败') {
+      // 表单验证失败已经在validate回调中处理过
+    } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+      ElMessage.error('网络连接失败，请检查网络设置');
+    } else {
+      ElMessage.error(errorMessage || '用户信息更新失败');
+    }
+  } finally {
+    saving.value = false;
+  }
+};
+
+// 处理删除用户
+const handleDeleteUser = async (user: any) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除用户 ${user.username} 吗？此操作不可恢复。`,
+      '确认删除',
+      {
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    );
+    
+    const response = await api.delete(`/api/users/${user.id}`);
+    console.log('删除用户响应:', response);
+    
+    if (response.code === 200) {
+      ElMessage.success('删除用户成功');
+      await fetchUsers();
+    } else {
+      ElMessage.error('删除用户失败');
+    }
+  } catch (err: any) {
+    if (err !== 'cancel') {
+      ElMessage.error(err.message || '删除用户失败');
+    }
+  }
+};
+
+// 处理批量删除
+const handleBatchDelete = async () => {
+  try {
+    if (selectedUsers.value.length === 0) {
+      ElMessage.warning('请先选择要删除的用户');
+      return;
+    }
+    
+    const usernames = selectedUsers.value.map(user => user.username).join('\n');
+    await ElMessageBox.confirm(
+      `确定要删除以下用户吗？此操作不可恢复。\n${usernames}`,
+      '确认批量删除',
+      {
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    );
+
+    // 逐个删除用户
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const user of selectedUsers.value) {
+      try {
+        console.log('批量删除用户 - 发送请求:', {
+          url: `/api/users/${user.id}`,
+          method: 'DELETE',
+          userId: user.id,
+          username: user.username
+        });
+
+        const response = await api.delete(`/api/users/${user.id}`);
+        console.log(`删除用户 ${user.username} (ID: ${user.id}) 响应:`, response);
+
+        successCount++;
+        console.log(`删除用户 ${user.username} (ID: ${user.id}) 成功`);
+      } catch (err) {
+        failCount++;
+        console.error(`删除用户 ${user.username} (ID: ${user.id}) 异常:`, err);
+      }
+    }
+    
+    if (failCount === 0) {
+      ElMessage.success(`成功删除 ${successCount} 个用户`);
+    } else {
+      ElMessage.warning(`成功删除 ${successCount} 个用户，失败 ${failCount} 个`);
+    }
+    
+    selectedUsers.value = [];
+    await fetchUsers();
+  } catch (err: any) {
+    if (err !== 'cancel') {
+      ElMessage.error(err.message || '批量删除失败');
+    }
+  }
+};
 </script>
 
 <style lang="scss" scoped>
-.user-manage-card {
+/* 桌面端样式 */
+.user-manage-container:not(.mobile) {
+  width: 90%;
+  margin: 20px auto;
+  position: relative;
   z-index: 1;
-  width: 75%;
-  margin: 5% auto;
-  border-radius: 15px;
-  background-color: #fff;
-  padding: 30px;
-  min-height: 80vh;
 }
 
-.header-section {
+.user-manage-card {
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  background: white;
+  position: relative;
+  z-index: 1;
+}
+
+.desktop-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+  padding: 20px 0;
+  border-bottom: 1px solid #f0f0f0;
 }
 
-.filter-section {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  padding: 15px 0;
-  border-bottom: 1px solid #ebeef5;
-}
-
-.filter-left,
-.filter-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.header-left,
-.header-right {
-  flex: 1;
-}
-
-.header-left {
-  text-align: left;
-}
-
-.header-right {
-  text-align: right;
-}
-
-.title {
+.desktop-header .title {
   margin: 0;
+  font-size: 20px;
+  font-weight: 600;
   color: #303133;
-  text-align: center;
+}
+
+.desktop-filter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 15px;
+  background: #f5f7fa;
+  border-radius: 4px;
+}
+
+.desktop-filter .filter-left {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+}
+
+/* 移动端样式 */
+.mobile-user-manage {
+  min-height: calc(100vh - 120px);
+  background: #f5f7fa;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.mobile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.mobile-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.mobile-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 16px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.filter-select, .filter-input {
+  width: 100% !important;
+}
+
+.user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.user-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.user-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.user-card.selected {
+  border: 2px solid #409eff;
+}
+
+.user-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.user-avatar {
+  margin-right: 12px;
+}
+
+.user-info {
   flex: 1;
 }
 
-.loading-container,
+.user-info h4 {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.user-checkbox {
+  margin-left: 12px;
+}
+
+.user-details {
+  margin-bottom: 12px;
+  padding: 12px;
+  background: #f5f7fa;
+  border-radius: 8px;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.detail-row:last-child {
+  border-bottom: none;
+}
+
+.detail-row .label {
+  font-size: 14px;
+  color: #909399;
+}
+
+.detail-row .value {
+  font-size: 14px;
+  font-weight: 500;
+  color: #303133;
+}
+
+.user-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.role-hint {
+  color: #f56c6c;
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+/* 公共样式 */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 0;
+  color: #909399;
+}
+
+.loading-container .is-loading {
+  margin-bottom: 12px;
+  font-size: 32px;
+}
+
 .error-container {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  padding: 60px 0;
+  color: #f56c6c;
+}
+
+.error-container .el-icon {
+  margin-bottom: 12px;
+  font-size: 32px;
+}
+
+.empty-state {
   padding: 40px 0;
-  gap: 16px;
 }
 
 .dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.role-hint {
-  font-size: 12px;
-  color: #909399;
-  margin-left: 8px;
+  text-align: right;
 }
 </style>

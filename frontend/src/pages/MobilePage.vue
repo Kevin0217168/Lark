@@ -88,7 +88,7 @@
       <MobileData v-else-if="route.path === '/Data' || route.path === '/Stream'" :activeTab="activeTab" />
       <DevicePage v-else-if="route.path === '/Device'" :activeTab="activeTab" />
       <ProfilePage v-else-if="route.path === '/Profile'" />
-      <MobileUserManage v-else-if="route.path === '/UserManage' && isAdmin" />
+      <UserManage v-else-if="route.path === '/UserManage' && isAdmin" />
       <div v-else class="mobile-placeholder">
         <h2>移动端页面</h2>
         <p>内容区域</p>
@@ -148,7 +148,7 @@ import HomePage from '../components/HomePage.vue';
 import MobileData from '../components/mobile/MobileData.vue';
 import DevicePage from '../components/DevicePage.vue';
 import ProfilePage from '../components/ProfilePage.vue';
-import MobileUserManage from '../components/mobile/MobileUserManage.vue';
+import UserManage from '../components/UserManage.vue';
 
 const route = useRoute();
 const router = useRouter();
