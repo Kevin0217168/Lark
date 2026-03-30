@@ -193,33 +193,35 @@
           description="请选择设备查看日志" 
         />
         
-        <!-- 日志表格 -->
-        <el-table v-else :data="currentLogs" style="width: 100%" border>
-          <el-table-column prop="id" label="日志ID" width="100" />
-          <el-table-column prop="device_id" label="设备ID" width="100" />
-          <el-table-column prop="level" label="级别" width="100">
-            <template #default="scope">
-              <el-tag 
-                :type="{
-                  'INFO': 'info',
-                  'WARNING': 'warning',
-                  'ERROR': 'danger',
-                  'DEBUG': ''
-                }[scope.row.level as 'INFO' | 'WARNING' | 'ERROR' | 'DEBUG']"
-              >
-                {{ scope.row.level }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="tag" label="标签" width="120" />
-          <el-table-column prop="content" label="日志内容" min-width="300" show-overflow-tooltip />
-          <el-table-column prop="tick" label="Tick" width="100" />
-          <el-table-column prop="timestamp" label="时间" width="180">
-            <template #default="scope">
-              {{ formatTimestamp(scope.row.timestamp) }}
-            </template>
-          </el-table-column>
-        </el-table>
+        <!-- 终端样式日志 -->
+        <div v-else class="terminal-logs">
+          <div class="terminal-header">
+            <span class="terminal-title">📟 日志终端</span>
+            <span class="terminal-count">共 {{ logTotal }} 条</span>
+            <el-button 
+              :type="wrapEnabled ? 'primary' : 'default'" 
+              size="small" 
+              @click="wrapEnabled = !wrapEnabled"
+              class="wrap-toggle"
+            >
+              {{ wrapEnabled ? '自动换行' : '不换行' }}
+            </el-button>
+          </div>
+          <div class="terminal-content" :class="{ 'no-wrap': !wrapEnabled }" ref="terminalContentRef">
+            <div 
+              v-for="log in currentLogs" 
+              :key="log.id" 
+              class="terminal-line"
+              :class="log.level.toLowerCase()"
+            >
+              <span class="terminal-timestamp">[{{ formatTimestamp(log.timestamp) }}]</span>
+              <span class="terminal-device">[设备{{ log.device_id }}]</span>
+              <span class="terminal-level" :class="log.level.toLowerCase()">{{ log.level.padEnd(7) }}</span>
+              <span class="terminal-tag">[{{ log.tag }}]</span>
+              <span class="terminal-text">{{ log.content }}</span>
+            </div>
+          </div>
+        </div>
         
         <!-- 分页控制 -->
         <div v-if="selectedDeviceIds.length > 0 && !logsLoading && !logsError && currentLogs.length > 0" class="pagination-container">
@@ -479,33 +481,32 @@
           description="请选择设备查看日志" 
         />
         
-        <!-- 日志列表 -->
-        <div v-else class="log-list">
-          <div 
-            v-for="log in currentLogs" 
-            :key="log.id" 
-            class="log-card"
-            :class="log.level.toLowerCase()"
-          >
-            <div class="log-header">
-              <span class="log-device">设备ID: {{ log.device_id }}</span>
-              <el-tag 
-                :type="{
-                  'INFO': 'info',
-                  'WARNING': 'warning',
-                  'ERROR': 'danger',
-                  'DEBUG': ''
-                }[log.level]"
-                size="small"
-              >
-                {{ log.level }}
-              </el-tag>
-            </div>
-            <div class="log-tag">标签: {{ log.tag }}</div>
-            <div class="log-content">{{ log.content }}</div>
-            <div class="log-footer">
-              <span class="log-tick">Tick: {{ log.tick }}</span>
-              <span class="log-time">{{ formatTimestamp(log.timestamp) }}</span>
+        <!-- 终端样式日志 -->
+        <div v-else class="terminal-logs mobile-terminal">
+          <div class="terminal-header">
+            <span class="terminal-title">📟 日志终端</span>
+            <span class="terminal-count">共 {{ logTotal }} 条</span>
+            <el-button 
+              :type="wrapEnabled ? 'primary' : 'default'" 
+              size="small" 
+              @click="wrapEnabled = !wrapEnabled"
+              class="wrap-toggle"
+            >
+              {{ wrapEnabled ? '换行' : '不换行' }}
+            </el-button>
+          </div>
+          <div class="terminal-content" :class="{ 'no-wrap': !wrapEnabled }">
+            <div 
+              v-for="log in currentLogs" 
+              :key="log.id" 
+              class="terminal-line"
+              :class="log.level.toLowerCase()"
+            >
+              <span class="terminal-timestamp">[{{ formatTimestamp(log.timestamp) }}]</span>
+              <span class="terminal-device">[设备{{ log.device_id }}]</span>
+              <span class="terminal-level" :class="log.level.toLowerCase()">{{ log.level.padEnd(7) }}</span>
+              <span class="terminal-tag">[{{ log.tag }}]</span>
+              <span class="terminal-text">{{ log.content }}</span>
             </div>
           </div>
         </div>
@@ -648,6 +649,7 @@ const logPagination = ref({
   skip: 0,
   limit: 50
 });
+const wrapEnabled = ref(true);
 
 // 筛选表单
 const filterForm = ref({
@@ -1351,6 +1353,123 @@ const handleRestart = (device: Device) => {
   font-size: 18px;
   font-weight: 600;
   color: #303133;
+}
+
+/* 终端样式日志 */
+.terminal-logs {
+  background: #1e1e1e;
+  border-radius: 8px;
+  overflow: hidden;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
+.terminal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #2d2d2d;
+  border-bottom: 1px solid #3c3c3c;
+}
+
+.terminal-title {
+  color: #4ec9b0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.terminal-count {
+  color: #858585;
+  font-size: 12px;
+}
+
+.terminal-content {
+  padding: 12px 16px;
+  max-height: 500px;
+  overflow-y: auto;
+  background: #1e1e1e;
+}
+
+.terminal-content.no-wrap {
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.terminal-content.no-wrap .terminal-line {
+  white-space: nowrap;
+}
+
+.terminal-header .wrap-toggle {
+  margin-left: auto;
+}
+
+.terminal-line {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 4px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #d4d4d4;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.terminal-line:last-child {
+  border-bottom: none;
+}
+
+.terminal-timestamp {
+  color: #858585;
+  margin-right: 8px;
+  white-space: nowrap;
+}
+
+.terminal-device {
+  color: #9cdcfe;
+  margin-right: 8px;
+  white-space: nowrap;
+}
+
+.terminal-level {
+  margin-right: 8px;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.terminal-level.info {
+  color: #909399;
+}
+
+.terminal-level.warning {
+  color: #e6a23c;
+}
+
+.terminal-level.error {
+  color: #f56c6c;
+}
+
+.terminal-level.debug {
+  color: #67c23a;
+}
+
+.terminal-tag {
+  color: #c586c0;
+  margin-right: 8px;
+  white-space: nowrap;
+}
+
+.terminal-text {
+  color: #d4d4d4;
+  word-break: break-all;
+}
+
+/* 移动端终端样式 */
+.mobile-terminal .terminal-content {
+  max-height: 400px;
+  padding: 8px 12px;
+}
+
+.mobile-terminal .terminal-line {
+  font-size: 12px;
 }
 
 .mobile-device .management-header {
