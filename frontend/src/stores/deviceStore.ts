@@ -26,11 +26,12 @@ export interface DeviceHistoryData {
 
 export interface DeviceLog {
   id: number;
-  deviceId: number;
-  deviceName: string;
-  level: 'info' | 'warning' | 'error';
-  message: string;
+  device_id: number;
   timestamp: string;
+  level: 'INFO' | 'WARNING' | 'ERROR' | 'DEBUG';
+  tag: string;
+  tick: number;
+  content: string;
 }
 
 export interface DevicePosition {
@@ -218,12 +219,7 @@ const getOrUpdateDevices = async () => {
 // 初始化时获取设备数据
 fetchDevices();
 
-const deviceLogs = ref<DeviceLog[]>([
-  { id: 1, deviceId: 1, deviceName: '设备1', level: 'info', message: '设备上线', timestamp: '2026/03/14 08:00:00' },
-  { id: 2, deviceId: 1, deviceName: '设备1', level: 'info', message: '开始采集数据', timestamp: '2026/03/14 08:01:00' },
-  { id: 3, deviceId: 1, deviceName: '设备1', level: 'warning', message: '温度偏高', timestamp: '2026/03/14 08:30:00' },
-  { id: 4, deviceId: 2, deviceName: '设备2', level: 'error', message: '设备离线', timestamp: '2026/03/14 09:00:00' },
-]);
+const deviceLogs = ref<DeviceLog[]>([]);
 
 // 设备位置存储
 const devicePositions = ref<DevicePosition[]>([]);
@@ -314,7 +310,7 @@ export const useDeviceStore = () => {
   // 日志相关方法
   const getDeviceLogs = (deviceId?: number) => {
     if (deviceId) {
-      return deviceLogs.value.filter(log => log.deviceId === deviceId);
+      return deviceLogs.value.filter(log => log.device_id === deviceId);
     }
     return deviceLogs.value;
   };
@@ -329,14 +325,104 @@ export const useDeviceStore = () => {
     });
   };
   
-  const addDeviceLog = (log: Omit<DeviceLog, 'id' | 'timestamp'>) => {
-    const newLog: DeviceLog = {
-      ...log,
-      id: deviceLogs.value.length + 1,
-      timestamp: new Date().toLocaleString('zh-CN')
-    };
-    deviceLogs.value.unshift(newLog); // 新日志添加到开头
-    cleanOldLogs(); // 添加新日志后清理过期日志
+  const addDeviceLog = (log: DeviceLog) => {
+    deviceLogs.value.unshift(log);
+    cleanOldLogs();
+  };
+  
+  // 从后端API获取设备日志
+  const fetchDeviceLogs = async (
+    deviceIds: number[], 
+    skip: number = 0, 
+    limit: number = 50,
+    levels?: ('INFO' | 'WARNING' | 'ERROR' | 'DEBUG')[],
+    startTime?: string,
+    endTime?: string
+  ) => {
+    try {
+      const baseParams: Record<string, string> = {
+        skip: skip.toString(),
+        limit: limit.toString()
+      };
+      
+      if (startTime) {
+        baseParams.start_time = startTime;
+      }
+      
+      if (endTime) {
+        baseParams.end_time = endTime;
+      }
+
+      console.log('========== API请求参数 ==========');
+      console.log('设备ID列表:', deviceIds);
+      console.log('日志等级列表:', levels);
+      console.log('基础查询参数:', baseParams);
+      console.log('================================');
+      
+      let allLogs: any[] = [];
+      
+      // 如果没有指定日志等级，则查询所有等级
+      const levelsToQuery = levels && levels.length > 0 ? levels : ['INFO', 'WARNING', 'ERROR', 'DEBUG'];
+      
+      // 逐个等级、逐个设备查询
+      for (const level of levelsToQuery) {
+        console.log(`正在查询等级 ${level} 的日志...`);
+        
+        const params = { ...baseParams, level };
+        
+        for (const deviceId of deviceIds) {
+          try {
+            console.log(`  正在查询设备 ${deviceId} 的 ${level} 等级日志...`);
+            const data = await api.get(`/api/logs/${deviceId}`, params);
+            
+            console.log(`  设备 ${deviceId} 返回数据:`, {
+              code: data.code,
+              message: data.message,
+              dataLength: Array.isArray(data.data) ? data.data.length : 0,
+              data: data.data
+            });
+            
+            if (data.code === 200 && Array.isArray(data.data)) {
+              allLogs = allLogs.concat(data.data);
+            }
+          } catch (error) {
+            console.error(`  查询设备 ${deviceId} 的 ${level} 等级日志失败:`, error);
+          }
+        }
+      }
+      
+      console.log('所有查询完成，获取到的日志总数:', allLogs.length);
+      
+      // 清空这些设备的旧日志
+      deviceLogs.value = deviceLogs.value.filter(log => !deviceIds.includes(log.device_id));
+      
+      // 添加新日志
+      allLogs.forEach((log: any) => {
+        deviceLogs.value.push({
+          id: log.id,
+          device_id: log.device_id,
+          timestamp: log.timestamp,
+          level: log.level,
+          tag: log.tag,
+          tick: log.tick,
+          content: log.content
+        });
+      });
+      
+      return {
+        success: true,
+        data: allLogs,
+        total: allLogs.length
+      };
+    } catch (error) {
+      console.error('获取设备日志失败:', error);
+      return {
+        success: false,
+        data: [],
+        total: 0,
+        error: error
+      };
+    }
   };
   
   // 设备位置相关方法
@@ -674,6 +760,7 @@ const fetchSensorData = async (deviceId: number) => {
     deleteDevice,
     getDeviceStats,
     getDeviceLogs,
+    fetchDeviceLogs,
     addDeviceLog,
     cleanOldLogs,
     getDevicePositions,

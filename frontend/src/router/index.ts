@@ -7,7 +7,7 @@ import Home from "@/components/HomePage.vue";
 import Stream from "@/components/Stream.vue";
 import Device from "@/components/DevicePage.vue";
 import Data from "@/components/Data.vue";
-import Profile from "@/components/Profile.vue";
+import Profile from "@/components/ProfilePage.vue";
 import UserManage from "@/components/UserManage.vue";
 
 const router = createRouter({

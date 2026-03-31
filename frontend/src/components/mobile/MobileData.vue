@@ -234,9 +234,6 @@
         <el-empty description="请选择设备查看历史数据" />
       </div>
     </div>
-
-    <!-- 备案信息 -->
-    <MobileBeian />
   </div>
 </template>
 
@@ -246,7 +243,6 @@ import { useDeviceStore } from '../../stores/deviceStore';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Warning, Switch, Sort, Refresh } from '@element-plus/icons-vue';
 import * as echarts from 'echarts';
-import MobileBeian from './MobileBeian.vue';
 import { api } from '../../utils/api';
 
 const getToken = () => {

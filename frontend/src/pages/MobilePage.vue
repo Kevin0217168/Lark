@@ -87,11 +87,31 @@
       <HomePage v-if="route.path === '/Home'" />
       <MobileData v-else-if="route.path === '/Data' || route.path === '/Stream'" :activeTab="activeTab" />
       <DevicePage v-else-if="route.path === '/Device'" :activeTab="activeTab" />
-      <MobileProfile v-else-if="route.path === '/Profile'" />
-      <MobileUserManage v-else-if="route.path === '/UserManage' && isAdmin" />
+      <ProfilePage v-else-if="route.path === '/Profile'" />
+      <UserManage v-else-if="route.path === '/UserManage' && isAdmin" />
       <div v-else class="mobile-placeholder">
         <h2>移动端页面</h2>
         <p>内容区域</p>
+      </div>
+      
+      <!-- 备案信息 -->
+      <div class="mobile-beian">
+        <div class="copyright">© 2026 Lark. All Rights Reserved.</div>
+        <div class="copyright">Powered by Vue.js & FastAPI</div>
+        <div class="beian">
+          <div class="beian-item">
+            <img src="https://www.beian.gov.cn/img/ghs.png" class="beian-icon">
+            <a class="beian-link" href="https://beian.mps.gov.cn/#/query/webSearch?code=41010502007493" rel="noreferrer" target="_blank">豫公网安备41010502007493号</a>
+          </div>
+          <div class="beian-item">
+            <span class="beian-placeholder"></span>
+            <a class="beian-link" href="https://beian.miit.gov.cn/" target="_blank">豫ICP备2026008104号</a>
+          </div>
+          <div class="beian-item">
+            <img src="https://icp.gov.moe/images/ico64.png" class="beian-icon moe-icon">
+            <a class="beian-link" target="_blank" href="https://icp.gov.moe/?keyword=20261324">萌ICP备20261324号</a>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -147,8 +167,8 @@ import { HomeFilled, DataAnalysis, Monitor, User, Grid } from '@element-plus/ico
 import HomePage from '../components/HomePage.vue';
 import MobileData from '../components/mobile/MobileData.vue';
 import DevicePage from '../components/DevicePage.vue';
-import MobileProfile from '../components/mobile/MobileProfile.vue';
-import MobileUserManage from '../components/mobile/MobileUserManage.vue';
+import ProfilePage from '../components/ProfilePage.vue';
+import UserManage from '../components/UserManage.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -467,5 +487,60 @@ const navigateToProfile = () => {
 
 .nav-item:active {
   background: #f5f5f5;
+}
+
+/* 移动端备案信息 */
+.mobile-beian {
+  background: transparent;
+  padding: 16px;
+  text-align: center;
+  margin-top: 20px;
+}
+
+.mobile-beian .copyright {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 8px;
+}
+
+.mobile-beian .beian {
+  font-size: 11px;
+  color: #909399;
+}
+
+.mobile-beian .beian-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  line-height: 1.6;
+}
+
+.mobile-beian .beian-icon {
+  width: 15px;
+  height: 15px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.mobile-beian .beian-icon.moe-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.mobile-beian .beian-placeholder {
+  width: 15px;
+  height: 15px;
+  display: inline-block;
+}
+
+.mobile-beian .beian-link {
+  color: #909399;
+  text-decoration: none;
+  vertical-align: middle;
+}
+
+.mobile-beian .beian-link:active {
+  color: #8bad42;
 }
 </style>
