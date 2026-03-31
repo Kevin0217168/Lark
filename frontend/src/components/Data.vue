@@ -7,6 +7,16 @@
     <div class="data-content">
       <!-- 实时数据 -->
       <div v-if="props.activeTab === 'realtime'" class="realtime-container">
+        <!-- 所有设备离线提示 -->
+        <el-alert
+          v-if="showAllOfflineAlert"
+          title="所有设备均处于离线状态"
+          type="warning"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 16px;"
+        />
+        
         <!-- 左侧数据区域 -->
         <div class="data-left">
           <!-- 设备选择 -->
@@ -292,6 +302,7 @@ const props = withDefaults(defineProps<{
 });
 
 const selectedDeviceId = ref<number | null>(null);
+const showAllOfflineAlert = ref(false);
 
 const selectedDevice = computed(() => {
   if (!selectedDeviceId.value) return null;
@@ -345,6 +356,44 @@ const stopRealtimeDataTimer = () => {
   if (realtimeDataTimer) {
     clearInterval(realtimeDataTimer);
     realtimeDataTimer = null;
+  }
+};
+
+// 获取在线设备列表（按ID升序排序）
+const getOnlineDevices = () => {
+  // 重新获取最新的设备数据
+  const currentDevices = getDevices();
+  console.log('[getOnlineDevices] 总设备数:', currentDevices.length);
+  console.log('[getOnlineDevices] 设备在线状态:', currentDevices.map(d => ({ id: d.id, name: d.name, isOnline: d.isOnline })));
+
+  const onlineDevices = currentDevices
+    .filter(device => device?.isOnline)
+    .sort((a, b) => (a?.id || 0) - (b?.id || 0));
+
+  console.log('[getOnlineDevices] 在线设备数:', onlineDevices.length);
+  return onlineDevices;
+};
+
+// 自动选择第一个在线设备
+const autoSelectFirstOnlineDevice = async () => {
+  const onlineDevices = getOnlineDevices();
+
+  if (onlineDevices.length > 0 && onlineDevices[0]) {
+    // 有在线设备，选择第一个
+    const firstDevice = onlineDevices[0];
+    selectedDeviceId.value = firstDevice.id;
+    showAllOfflineAlert.value = false;
+
+    // 立即获取实时温湿度数据并启动定时器
+    await fetchRealtimeData();
+    startRealtimeDataTimer();
+
+    console.log(`[自动选择] 已选择第一个在线设备: ${firstDevice.name} (ID: ${firstDevice.id})`);
+  } else {
+    // 没有在线设备
+    selectedDeviceId.value = null;
+    showAllOfflineAlert.value = true;
+    console.log('[自动选择] 所有设备均处于离线状态');
   }
 };
 
@@ -973,55 +1022,80 @@ const handleResize = () => {
 // 组件挂载时初始化
 onMounted(async () => {
   window.addEventListener('resize', handleResize);
-  
-  console.log('Component mounted');
-  console.log('Initial active tab:', props.activeTab);
-  
+
+  console.log('[Data.vue] Component mounted');
+  console.log('[Data.vue] Initial active tab:', props.activeTab);
+  console.log('[Data.vue] Route query:', route.query);
+
   // 从后端获取设备数据
+  console.log('[Data.vue] 开始获取设备数据...');
   await fetchDevices();
-  
+
   const latestDevices = getDevices();
-  console.log('Devices available:', latestDevices.length);
-  
-  // 如果默认有设备，初始化图表
-  if (latestDevices.length > 0 && !selectedDeviceId.value) {
-    console.log('Setting default device:', latestDevices[0]?.id);
-    selectedDeviceId.value = latestDevices[0]?.id || null;
-  }
-  
-  // 如果在实时数据标签页，由watch(selectedDeviceId)处理实时监控的启动
-  // 不直接调用startRealtimeMonitoring()，避免与watch重复调用
-  if (props.activeTab === 'realtime' && selectedDeviceId.value) {
-    console.log('Device selected, realtime monitoring will be started by watch');
-  } else if (props.activeTab === 'analysis') {
-    // 如果在分析标签页，获取所有设备的历史数据并初始化图表
-    console.log('Initializing charts for analysis tab on mount');
-    await fetchDeviceHistoryData(); // 不传参数，获取所有设备数据
+  console.log('[Data.vue] 设备数据获取完成，设备数量:', latestDevices.length);
+  console.log('[Data.vue] 设备列表:', latestDevices.map(d => ({ id: d.id, name: d.name, isOnline: d.isOnline })));
+
+  // 延迟1秒后执行自动选择，确保界面渲染完成
+  setTimeout(async () => {
+    // 重新获取最新的设备数据
+    const currentDevices = getDevices();
+    console.log('[自动选择] ========== 开始自动选择 ==========');
+    console.log('[自动选择] 当前设备数量:', currentDevices.length);
+    console.log('[自动选择] 当前标签页:', props.activeTab);
+    console.log('[自动选择] 当前选中设备ID:', selectedDeviceId.value);
+    console.log('[自动选择] 设备在线状态:', currentDevices.map(d => ({ id: d.id, name: d.name, isOnline: d.isOnline })));
+
+    if (currentDevices.length > 0) {
+      if (props.activeTab === 'realtime') {
+        // 检查当前选择的设备是否在线
+        const currentDevice = currentDevices.find((d: any) => d.id === selectedDeviceId.value);
+        const isCurrentDeviceOnline = currentDevice?.isOnline ?? false;
+        
+        if (!selectedDeviceId.value || !isCurrentDeviceOnline) {
+          console.log('[自动选择] 条件满足：realtime标签页且未选择设备或当前设备离线');
+          console.log('[自动选择] - 是否已选择设备:', !!selectedDeviceId.value);
+          console.log('[自动选择] - 当前设备是否在线:', isCurrentDeviceOnline);
+          console.log('[自动选择] 执行自动选择第一个在线设备...');
+          // 自动选择第一个在线设备
+          await autoSelectFirstOnlineDevice();
+          console.log('[自动选择] 自动选择完成，选中设备ID:', selectedDeviceId.value);
+        } else {
+          console.log('[自动选择] 当前设备已在线，无需自动选择');
+          // 启动实时数据定时器
+          await fetchRealtimeData();
+          startRealtimeDataTimer();
+        }
+      } else if (props.activeTab === 'history' && !historyDeviceId.value) {
+        console.log('[自动选择] 历史数据标签页，选择第一个设备');
+        // 历史数据标签页，选择第一个设备
+        historyDeviceId.value = currentDevices[0]?.id || null;
+        // 获取历史数据
+        if (historyDeviceId.value) {
+          await fetchDeviceHistoryData(historyDeviceId.value);
+        }
+      } else if (props.activeTab === 'analysis') {
+        console.log('[自动选择] 分析标签页，选择第一个设备');
+        // 分析界面需要选择第一个设备并获取所有设备的历史数据
+        if (!selectedDeviceId.value) {
+          selectedDeviceId.value = currentDevices[0]?.id || null;
+        }
+        await fetchDeviceHistoryData(); // 不传参数，获取所有设备数据
+      } else {
+        console.log('[自动选择] 条件不满足，跳过自动选择');
+        console.log('[自动选择] - 标签页是否为realtime:', props.activeTab === 'realtime');
+        console.log('[自动选择] - 是否已选择设备:', !!selectedDeviceId.value);
+      }
+    } else {
+      console.log('[自动选择] 没有可用设备，跳过自动选择');
+    }
+    console.log('[自动选择] ========== 自动选择结束 ==========');
+  }, 1000);
+
+  // 如果在分析标签页，初始化图表
+  if (props.activeTab === 'analysis') {
     nextTick(async () => {
       await initCharts();
     });
-  } else if (props.activeTab === 'history' && latestDevices.length > 0) {
-    // 如果在历史数据标签页，自动选择第一个设备并获取历史数据
-    const deviceId = latestDevices[0]?.id || null;
-    historyDeviceId.value = deviceId;
-    if (deviceId) {
-      console.log('Auto-selecting device for history on mount:', deviceId);
-      await fetchDeviceHistoryData(deviceId);
-      console.log('History data fetched for device:', deviceId);
-    }
-  }
-  
-  // 进入数据界面时获取最新的温度湿度数据
-  if (selectedDeviceId.value) {
-    console.log('Fetching latest sensor data for device:', selectedDeviceId.value);
-    const sensorData = await fetchSensorData(selectedDeviceId.value);
-    // 将最新的温度湿度数据存储到deviceStore中
-    if (sensorData.temperatureValues.length > 0 && sensorData.humidityValues.length > 0) {
-      const latestTemp = sensorData.temperatureValues[sensorData.temperatureValues.length - 1];
-      const latestHumidity = sensorData.humidityValues[sensorData.humidityValues.length - 1];
-      updateDevice(selectedDeviceId.value, { temperature: latestTemp, humidity: latestHumidity });
-      console.log('Latest sensor data stored to deviceStore:', { temperature: latestTemp, humidity: latestHumidity });
-    }
   }
 });
 
@@ -1080,48 +1154,32 @@ watch(() => props.activeTab, async (newTab, oldTab) => {
   } else if (newTab === 'realtime') {
     // 切换到实时数据标签时，重新获取设备数据
     fetchDevices().then(async () => {
-      // 确保有设备被选择
       const latestDevices = getDevices();
-      if (latestDevices.length > 0) {
-        // 不管之前是否有选择，都强制选择第一个设备
-        const deviceId = latestDevices[0]?.id || null;
-        selectedDeviceId.value = deviceId;
-        
-        // 立即获取实时温湿度数据并启动定时器
-        if (deviceId) {
-          console.log('Auto-starting realtime monitoring for device:', deviceId);
-          await fetchRealtimeData();
-          startRealtimeDataTimer();
-          // 使用nextTick确保selectedDeviceId已更新
-          nextTick(() => {
-            startRealtimeMonitoring();
-          });
-        }
+      const currentDevice = latestDevices.find((d: any) => d.id === selectedDeviceId.value);
+      const isCurrentDeviceOnline = currentDevice?.isOnline ?? false;
+      
+      // 只有在没有选中设备，或当前设备不在线时，才执行自动选择
+      if (!selectedDeviceId.value || !isCurrentDeviceOnline) {
+        console.log('[watch activeTab] 切换到realtime标签，当前设备离线或未选择，执行自动选择');
+        console.log('[watch activeTab] - 是否已选择设备:', !!selectedDeviceId.value);
+        console.log('[watch activeTab] - 当前设备是否在线:', isCurrentDeviceOnline);
+        await autoSelectFirstOnlineDevice();
       } else {
-        console.log('No devices available, cannot start realtime monitoring');
+        console.log('[watch activeTab] 切换到realtime标签，当前设备已在线，保持当前选择');
+        // 启动实时数据定时器
+        await fetchRealtimeData();
+        startRealtimeDataTimer();
       }
-    });
-  } else if (newTab === 'history') {
-    // 切换到历史数据标签时，重新获取设备数据
-    fetchDevices().then(() => {
-      // 确保有设备被选择
-      const latestDevices = getDevices();
-      if (latestDevices.length > 0) {
-        // 不管之前是否有选择，都强制选择第一个设备
-        const deviceId = latestDevices[0]?.id || null;
-        historyDeviceId.value = deviceId;
-        
-        // 获取该设备的历史数据
-        if (deviceId) {
-          console.log('Auto-selecting device for history:', deviceId);
-          // 使用nextTick确保historyDeviceId已更新
-          nextTick(async () => {
-            await fetchDeviceHistoryData(deviceId);
-            console.log('History data fetched for device:', deviceId);
-          });
-        }
+      
+      // 如果成功选择了设备，启动实时监控
+      if (selectedDeviceId.value) {
+        console.log('Auto-starting realtime monitoring for device:', selectedDeviceId.value);
+        // 使用nextTick确保selectedDeviceId已更新
+        nextTick(() => {
+          startRealtimeMonitoring();
+        });
       } else {
-        console.log('No devices available, cannot load history data');
+        console.log('No online devices available, cannot start realtime monitoring');
       }
     });
   } else {
@@ -1163,15 +1221,38 @@ watch(() => route.query.deviceId, (newDeviceId) => {
 }, { immediate: true });
 
 // 监听路由变化，确保在导航到数据页面时自动选择设备
-watch(() => route.path, (newPath) => {
-  console.log('Route path changed:', newPath);
+watch(() => route.path, async (newPath) => {
+  console.log('[路由监听] Route path changed:', newPath);
   if (newPath === '/Data' || newPath === '/Stream') {
-    console.log('Navigated to data page, checking device selection');
-    const latestDevices = getDevices();
-    if (latestDevices.length > 0 && !selectedDeviceId.value) {
-      console.log('Auto-selecting first device:', latestDevices[0]?.id);
-      selectedDeviceId.value = latestDevices[0]?.id || null;
-    }
+    console.log('[路由监听] Navigated to data page, checking device selection');
+    // 延迟执行，确保设备数据已加载
+    setTimeout(async () => {
+      const latestDevices = getDevices();
+      console.log('[路由监听] 设备数量:', latestDevices.length);
+      console.log('[路由监听] 当前选中设备:', selectedDeviceId.value);
+      console.log('[路由监听] 当前标签页:', props.activeTab);
+
+      if (latestDevices.length > 0) {
+        if (props.activeTab === 'realtime') {
+          // 检查当前选择的设备是否在线
+          const currentDevice = latestDevices.find((d: any) => d.id === selectedDeviceId.value);
+          const isCurrentDeviceOnline = currentDevice?.isOnline ?? false;
+          
+          // 如果没有选中设备，或当前设备不在线，执行自动选择
+          if (!selectedDeviceId.value || !isCurrentDeviceOnline) {
+            console.log('[路由监听] 执行自动选择第一个在线设备');
+            console.log('[路由监听] - 是否已选择设备:', !!selectedDeviceId.value);
+            console.log('[路由监听] - 当前设备是否在线:', isCurrentDeviceOnline);
+            await autoSelectFirstOnlineDevice();
+          } else {
+            console.log('[路由监听] 当前设备已在线，无需自动选择');
+          }
+        } else if (!selectedDeviceId.value) {
+          console.log('[路由监听] 非实时监控标签页，选择第一个设备:', latestDevices[0]?.id);
+          selectedDeviceId.value = latestDevices[0]?.id || null;
+        }
+      }
+    }, 500);
   }
 });
 

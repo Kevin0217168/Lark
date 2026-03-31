@@ -14,6 +14,16 @@
         </el-select>
       </div>
       
+      <!-- 所有设备离线提示 -->
+      <el-alert
+        v-if="showAllOfflineAlert"
+        title="所有设备均处于离线状态"
+        type="warning"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 16px;"
+      />
+      
       <!-- 设备数据卡片 -->
       <div v-if="selectedDevice" class="device-data-card">
         <div class="data-header">
@@ -259,6 +269,7 @@ const props = defineProps<{
 const activeTab = computed(() => props.activeTab || 'realtime');
 
 const selectedDeviceId = ref<number | null>(null);
+const showAllOfflineAlert = ref(false);
 
 const selectedDevice = computed(() => {
   if (!selectedDeviceId.value) return null;
@@ -266,6 +277,36 @@ const selectedDevice = computed(() => {
   const latestDevices = getDevices();
   return latestDevices.find(device => device.id === selectedDeviceId.value) || null;
 });
+
+// 获取在线设备列表（按ID升序排序）
+const getOnlineDevices = () => {
+  return devices
+    .filter(device => device?.isOnline)
+    .sort((a, b) => (a?.id || 0) - (b?.id || 0));
+};
+
+// 自动选择第一个在线设备
+const autoSelectFirstOnlineDevice = async () => {
+  const onlineDevices = getOnlineDevices();
+  
+  if (onlineDevices.length > 0 && onlineDevices[0]) {
+    // 有在线设备，选择第一个
+    const firstDevice = onlineDevices[0];
+    selectedDeviceId.value = firstDevice.id;
+    showAllOfflineAlert.value = false;
+    
+    // 立即获取实时温湿度数据并启动定时器
+    await fetchRealtimeData();
+    startRealtimeDataTimer();
+    
+    console.log(`[自动选择] 已选择第一个在线设备: ${firstDevice.name} (ID: ${firstDevice.id})`);
+  } else {
+    // 没有在线设备
+    selectedDeviceId.value = null;
+    showAllOfflineAlert.value = true;
+    console.log('[自动选择] 所有设备均处于离线状态');
+  }
+};
 
 const isWebSocketConnected = computed(() => {
   return ws !== null && ws.readyState === WebSocket.OPEN;
@@ -1048,29 +1089,27 @@ onMounted(async () => {
   await fetchDevices();
   window.addEventListener('resize', handleResize);
   
-  // 默认选择第一个设备
-  if (devices.length > 0) {
-    if (activeTab.value === 'realtime' && !selectedDeviceId.value) {
-      selectedDeviceId.value = devices[0]?.id || null;
-      // 立即获取实时温湿度数据并启动定时器
-      if (selectedDeviceId.value) {
-        await fetchRealtimeData();
-        startRealtimeDataTimer();
+  // 延迟1秒后执行自动选择，确保界面渲染完成
+  setTimeout(async () => {
+    if (devices.length > 0) {
+      if (activeTab.value === 'realtime' && !selectedDeviceId.value) {
+        // 自动选择第一个在线设备
+        await autoSelectFirstOnlineDevice();
+      } else if (activeTab.value === 'history' && !historyDeviceId.value) {
+        historyDeviceId.value = devices[0]?.id || null;
+        // 获取历史数据
+        if (historyDeviceId.value) {
+          await getOrUpdateDeviceHistoryData(historyDeviceId.value);
+        }
+      } else if (activeTab.value === 'analysis') {
+        // 分析界面需要选择第一个设备并获取所有设备的历史数据
+        if (!selectedDeviceId.value) {
+          selectedDeviceId.value = devices[0]?.id || null;
+        }
+        await getOrUpdateDeviceHistoryData(); // 不传参数，获取所有设备数据
       }
-    } else if (activeTab.value === 'history' && !historyDeviceId.value) {
-      historyDeviceId.value = devices[0]?.id || null;
-      // 获取历史数据
-      if (historyDeviceId.value) {
-        await getOrUpdateDeviceHistoryData(historyDeviceId.value);
-      }
-    } else if (activeTab.value === 'analysis') {
-      // 分析界面需要选择第一个设备并获取所有设备的历史数据
-      if (!selectedDeviceId.value) {
-        selectedDeviceId.value = devices[0]?.id || null;
-      }
-      await getOrUpdateDeviceHistoryData(); // 不传参数，获取所有设备数据
     }
-  }
+  }, 1000);
   
   if (activeTab.value === 'analysis') {
     nextTick(() => {
