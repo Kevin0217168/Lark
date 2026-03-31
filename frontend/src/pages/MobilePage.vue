@@ -85,7 +85,7 @@
     <div class="mobile-content">
       <!-- 根据路由显示不同的移动端组件 -->
       <HomePage v-if="route.path === '/Home'" />
-      <MobileData v-else-if="route.path === '/Data' || route.path === '/Stream'" :activeTab="activeTab" />
+      <Data v-else-if="route.path === '/Data' || route.path === '/Stream'" :activeTab="activeTab" />
       <DevicePage v-else-if="route.path === '/Device'" :activeTab="activeTab" />
       <ProfilePage v-else-if="route.path === '/Profile'" />
       <UserManage v-else-if="route.path === '/UserManage' && isAdmin" />
@@ -165,7 +165,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { HomeFilled, DataAnalysis, Monitor, User, Grid } from '@element-plus/icons-vue';
 import HomePage from '../components/HomePage.vue';
-import MobileData from '../components/mobile/MobileData.vue';
+import Data from '../components/Data.vue';
 import DevicePage from '../components/DevicePage.vue';
 import ProfilePage from '../components/ProfilePage.vue';
 import UserManage from '../components/UserManage.vue';

@@ -1,12 +1,13 @@
 <template>
-  <div class="data-card">
+  <!-- 桌面端界面 -->
+  <div v-if="!isMobile" class="data-card">
     <div class="title">
       <h2>数据管理</h2>
     </div>
     
     <div class="data-content">
       <!-- 实时数据 -->
-      <div v-if="props.activeTab === 'realtime'" class="realtime-container">
+      <div v-if="activeTab === 'realtime'" class="realtime-container">
         <!-- 所有设备离线提示 -->
         <el-alert
           v-if="showAllOfflineAlert"
@@ -80,7 +81,7 @@
         
         <!-- 右侧视频流区域 -->
         <div class="data-right">
-          <div class="video-header">/  
+          <div class="video-header">
             <h3>实时监控</h3>
             <div class="video-controls">
               <el-button 
@@ -162,7 +163,7 @@
       </div>
       
       <!-- 分析 -->
-      <div v-else-if="props.activeTab === 'analysis'" class="tab-content">
+      <div v-else-if="activeTab === 'analysis'" class="tab-content">
         <div class="card-header">
           <div class="card-title">
             <span>数据分析</span>
@@ -197,7 +198,7 @@
       </div>
       
       <!-- 历史数据 -->
-      <div v-else-if="props.activeTab === 'history'" class="tab-content">
+      <div v-else-if="activeTab === 'history'" class="tab-content">
         <div class="card-header">
           <div class="card-title">
             <span>历史数据</span>
@@ -272,16 +273,265 @@
       </div>
     </div>
   </div>
+
+  <!-- 移动端界面 -->
+  <div v-else class="mobile-data">
+    <!-- 实时数据 -->
+    <div v-if="activeTab === 'realtime'" class="realtime-container">
+      <!-- 设备选择 -->
+      <div class="device-selector">
+        <el-select v-model="selectedDeviceId" placeholder="选择设备" @change="handleDeviceChange" style="width: 100%;">
+          <el-option 
+            v-for="device in devices" 
+            :key="device.id" 
+            :label="device.name" 
+            :value="device.id" 
+          />
+        </el-select>
+      </div>
+      
+      <!-- 所有设备离线提示 -->
+      <el-alert
+        v-if="showAllOfflineAlert"
+        title="所有设备均处于离线状态"
+        type="warning"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 16px;"
+      />
+      
+      <!-- 设备数据卡片 -->
+      <div v-if="selectedDevice" class="device-data-card">
+        <div class="data-header">
+          <h3>{{ selectedDevice.name }}</h3>
+          <el-tag :type="selectedDevice.isOnline ? 'success' : 'danger'" size="small">
+            {{ selectedDevice.isOnline ? '在线' : '离线' }}
+          </el-tag>
+        </div>
+        <div class="data-grid">
+          <div class="data-item">
+            <div class="data-label">温度</div>
+            <div class="data-value">{{ selectedDevice.temperature }}°C</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">湿度</div>
+            <div class="data-value">{{ selectedDevice.humidity }}%</div>
+          </div>
+          <div class="data-item full">
+            <div class="data-label">类型</div>
+            <div class="data-value">{{ selectedDevice.device_type || '未设置' }}</div>
+          </div>
+          <div class="data-item full">
+            <div class="data-label">创建时间</div>
+            <div class="data-value small">{{ selectedDevice.createTime }}</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 实时监控 -->
+      <div v-if="selectedDevice" class="video-section">
+        <div class="video-header">
+          <div class="video-header-top">
+            <h3>实时监控</h3>
+            <div class="video-controls">
+              <el-button 
+                type="warning"
+                size="small"
+                @click="reconnectWebSocket"
+                :disabled="!selectedDeviceId || isWebSocketConnected"
+              >
+                <el-icon><Refresh /></el-icon>
+                重连
+              </el-button>
+              <el-button 
+                :type="flipHorizontal ? 'primary' : 'default'"
+                size="small"
+                @click="toggleHorizontalFlip"
+              >
+                <el-icon><Switch /></el-icon>
+                左右
+              </el-button>
+              <el-button 
+                :type="flipVertical ? 'primary' : 'default'"
+                size="small"
+                @click="toggleVerticalFlip"
+              >
+                <el-icon><Sort /></el-icon>
+                上下
+              </el-button>
+            </div>
+          </div>
+          
+          <!-- 视频质量和尺寸控制 -->
+          <div class="video-settings">
+            <div class="setting-item">
+              <span class="setting-label">画质</span>
+              <el-slider 
+                v-model="imageQuality" 
+                :min="1" 
+                :max="63" 
+                :step="1"
+                :show-tooltip="false"
+                size="small"
+                style="flex: 1; margin-left: 8px;"
+              />
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">视频尺寸</span>
+              <el-select v-model="frameSize" style="flex: 1; margin-left: 8px;" size="small">
+                <el-option label="128x128" value="FRAMESIZE_128X128" />
+                <el-option label="240x240" value="FRAMESIZE_240X240" />
+                <el-option label="320x320" value="FRAMESIZE_320X320" />
+                <el-option label="VGA" value="FRAMESIZE_VGA" />
+                <el-option label="SVGA" value="FRAMESIZE_SVGA" />
+                <el-option label="HD" value="FRAMESIZE_HD" />
+                <el-option label="FHD" value="FRAMESIZE_FHD" />
+              </el-select>
+            </div>
+          </div>
+        </div>
+        <div class="video-card">
+          <div class="video-container" v-if="currentFrameImage">
+            <img 
+              :src="currentFrameImage" 
+              class="video-stream"
+              :class="{ 'flip-horizontal': flipHorizontal, 'flip-vertical': flipVertical, 'disconnected': isStreamDisconnected }"
+              alt="实时监控画面"
+            />
+            <div class="frame-info">
+                <span>更新时间: {{ lastFrameTime }}</span>
+                <span class="fps-info">帧率: {{ currentFps }} FPS</span>
+              </div>
+            <div class="stream-disconnected-overlay" v-if="isStreamDisconnected">
+              <div class="disconnected-content">
+                <el-icon class="disconnected-icon" :size="48"><Warning /></el-icon>
+                <div class="disconnected-message">视频流已断联</div>
+              </div>
+            </div>
+          </div>
+          <div class="video-error" v-else-if="connectionError">
+            <div class="error-content">
+              <el-icon class="error-icon" :size="48"><Warning /></el-icon>
+              <div class="error-message">{{ connectionError }}</div>
+            </div>
+          </div>
+          <div class="video-placeholder" v-else>
+            <el-empty description="未开始实时监控" />
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 分析 -->
+    <div v-else-if="activeTab === 'analysis'" class="analysis-container">
+      <div class="device-selector">
+        <el-select v-model="selectedDeviceId" placeholder="选择设备" @change="handleDeviceChange" style="width: 100%;">
+          <el-option 
+            v-for="device in devices" 
+            :key="device.id" 
+            :label="device.name" 
+            :value="device.id" 
+          />
+        </el-select>
+      </div>
+      
+      <!-- 图表 -->
+      <div class="chart-section">
+        <div class="chart-card">
+          <h3>所有设备平均值 <span class="time-range">(最近6小时)</span></h3>
+          <div ref="averageChartRef" class="chart"></div>
+        </div>
+        <div class="chart-card">
+          <h3>温度数据 <span class="time-range">(最近6小时)</span></h3>
+          <div ref="temperatureChartRef" class="chart"></div>
+        </div>
+        <div class="chart-card">
+          <h3>湿度数据 <span class="time-range">(最近6小时)</span></h3>
+          <div ref="humidityChartRef" class="chart"></div>
+        </div>
+       
+      </div>
+    </div>
+    
+    <!-- 历史数据 -->
+    <div v-else-if="activeTab === 'history'" class="history-container">
+      <div class="device-selector">
+        <el-select v-model="historyDeviceId" placeholder="选择设备" @change="handleHistoryDeviceChange" style="width: 100%;">
+          <el-option 
+            v-for="device in devices" 
+            :key="device.id" 
+            :label="device.name" 
+            :value="device.id" 
+          />
+        </el-select>
+      </div>
+      
+      <div v-if="selectedHistoryDevice" class="history-content">
+        <!-- 设备信息卡片 -->
+        <div class="device-info-card">
+          <div class="info-item">
+            <span class="info-label">设备名称</span>
+            <span class="info-value">{{ selectedHistoryDevice.name }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">设备类型</span>
+            <span class="info-value">{{ selectedHistoryDevice.device_type || '未设置' }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">设备状态</span>
+            <el-tag :type="selectedHistoryDevice.isOnline ? 'success' : 'danger'" size="small">
+              {{ selectedHistoryDevice.isOnline ? '在线' : '离线' }}
+            </el-tag>
+          </div>
+        </div>
+        
+        <!-- 历史数据列表 -->
+        <div class="history-list">
+          <div v-for="(item, index) in paginatedHistoryData" :key="index" class="history-item">
+            <div class="history-row">
+              <span class="device-name">{{ item.deviceName }}</span>
+              <span class="device-id">ID: {{ item.deviceId }}</span>
+              <span class="history-time">{{ item.timestamp }}</span>
+            </div>
+            <div class="history-row data-row">
+              <span class="data-item">温度 {{ item.temperature }}°C</span>
+              <span class="data-item">湿度 {{ item.humidity }}%</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 分页组件 -->
+        <div class="pagination-container">
+          <el-pagination
+            v-model:current-page="currentPage"
+            v-model:page-size="pageSize"
+            :page-sizes="[5, 10, 20]"
+            :total="historyDataList.length"
+            layout="prev, pager, next"
+            background
+            :pager-count="3"
+            @size-change="handleSizeChange"
+            @current-change="handleCurrentChange"
+          />
+        </div>
+      </div>
+      
+      <div v-else class="history-placeholder">
+        <el-empty description="请选择设备查看历史数据" />
+      </div>
+    </div>
+  </div>
 </template>
 
-<script lang="ts" setup>
+<script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useDeviceStore } from '../stores/deviceStore';
-import { ElMessage, ElMessageBox, ElIcon } from 'element-plus';
-import { Warning, Switch, Sort, Monitor, CircleCheck, CircleClose, Odometer, Clock, FullScreen } from '@element-plus/icons-vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { Warning, Switch, Sort, Monitor, CircleCheck, CircleClose, Odometer, Clock, Refresh } from '@element-plus/icons-vue';
 import { api } from '../utils/api';
 import * as echarts from 'echarts';
+import { shouldUseMobilePage } from '../utils/mobileAdapter';
 
 // 获取登录token
 const getToken = () => {
@@ -291,15 +541,25 @@ const getToken = () => {
 const route = useRoute();
 const router = useRouter();
 const { getDevices, getDeviceHistoryData, getDeviceAverageData, fetchDevices, updateDevice, fetchDeviceHistoryData, getOrUpdateDeviceHistoryData, fetchSensorData, fetchRealtimeSensorData } = useDeviceStore();
+
 // 直接获取设备数据
 const devices = getDevices();
 
 // 接收父组件传递的activeTab
 const props = withDefaults(defineProps<{
-  activeTab: string
+  activeTab?: string
 }>(), {
   activeTab: 'realtime'
 });
+
+// 计算当前激活的标签页
+const activeTab = computed(() => props.activeTab || 'realtime');
+
+// 移动端检测
+const isMobile = ref(false);
+const checkMobileStatus = () => {
+  isMobile.value = shouldUseMobilePage();
+};
 
 const selectedDeviceId = ref<number | null>(null);
 const showAllOfflineAlert = ref(false);
@@ -309,9 +569,6 @@ const selectedDevice = computed(() => {
   // 每次计算时重新获取最新的设备列表
   const latestDevices = getDevices();
   const device = latestDevices.find((device: any) => device.id === selectedDeviceId.value) || null;
-  console.log('Selected device:', device);
-  console.log('Device temperature:', device?.temperature);
-  console.log('Device humidity:', device?.humidity);
   return device;
 });
 
@@ -402,18 +659,21 @@ const handleDeviceChange = async () => {
     ElMessage.success(`已切换到设备: ${selectedDevice.value.name}`);
     
     // 如果在实时界面，立即获取实时温湿度数据并启动定时器
-    if (props.activeTab === 'realtime') {
+    if (activeTab.value === 'realtime') {
       await fetchRealtimeData();
       startRealtimeDataTimer();
     }
     
-    // 如果在分析界面，需要获取所有设备的历史数据再初始化图表
-    if (props.activeTab === 'analysis') {
-      await fetchDeviceHistoryData(); // 不传参数，获取所有设备数据
+    // 如果在分析界面，需要先获取历史数据再初始化图表
+    if (activeTab.value === 'analysis' && selectedDeviceId.value) {
+      if (isMobile.value) {
+        await getOrUpdateDeviceHistoryData(selectedDeviceId.value);
+      } else {
+        await fetchDeviceHistoryData(); // 不传参数，获取所有设备数据
+      }
     }
-    // 切换设备后更新图表
-    nextTick(async () => {
-      await initCharts();
+    nextTick(() => {
+      initCharts();
     });
     // 重新开始实时监控
     startRealtimeMonitoring();
@@ -439,6 +699,7 @@ const historyDataList = computed(() => {
     .map(data => ({
       ...data,
       deviceName: deviceName,
+      deviceId: historyDeviceId.value,
       timestamp: data.timestamp
     }))
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -471,8 +732,14 @@ const handleHistoryDeviceChange = async () => {
     ElMessage.success(`已切换到设备: ${selectedHistoryDevice.value.name}`);
     // 获取该设备的历史数据
     console.log('Fetching history data for device:', historyDeviceId.value);
-    await getOrUpdateDeviceHistoryData(historyDeviceId.value);
+    if (isMobile.value) {
+      await getOrUpdateDeviceHistoryData(historyDeviceId.value);
+    } else {
+      await fetchDeviceHistoryData(historyDeviceId.value);
+    }
     console.log('History data fetched');
+    // 重置页码
+    currentPage.value = 1;
   }
 };
 
@@ -552,8 +819,9 @@ const sendFrameSize = async (size: string) => {
   }
 };
   
-// 监听滑块变化，将值反转后发送给后端（0-63 -> 63-0）
+// 监听滑块变化
 watch(imageQuality, (newQuality) => {
+  // 双端统一：1-63 -> 63-1
   const invertedQuality = 63 - newQuality;
   sendStreamQuality(invertedQuality);
 });
@@ -840,20 +1108,66 @@ const stopRealtimeMonitoring = async () => {
     ws = null;
   }
   
+  if (isMobile.value && currentImageUrl) {
+    URL.revokeObjectURL(currentImageUrl);
+    currentImageUrl = '';
+  }
+  
+  if (isMobile.value) {
+    currentFrameImage.value = '';
+  }
   connectionError.value = '';
   isStreamDisconnected.value = false;
 };
 
+// 格式化时间标签，只显示小时和分钟（移动端专用）
+const formatTimeLabel = (timestamp: string) => {
+  // 如果已经是 HH:00 格式，直接返回
+  if (/^\d{2}:\d{2}$/.test(timestamp)) {
+    return timestamp;
+  }
+  const date = new Date(timestamp);
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  return `${hours}:${minutes}`;
+};
 
+// 采样函数：从数组中均匀采样指定数量的点（移动端专用）
+const sampleData = (data: any[], count: number) => {
+  if (data.length <= count) return data;
+  const result = [];
+  const step = (data.length - 1) / (count - 1);
+  for (let i = 0; i < count; i++) {
+    const index = Math.round(i * step);
+    result.push(data[index]);
+  }
+  return result;
+};
 
-
+// 窗口大小变化时调整图表
+const handleResize = () => {
+  temperatureChart?.resize();
+  humidityChart?.resize();
+  averageChart?.resize();
+};
 
 // 初始化图表
 const initCharts = async () => {
   if (!selectedDeviceId.value) return;
   
+  if (isMobile.value) {
+    // 移动端图表初始化
+    initMobileCharts();
+  } else {
+    // 桌面端图表初始化
+    initDesktopCharts();
+  }
+};
+
+// 桌面端图表初始化
+const initDesktopCharts = async () => {
   // 获取传感器数据
-  const sensorData = await fetchSensorData(selectedDeviceId.value);
+  const sensorData = await fetchSensorData(selectedDeviceId.value!);
   
   // 温度图表
   if (temperatureChartRef.value) {
@@ -961,8 +1275,6 @@ const initCharts = async () => {
     });
   }
   
-
-  
   // 所有设备平均值图表
   if (averageChartRef.value) {
     if (averageChart) {
@@ -1012,19 +1324,249 @@ const initCharts = async () => {
   }
 };
 
-// 窗口大小变化时调整图表
-const handleResize = () => {
-  temperatureChart?.resize();
-  humidityChart?.resize();
-  averageChart?.resize();
+// 移动端图表初始化
+const initMobileCharts = () => {
+  // 销毁旧图表实例
+  temperatureChart?.dispose();
+  humidityChart?.dispose();
+  averageChart?.dispose();
+  
+  // 初始化平均图表
+  if (averageChartRef.value) {
+    averageChart = echarts.init(averageChartRef.value);
+    const avgData = getDeviceAverageData(6); // 6小时范围
+    
+    // 采样12个点显示（保持6小时范围）
+    const sampledTimes = sampleData(avgData.times, 12);
+    const sampledTempValues = sampleData(avgData.temperatureValues, 12);
+    const sampledHumidityValues = sampleData(avgData.humidityValues, 12);
+    
+    averageChart.setOption({
+      tooltip: {
+        trigger: 'axis'
+      },
+      legend: {
+        data: ['平均温度', '平均湿度'],
+        top: 5,
+        textStyle: { fontSize: 11 },
+        itemGap: 15
+      },
+      grid: {
+        left: '12%',
+        right: '8%',
+        bottom: '15%',
+        top: '18%',
+        containLabel: false
+      },
+      xAxis: {
+        type: 'category',
+        data: sampledTimes,
+        axisLabel: { 
+          fontSize: 10, 
+          interval: 1
+        }
+      },
+      yAxis: {
+        type: 'value',
+        name: '数值',
+        nameTextStyle: {
+          fontSize: 10
+        },
+        axisLabel: { fontSize: 10 }
+      },
+      series: [
+        {
+          name: '平均温度',
+          data: sampledTempValues,
+          type: 'line',
+          smooth: true,
+          itemStyle: { color: '#ff7875' },
+          areaStyle: {
+            color: {
+              type: 'linear',
+              x: 0, y: 0, x2: 0, y2: 1,
+              colorStops: [{
+                offset: 0, color: 'rgba(255, 120, 117, 0.3)'
+              }, {
+                offset: 1, color: 'rgba(255, 120, 117, 0.05)'
+              }]
+            }
+          }
+        },
+        {
+          name: '平均湿度',
+          data: sampledHumidityValues,
+          type: 'line',
+          smooth: true,
+          itemStyle: { color: '#69c0ff' },
+          areaStyle: {
+            color: {
+              type: 'linear',
+              x: 0, y: 0, x2: 0, y2: 1,
+              colorStops: [{
+                offset: 0, color: 'rgba(105, 192, 255, 0.3)'
+              }, {
+                offset: 1, color: 'rgba(105, 192, 255, 0.05)'
+              }]
+            }
+          }
+        }
+      ]
+    });
+  }
+  
+  // 初始化温度图表
+  if (temperatureChartRef.value && selectedDeviceId.value) {
+    temperatureChart = echarts.init(temperatureChartRef.value);
+    const allHistoryData = getDeviceHistoryData(selectedDeviceId.value);
+    
+    // 过滤最近6小时的数据
+    const sixHoursAgo = new Date();
+    sixHoursAgo.setHours(sixHoursAgo.getHours() - 6);
+    const historyData = allHistoryData.filter(d => new Date(d.timestamp) >= sixHoursAgo);
+    
+    // 采样12个点显示（保持6小时范围）
+    const sampledHistoryData = sampleData(historyData, 12);
+    const tempValues = sampledHistoryData.map(d => d.temperature);
+    const tempMin = Math.min(...tempValues);
+    const tempMax = Math.max(...tempValues);
+    // 调整纵轴范围，使数据更直观
+    const tempRange = tempMax - tempMin;
+    let tempYMin = tempMin;
+    let tempYMax = tempMax;
+    if (tempRange < 5) {
+      tempYMin = Math.floor(tempMin - 1);
+      tempYMax = Math.ceil(tempMax + 1);
+    }
+    
+    temperatureChart.setOption({
+      tooltip: { trigger: 'axis' },
+      grid: {
+        left: '15%',
+        right: '8%',
+        bottom: '15%',
+        top: '12%',
+        containLabel: false
+      },
+      xAxis: {
+        type: 'category',
+        data: sampledHistoryData.map(d => d.timestamp).map(formatTimeLabel),
+        axisLabel: { 
+          fontSize: 10, 
+          interval: 1
+        }
+      },
+      yAxis: {
+        type: 'value',
+        name: '温度 (℃)',
+        min: tempYMin,
+        max: tempYMax,
+        nameTextStyle: {
+          fontSize: 10
+        },
+        axisLabel: { fontSize: 10 }
+      },
+      series: [{
+        data: tempValues,
+        type: 'line',
+        smooth: true,
+        itemStyle: { color: '#ff7875' },
+        areaStyle: {
+          color: {
+            type: 'linear',
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [{
+              offset: 0, color: 'rgba(255, 120, 117, 0.3)'
+            }, {
+              offset: 1, color: 'rgba(255, 120, 117, 0.05)'
+            }]
+          }
+        }
+      }]
+    });
+  }
+  
+  // 初始化湿度图表
+  if (humidityChartRef.value && selectedDeviceId.value) {
+    humidityChart = echarts.init(humidityChartRef.value);
+    const allHistoryData = getDeviceHistoryData(selectedDeviceId.value);
+    
+    // 过滤最近6小时的数据
+    const sixHoursAgo = new Date();
+    sixHoursAgo.setHours(sixHoursAgo.getHours() - 6);
+    const historyData = allHistoryData.filter(d => new Date(d.timestamp) >= sixHoursAgo);
+    
+    // 采样12个点显示（保持6小时范围）
+    const sampledHistoryData = sampleData(historyData, 12);
+    const humidityValues = sampledHistoryData.map(d => d.humidity);
+    const humidityMin = Math.min(...humidityValues);
+    const humidityMax = Math.max(...humidityValues);
+    // 调整纵轴范围，使数据更直观
+    const humidityRange = humidityMax - humidityMin;
+    let humidityYMin = humidityMin;
+    let humidityYMax = humidityMax;
+    if (humidityRange < 5) {
+      humidityYMin = Math.floor(humidityMin - 1);
+      humidityYMax = Math.ceil(humidityMax + 1);
+    }
+    
+    humidityChart.setOption({
+      tooltip: { trigger: 'axis' },
+      grid: {
+        left: '15%',
+        right: '8%',
+        bottom: '15%',
+        top: '12%',
+        containLabel: false
+      },
+      xAxis: {
+        type: 'category',
+        data: sampledHistoryData.map(d => d.timestamp).map(formatTimeLabel),
+        axisLabel: { 
+          fontSize: 10, 
+          interval: 1
+        }
+      },
+      yAxis: {
+        type: 'value',
+        name: '湿度 (%)',
+        min: humidityYMin,
+        max: humidityYMax,
+        nameTextStyle: {
+          fontSize: 10
+        },
+        axisLabel: { fontSize: 10 }
+      },
+      series: [{
+        data: humidityValues,
+        type: 'line',
+        smooth: true,
+        itemStyle: { color: '#69c0ff' },
+        areaStyle: {
+          color: {
+            type: 'linear',
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [{
+              offset: 0, color: 'rgba(105, 192, 255, 0.3)'
+            }, {
+              offset: 1, color: 'rgba(105, 192, 255, 0.05)'
+            }]
+          }
+        }
+      }]
+    });
+  }
 };
 
 // 组件挂载时初始化
 onMounted(async () => {
+  // 初始化移动端检测
+  checkMobileStatus();
   window.addEventListener('resize', handleResize);
 
   console.log('[Data.vue] Component mounted');
-  console.log('[Data.vue] Initial active tab:', props.activeTab);
+  console.log('[Data.vue] Initial active tab:', activeTab.value);
+  console.log('[Data.vue] Is mobile:', isMobile.value);
   console.log('[Data.vue] Route query:', route.query);
 
   // 从后端获取设备数据
@@ -1041,12 +1583,12 @@ onMounted(async () => {
     const currentDevices = getDevices();
     console.log('[自动选择] ========== 开始自动选择 ==========');
     console.log('[自动选择] 当前设备数量:', currentDevices.length);
-    console.log('[自动选择] 当前标签页:', props.activeTab);
+    console.log('[自动选择] 当前标签页:', activeTab.value);
     console.log('[自动选择] 当前选中设备ID:', selectedDeviceId.value);
     console.log('[自动选择] 设备在线状态:', currentDevices.map(d => ({ id: d.id, name: d.name, isOnline: d.isOnline })));
 
     if (currentDevices.length > 0) {
-      if (props.activeTab === 'realtime') {
+      if (activeTab.value === 'realtime') {
         // 检查当前选择的设备是否在线
         const currentDevice = currentDevices.find((d: any) => d.id === selectedDeviceId.value);
         const isCurrentDeviceOnline = currentDevice?.isOnline ?? false;
@@ -1065,24 +1607,32 @@ onMounted(async () => {
           await fetchRealtimeData();
           startRealtimeDataTimer();
         }
-      } else if (props.activeTab === 'history' && !historyDeviceId.value) {
+      } else if (activeTab.value === 'history' && !historyDeviceId.value) {
         console.log('[自动选择] 历史数据标签页，选择第一个设备');
         // 历史数据标签页，选择第一个设备
         historyDeviceId.value = currentDevices[0]?.id || null;
         // 获取历史数据
         if (historyDeviceId.value) {
-          await fetchDeviceHistoryData(historyDeviceId.value);
+          if (isMobile.value) {
+            await getOrUpdateDeviceHistoryData(historyDeviceId.value);
+          } else {
+            await fetchDeviceHistoryData(historyDeviceId.value);
+          }
         }
-      } else if (props.activeTab === 'analysis') {
+      } else if (activeTab.value === 'analysis') {
         console.log('[自动选择] 分析标签页，选择第一个设备');
         // 分析界面需要选择第一个设备并获取所有设备的历史数据
         if (!selectedDeviceId.value) {
           selectedDeviceId.value = currentDevices[0]?.id || null;
         }
-        await fetchDeviceHistoryData(); // 不传参数，获取所有设备数据
+        if (isMobile.value) {
+          await getOrUpdateDeviceHistoryData(); // 不传参数，获取所有设备数据
+        } else {
+          await fetchDeviceHistoryData(); // 不传参数，获取所有设备数据
+        }
       } else {
         console.log('[自动选择] 条件不满足，跳过自动选择');
-        console.log('[自动选择] - 标签页是否为realtime:', props.activeTab === 'realtime');
+        console.log('[自动选择] - 标签页是否为realtime:', activeTab.value === 'realtime');
         console.log('[自动选择] - 是否已选择设备:', !!selectedDeviceId.value);
       }
     } else {
@@ -1092,7 +1642,7 @@ onMounted(async () => {
   }, 1000);
 
   // 如果在分析标签页，初始化图表
-  if (props.activeTab === 'analysis') {
+  if (activeTab.value === 'analysis') {
     nextTick(async () => {
       await initCharts();
     });
@@ -1117,7 +1667,11 @@ watch(() => props.activeTab, async (newTab, oldTab) => {
   
   if (newTab === 'analysis') {
     // 切换到分析标签时，获取所有设备的历史数据
-    await fetchDeviceHistoryData(); // 不传参数，获取所有设备数据
+    if (isMobile.value) {
+      await getOrUpdateDeviceHistoryData(); // 不传参数，获取所有设备数据
+    } else {
+      await fetchDeviceHistoryData(); // 不传参数，获取所有设备数据
+    }
     nextTick(async () => {
       await initCharts();
     });
@@ -1141,7 +1695,11 @@ watch(() => props.activeTab, async (newTab, oldTab) => {
           console.log('Auto-selecting device for history:', deviceId);
           // 使用nextTick确保historyDeviceId已更新
           nextTick(async () => {
-            await fetchDeviceHistoryData(deviceId);
+            if (isMobile.value) {
+              await getOrUpdateDeviceHistoryData(deviceId);
+            } else {
+              await fetchDeviceHistoryData(deviceId);
+            }
             console.log('History data fetched for device:', deviceId);
           });
         }
@@ -1193,18 +1751,20 @@ watch(() => props.activeTab, async (newTab, oldTab) => {
 // 监听selectedDeviceId变化，更新设备数据
 watch(() => selectedDeviceId.value, async (newDeviceId, oldDeviceId) => {
   console.log('Selected device ID changed:', newDeviceId, 'Old device ID:', oldDeviceId);
-  if (newDeviceId && props.activeTab === 'realtime') {
+  if (newDeviceId && activeTab.value === 'realtime') {
     // 切换设备时，更新设备数据
     console.log('Updating device data for new device:', newDeviceId);
     // 从后端获取最新的设备数据
     await fetchDevices();
-    // 获取最新的温度湿度数据
-    const sensorData = await fetchSensorData(newDeviceId);
-    if (sensorData.temperatureValues.length > 0 && sensorData.humidityValues.length > 0) {
-      const latestTemp = sensorData.temperatureValues[sensorData.temperatureValues.length - 1];
-      const latestHumidity = sensorData.humidityValues[sensorData.humidityValues.length - 1];
-      updateDevice(newDeviceId, { temperature: latestTemp, humidity: latestHumidity });
-      console.log('Latest sensor data stored to deviceStore:', { temperature: latestTemp, humidity: latestHumidity });
+    if (!isMobile.value) {
+      // 获取最新的温度湿度数据（仅桌面端）
+      const sensorData = await fetchSensorData(newDeviceId);
+      if (sensorData.temperatureValues.length > 0 && sensorData.humidityValues.length > 0) {
+        const latestTemp = sensorData.temperatureValues[sensorData.temperatureValues.length - 1];
+        const latestHumidity = sensorData.humidityValues[sensorData.humidityValues.length - 1];
+        updateDevice(newDeviceId, { temperature: latestTemp, humidity: latestHumidity });
+        console.log('Latest sensor data stored to deviceStore:', { temperature: latestTemp, humidity: latestHumidity });
+      }
     }
     console.log('Device data updated for new device');
   }
@@ -1230,10 +1790,10 @@ watch(() => route.path, async (newPath) => {
       const latestDevices = getDevices();
       console.log('[路由监听] 设备数量:', latestDevices.length);
       console.log('[路由监听] 当前选中设备:', selectedDeviceId.value);
-      console.log('[路由监听] 当前标签页:', props.activeTab);
+      console.log('[路由监听] 当前标签页:', activeTab.value);
 
       if (latestDevices.length > 0) {
-        if (props.activeTab === 'realtime') {
+        if (activeTab.value === 'realtime') {
           // 检查当前选择的设备是否在线
           const currentDevice = latestDevices.find((d: any) => d.id === selectedDeviceId.value);
           const isCurrentDeviceOnline = currentDevice?.isOnline ?? false;
@@ -1259,20 +1819,18 @@ watch(() => route.path, async (newPath) => {
 // 监听selectedDeviceId变化，自动开启实时监控
 watch(() => selectedDeviceId.value, (newDeviceId, oldDeviceId) => {
   console.log('Selected device ID changed:', newDeviceId, 'Old device ID:', oldDeviceId);
-  console.log('Current active tab:', props.activeTab);
+  console.log('Current active tab:', activeTab.value);
   
   // 使用nextTick确保activeTab已经更新
   nextTick(() => {
-    console.log('Active tab after nextTick:', props.activeTab);
+    console.log('Active tab after nextTick:', activeTab.value);
     // 只有当有设备ID且当前是实时标签时才启动监控
-    if (newDeviceId && props.activeTab === 'realtime') {
+    if (newDeviceId && activeTab.value === 'realtime') {
       console.log('Auto-starting realtime monitoring for device:', newDeviceId);
       startRealtimeMonitoring();
     }
   });
 });
-
-// 组件挂载时检查URL参数已移至上面的onMounted函数
 
 // 跳转到总览界面的大图模式全屏状态
 const goToFullscreen = () => {
@@ -1284,6 +1842,7 @@ const goToFullscreen = () => {
 </script>
 
 <style lang="scss" scoped>
+/* ==================== 桌面端样式 ==================== */
 .data-card {
   z-index: 1;
   width: 75%;
@@ -1770,6 +2329,414 @@ const goToFullscreen = () => {
   min-height: 300px;
 }
 
+/* ==================== 移动端样式 ==================== */
+.mobile-data {
+  min-height: calc(100vh - 120px);
+  background: #f5f7fa;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 设备选择 */
+.mobile-data .device-selector {
+  margin-bottom: 16px;
+}
+
+/* 实时数据 */
+.mobile-data .realtime-container {
+  padding: 0;
+}
+
+/* 设备数据卡片 */
+.mobile-data .device-data-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.mobile-data .data-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.mobile-data .data-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.mobile-data .data-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.mobile-data .data-item {
+  padding: 12px;
+  background: #f5f7fa;
+  border-radius: 8px;
+}
+
+.mobile-data .data-item.full {
+  grid-column: 1 / -1;
+}
+
+.mobile-data .data-label {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 4px;
+}
+
+.mobile-data .data-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.mobile-data .data-value.small {
+  font-size: 14px;
+}
+
+/* 视频监控 */
+.mobile-data .video-section {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.mobile-data .video-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+  width: 100%;
+}
+
+.mobile-data .video-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.mobile-data .video-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.mobile-data .video-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.mobile-data .video-settings {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  background: #f5f7fa;
+  border-radius: 8px;
+}
+
+.mobile-data .setting-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mobile-data .setting-label {
+  font-size: 14px;
+  color: #606266;
+  min-width: 60px;
+}
+
+.mobile-data .setting-value {
+  font-size: 14px;
+  color: #409EFF;
+  font-weight: 600;
+  min-width: 30px;
+  text-align: right;
+}
+
+.mobile-data .video-card {
+  position: relative;
+  width: 100%;
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.mobile-data .video-container {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+
+.mobile-data .video-stream {
+  max-width: 100%;
+  max-height: 70vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+}
+
+.mobile-data .video-stream.flip-horizontal {
+  transform: scaleX(-1);
+}
+
+.mobile-data .video-stream.flip-vertical {
+  transform: scaleY(-1);
+}
+
+.mobile-data .video-stream.disconnected {
+  opacity: 0.5;
+}
+
+.mobile-data .frame-info {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mobile-data .fps-info {
+  font-weight: bold;
+  color: #409EFF;
+}
+
+.mobile-data .stream-disconnected-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.mobile-data .disconnected-content {
+  text-align: center;
+  color: white;
+}
+
+.mobile-data .disconnected-icon {
+  color: #f56c6c;
+}
+
+.mobile-data .disconnected-message {
+  margin-top: 8px;
+  font-size: 14px;
+}
+
+.mobile-data .video-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  background: #f5f7fa;
+}
+
+.mobile-data .error-content {
+  text-align: center;
+}
+
+.mobile-data .error-icon {
+  color: #f56c6c;
+}
+
+.mobile-data .error-message {
+  margin-top: 8px;
+  color: #606266;
+}
+
+.mobile-data .video-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+/* 分析 */
+.mobile-data .analysis-container {
+  padding: 0;
+}
+
+.mobile-data .chart-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mobile-data .chart-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.mobile-data .chart-card h3 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.mobile-data .chart-card h3 .time-range {
+  font-size: 12px;
+  font-weight: 400;
+  color: #909399;
+  margin-left: 8px;
+}
+
+.mobile-data .chart {
+  width: 100%;
+  height: 200px;
+}
+
+/* 历史数据 */
+.mobile-data .history-container {
+  padding: 0;
+}
+
+.mobile-data .history-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mobile-data .device-info-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mobile-data .device-info-card .info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mobile-data .device-info-card .info-label {
+  font-size: 12px;
+  color: #909399;
+}
+
+.mobile-data .device-info-card .info-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.mobile-data .history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mobile-data .history-item {
+  background: white;
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.mobile-data .history-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+
+.mobile-data .history-row .device-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  flex-shrink: 0;
+}
+
+.mobile-data .history-row .device-id {
+  font-size: 12px;
+  color: #909399;
+  flex-shrink: 0;
+}
+
+.mobile-data .history-row .history-time {
+  font-size: 12px;
+  color: #909399;
+  margin-left: auto;
+}
+
+.mobile-data .history-row.data-row {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.mobile-data .history-row .data-item {
+  font-size: 14px;
+  color: #303133;
+}
+
+.mobile-data .history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mobile-data .pagination-container {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
+  padding: 0 4px;
+  overflow-x: auto;
+}
+
+.mobile-data .pagination-container :deep(.el-pagination) {
+  --el-pagination-button-width: 28px;
+  --el-pagination-button-height: 28px;
+  font-size: 12px;
+}
+
+.mobile-data .pagination-container :deep(.el-pagination .el-select .el-input) {
+  width: 80px;
+}
+
+.mobile-data .history-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+/* ==================== 响应式适配 ==================== */
 @media (max-width: 768px) {
   .data-card {
     width: 95%;
