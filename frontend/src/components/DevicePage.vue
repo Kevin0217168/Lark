@@ -162,12 +162,10 @@
             <el-option label="DEBUG" value="DEBUG" />
           </el-select>
           <el-date-picker
-            v-model="selectedTimeRange"
-            type="datetimerange"
-            range-separator="至"
-            start-placeholder="开始时间"
-            end-placeholder="结束时间"
-            style="width: 360px; margin-right: 10px;"
+            v-model="selectedEndTime"
+            type="datetime"
+            placeholder="选择结束时间"
+            style="width: 220px; margin-right: 10px;"
             value-format="YYYY-MM-DDTHH:mm:ss"
             :disabled-date="disabledDate"
             @change="handleTimeChange"
@@ -231,16 +229,7 @@
           </div>
         </div>
         
-        <!-- 分页控制 -->
-        <div v-if="selectedDeviceIds.length > 0 && !logsLoading && !logsError && currentLogs.length > 0" class="pagination-container">
-          <el-pagination
-            v-model:current-page="logCurrentPage"
-            :page-size="logPagination.limit"
-            :total="logTotal"
-            layout="total, prev, pager, next, jumper"
-            @current-change="handleCurrentChange"
-          />
-        </div>
+
         
         <!-- 空数据提示 -->
         <el-empty 
@@ -438,27 +427,15 @@
             <el-option label="ERROR" value="ERROR" />
             <el-option label="DEBUG" value="DEBUG" />
           </el-select>
-          <div class="mobile-time-range">
-            <el-date-picker
-              v-model="startTime"
-              type="datetime"
-              placeholder="开始时间"
-              class="filter-datepicker-mobile"
-              value-format="YYYY-MM-DDTHH:mm:ss"
-              :disabled-date="disabledDate"
-              @change="handleMobileTimeChange"
-            />
-            <span class="time-separator">至</span>
-            <el-date-picker
-              v-model="endTime"
-              type="datetime"
-              placeholder="结束时间"
-              class="filter-datepicker-mobile"
-              value-format="YYYY-MM-DDTHH:mm:ss"
-              :disabled-date="disabledDate"
-              @change="handleMobileTimeChange"
-            />
-          </div>
+          <el-date-picker
+            v-model="selectedEndTime"
+            type="datetime"
+            placeholder="选择结束时间"
+            class="filter-datepicker-mobile"
+            value-format="YYYY-MM-DDTHH:mm:ss"
+            :disabled-date="disabledDate"
+            @change="handleTimeChange"
+          />
           <div class="mobile-button-group">
             <el-button type="primary" size="small" @click="fetchLogs" :loading="logsLoading" :disabled="selectedDeviceIds.length === 0" class="mobile-action-button">
               查询
@@ -522,17 +499,7 @@
           </div>
         </div>
         
-        <!-- 分页控制 -->
-        <div v-if="selectedDeviceIds.length > 0 && !logsLoading && !logsError && currentLogs.length > 0" class="pagination-container">
-          <el-pagination
-            v-model:current-page="logCurrentPage"
-            :page-size="logPagination.limit"
-            :total="logTotal"
-            layout="total, prev, pager, next"
-            small
-            @current-change="handleCurrentChange"
-          />
-        </div>
+
         
         <!-- 空数据提示 -->
         <el-empty 
@@ -650,21 +617,16 @@ const fetchDeviceVersion = async (deviceId: number) => {
 
 const selectedDeviceIds = ref<number[]>([]);
 const selectedLogLevels = ref<('INFO' | 'WARNING' | 'ERROR' | 'DEBUG')[]>([]);
-const selectedTimeRange = ref<[string, string] | null>(null);
-
-// 移动端时间选择（分开的开始时间和结束时间）
-const startTime = ref<string>('');
-const endTime = ref<string>('');
+const selectedEndTime = ref<string>('');
 
 // 日志相关状态
 const logsLoading = ref(false);
 const logsError = ref('');
 const currentLogs = ref<DeviceLog[]>([]);
 const logTotal = ref(0);
-const logCurrentPage = ref(1);
 const logPagination = ref({
   skip: 0,
-  limit: 50
+  limit: 500
 });
 const wrapEnabled = ref(true);
 
@@ -716,22 +678,21 @@ const fetchLogs = async () => {
   console.log('========== 查询日志参数 ==========');
   console.log('设备ID:', selectedDeviceIds.value);
   console.log('日志等级:', selectedLogLevels.value.length > 0 ? selectedLogLevels.value : '全部');
-  console.log('时间范围:', selectedTimeRange.value ? `${selectedTimeRange.value[0]} 至 ${selectedTimeRange.value[1]}` : '不限');
-  console.log('分页参数:', { skip: logPagination.value.skip, limit: logPagination.value.limit });
+  console.log('结束时间:', selectedEndTime.value || '当前时间');
+  console.log('限制条数:', logPagination.value.limit);
   console.log('==================================');
 
   try {
     const { fetchDeviceLogs } = useDeviceStore();
     const levels = selectedLogLevels.value.length > 0 ? selectedLogLevels.value : undefined;
-    const startTime = selectedTimeRange.value ? selectedTimeRange.value[0] : undefined;
-    const endTime = selectedTimeRange.value ? selectedTimeRange.value[1] : undefined;
+    const endTime = selectedEndTime.value || undefined;
 
     const result = await fetchDeviceLogs(
       selectedDeviceIds.value,
-      logPagination.value.skip,
+      0,
       logPagination.value.limit,
       levels,
-      startTime,
+      undefined,
       endTime
     );
 
@@ -750,6 +711,7 @@ const fetchLogs = async () => {
         return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
       });
       logTotal.value = result.total;
+      ElMessage.success(`成功加载 ${result.data.length} 条日志`);
     } else {
       logsError.value = '获取日志失败，请稍后重试';
     }
@@ -763,17 +725,16 @@ const fetchLogs = async () => {
 
 // 设备选择变化
 const handleDeviceChange = () => {
-  logCurrentPage.value = 1;
-  logPagination.value.skip = 0;
   currentLogs.value = [];
   logTotal.value = 0;
   logsError.value = '';
+  if (selectedDeviceIds.value.length > 0) {
+    fetchLogs();
+  }
 };
 
 // 日志等级变化
 const handleLevelChange = () => {
-  logCurrentPage.value = 1;
-  logPagination.value.skip = 0;
   if (selectedDeviceIds.value.length > 0) {
     fetchLogs();
   }
@@ -781,35 +742,9 @@ const handleLevelChange = () => {
 
 // 时间范围变化
 const handleTimeChange = () => {
-  logCurrentPage.value = 1;
-  logPagination.value.skip = 0;
   if (selectedDeviceIds.value.length > 0) {
     fetchLogs();
   }
-};
-
-// 移动端时间变化
-const handleMobileTimeChange = () => {
-  // 更新selectedTimeRange以兼容现有的fetchLogs逻辑
-  if (startTime.value && endTime.value) {
-    selectedTimeRange.value = [startTime.value, endTime.value];
-  } else {
-    selectedTimeRange.value = null;
-  }
-  logCurrentPage.value = 1;
-  logPagination.value.skip = 0;
-  if (selectedDeviceIds.value.length > 0) {
-    fetchLogs();
-  }
-};
-
-
-
-// 当前页变化
-const handleCurrentChange = (page: number) => {
-  logCurrentPage.value = page;
-  logPagination.value.skip = (page - 1) * logPagination.value.limit;
-  fetchLogs();
 };
 
 // 格式化时间戳
@@ -840,28 +775,17 @@ const formatDateForPicker = (date: Date) => {
   return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
 };
 
-// 设置默认时间范围为最近三天
+// 设置默认结束时间为当前时间
 const setDefaultTimeRange = () => {
   const now = new Date();
-  const threeDaysAgo = new Date();
-  threeDaysAgo.setTime(threeDaysAgo.getTime() - 3 * 24 * 60 * 60 * 1000);
-  
-  const startTimeStr = formatDateForPicker(threeDaysAgo);
-  const endTimeStr = formatDateForPicker(now);
-  
-  selectedTimeRange.value = [startTimeStr, endTimeStr];
-  startTime.value = startTimeStr;
-  endTime.value = endTimeStr;
+  selectedEndTime.value = formatDateForPicker(now);
 };
 
-// 限制时间范围为最近三天
+// 限制时间不能晚于当前时间
 const disabledDate = (time: Date) => {
-  const threeDaysAgo = new Date();
-  threeDaysAgo.setTime(threeDaysAgo.getTime() - 3 * 24 * 60 * 60 * 1000);
-  threeDaysAgo.setHours(0, 0, 0, 0);
   const now = new Date();
   now.setHours(23, 59, 59, 999);
-  return time < threeDaysAgo || time > now;
+  return time > now;
 };
 
 // 重置日志筛选
@@ -869,10 +793,9 @@ const resetLogFilter = () => {
   selectedDeviceIds.value = [];
   selectedLogLevels.value = [];
   setDefaultTimeRange();
-  logCurrentPage.value = 1;
   logPagination.value = {
     skip: 0,
-    limit: 50
+    limit: 500
   };
   currentLogs.value = [];
   logTotal.value = 0;
@@ -1616,16 +1539,8 @@ const handleRestart = (device: Device) => {
   width: 100% !important;
 }
 
-/* 移动端时间范围选择 - 经典设计 */
-.mobile-time-range {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-}
-
 .filter-datepicker-mobile {
-  flex: 1;
+  width: 100%;
 }
 
 .filter-datepicker-mobile :deep(.el-input__wrapper) {
@@ -1635,13 +1550,6 @@ const handleRestart = (device: Device) => {
 
 .filter-datepicker-mobile :deep(.el-input__inner) {
   font-size: 14px;
-}
-
-.time-separator {
-  font-size: 14px;
-  color: #606266;
-  white-space: nowrap;
-  padding: 0 4px;
 }
 
 /* 移动端按钮组 - 确保查询和重置按钮对齐 */
