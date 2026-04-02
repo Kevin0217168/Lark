@@ -102,34 +102,34 @@ class UserItem(BaseModel):
 
 
 class UserUpdateItem(BaseModel):
-    username: str = Field(
+    username: Optional[str] = Field(
         title="用户名", description="数据库唯一用户名", examples=["mint"], default=None
     )
-    password: str = Field(
+    password: Optional[str] = Field(
         title="用户密码", description="用户密码", examples=["123456789"], default=None
     )
-    nickname: str = Field(
+    nickname: Optional[str] = Field(
         title="用户昵称",
         description="数据库用户昵称(不唯一)",
         examples=["猫猫"],
         default=None,
     )
-    role: Literal["root", "user", "readonly"] = Field(
+    role: Optional[Literal["root", "user", "readonly"]] = Field(
         title="用户权限", description="数据库用户权限", examples=["root"], default=None
     )
-    avatar: str = Field(
+    avatar: Optional[str] = Field(
         title="用户头像",
         description="用户头像图片访问地址",
         examples=[""],
         default=None,
     )
-    banner: str = Field(
+    banner: Optional[str] = Field(
         title="用户自定义主图",
         description="用户自定义主图图片访问地址",
         examples=[""],
         default=None,
     )
-    email: str = Field(
+    email: Optional[str] = Field(
         title="用户邮箱",
         description="数据库用户邮箱",
         examples=["BI6PPD@163.com"],

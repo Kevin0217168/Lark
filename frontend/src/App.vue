@@ -22,10 +22,10 @@
       fit="cover"
     />
     <el-container class="app-container">
-      <el-header>
+      <el-header v-if="!isAuthPage">
         <Header />
       </el-header>
-      <Sider @tabChange="handleTabChange" />
+      <Sider v-if="!isAuthPage" @tabChange="handleTabChange" />
       <el-main>
         <RouterView v-slot="{ Component }">
           <component :is="Component" :activeTab="activeTab" />
@@ -59,7 +59,6 @@
 import { ref, watch, onMounted, onUnmounted, computed } from "vue";
 import { el } from "element-plus/es/locale/index.mjs";
 import Header from "./components/Header.vue";
-import LoginPage from "./components/LoginPage.vue";
 import Sider from "./components/Sider.vue";
 import MobilePage from "./pages/MobilePage.vue";
 import { shouldUseMobilePage } from "./utils/mobileAdapter";
