@@ -33,7 +33,12 @@
       <div v-else-if="activeTab === 'management'">
         <div class="management-header">
           <h4>设备管理</h4>
-          <el-button type="primary" @click="showAddDialog">添加设备</el-button>
+          <div class="add-device-section">
+            <el-button type="primary" @click="showAddDialog" :disabled="!isRootUser">添加设备</el-button>
+            <div v-if="!isRootUser" class="permission-hint-desktop">
+              仅管理员用户可操作
+            </div>
+          </div>
         </div>
         
         <!-- 筛选查询 -->
@@ -100,10 +105,13 @@
           </el-table-column>
           <el-table-column label="操作" min-width="300" fixed="right">
             <template #default="scope">
-              <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
-              <el-button size="small" type="success" @click="handleUpdateFirmware(scope.row)">更新固件</el-button>
-              <el-button size="small" type="warning" @click="handleRestart(scope.row)">重启</el-button>
-              <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
+              <el-button size="small" @click="handleEdit(scope.row)" :disabled="!isRootUser">编辑</el-button>
+              <el-button size="small" type="success" @click="handleUpdateFirmware(scope.row)" :disabled="!isRootUser">更新固件</el-button>
+              <el-button size="small" type="warning" @click="handleRestart(scope.row)" :disabled="!isRootUser">重启</el-button>
+              <el-button size="small" type="danger" @click="handleDelete(scope.row)" :disabled="!isRootUser">删除</el-button>
+              <div v-if="!isRootUser" style="margin-top: 5px; font-size: 12px; color: #909399;">
+                仅管理员用户可操作
+              </div>
             </template>
           </el-table-column>
         </el-table>
@@ -291,7 +299,7 @@
       <div v-else-if="activeTab === 'management'" class="management-container">
         <div class="management-header">
           <h3>设备管理</h3>
-          <el-button type="primary" size="small" @click="showAddDialog">
+          <el-button type="primary" size="small" @click="showAddDialog" :disabled="!isRootUser">
             <el-icon><Plus /></el-icon>
             添加
           </el-button>
@@ -375,10 +383,13 @@
               </div>
             </div>
             <div class="device-actions">
-              <el-button size="small" @click="handleEdit(device)">编辑</el-button>
-              <el-button size="small" type="success" @click="handleUpdateFirmware(device)">更新固件</el-button>
-              <el-button size="small" type="warning" @click="handleRestart(device)">重启</el-button>
-              <el-button size="small" type="danger" @click="handleDelete(device)">删除</el-button>
+              <el-button size="small" @click="handleEdit(device)" :disabled="!isRootUser">编辑</el-button>
+              <el-button size="small" type="success" @click="handleUpdateFirmware(device)" :disabled="!isRootUser">更新固件</el-button>
+              <el-button size="small" type="warning" @click="handleRestart(device)" :disabled="!isRootUser">重启</el-button>
+              <el-button size="small" type="danger" @click="handleDelete(device)" :disabled="!isRootUser">删除</el-button>
+            </div>
+            <div v-if="!isRootUser" class="permission-hint">
+              仅管理员用户可操作
             </div>
           </div>
         </div>
@@ -590,6 +601,12 @@ const props = defineProps<{
 const activeTab = computed(() => props.activeTab || 'overview');
 
 const { devices, fetchDevices: storeFetchDevices } = useDeviceStore();
+
+// 检查是否为 root 用户
+const isRootUser = computed(() => {
+  const role = localStorage.getItem('role');
+  return role === 'root';
+});
 
 // 获取设备列表
 const fetchDevices = async () => {
@@ -895,6 +912,10 @@ const canCall = (key: string): boolean => {
 
 // 显示添加对话框
 const showAddDialog = () => {
+  if (!isRootUser.value) {
+    ElMessage.warning('仅管理员用户可添加设备');
+    return;
+  }
   isEdit.value = false;
   deviceForm.value = {
     id: '',
@@ -911,6 +932,10 @@ const showAddDialog = () => {
 
 // 编辑设备
 const handleEdit = (device: Device) => {
+  if (!isRootUser.value) {
+    ElMessage.warning('仅管理员用户可编辑设备');
+    return;
+  }
   isEdit.value = true;
   deviceForm.value = {
     id: device.id.toString(),
@@ -927,6 +952,10 @@ const handleEdit = (device: Device) => {
 
 // 保存设备
 const handleSave = async () => {
+  if (!isRootUser.value) {
+    ElMessage.warning('仅管理员用户可保存设备');
+    return;
+  }
   if (!deviceForm.value.name) {
     ElMessage.warning('请填写设备名称');
     return;
@@ -1033,6 +1062,10 @@ const handleSave = async () => {
 
 // 删除设备
 const handleDelete = async (device: Device) => {
+  if (!isRootUser.value) {
+    ElMessage.warning('仅管理员用户可删除设备');
+    return;
+  }
   if (isMobile.value) {
     // 移动端：二次确认
     ElMessageBox.confirm(
@@ -1131,6 +1164,10 @@ const handleDelete = async (device: Device) => {
 
 // 更新固件
 const handleUpdateFirmware = (device: Device) => {
+  if (!isRootUser.value) {
+    ElMessage.warning('仅管理员用户可更新固件');
+    return;
+  }
   ElMessageBox.confirm(
     '确定要为设备更新固件吗？更新过程中摄像头会被临时关闭，设备可能会自动重启。',
     '更新固件',
@@ -1177,6 +1214,10 @@ const handleUpdateFirmware = (device: Device) => {
 
 // 重启设备
 const handleRestart = (device: Device) => {
+  if (!isRootUser.value) {
+    ElMessage.warning('仅管理员用户可重启设备');
+    return;
+  }
   ElMessageBox.confirm(
     '确定要重启该设备吗？设备收到指令后约500ms执行重启。',
     '确认重启',
@@ -1548,6 +1589,13 @@ const handleRestart = (device: Device) => {
   gap: 8px;
   padding-top: 12px;
   border-top: 1px solid #f0f0f0;
+}
+
+.permission-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #909399;
+  text-align: center;
 }
 
 /* 移动端筛选 */
