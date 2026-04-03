@@ -30,7 +30,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r backend/app/requirements.txt 2>/dev/null || true
-          python -m pip install pytest fastapi uvicorn sqlalchemy httpx pwdlib[argon2]
+          python -m pip install pytest fastapi uvicorn sqlalchemy httpx pwdlib[argon2] PyJWT
 
       - name: Run pytest
         working-directory: backend/app
