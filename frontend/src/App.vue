@@ -33,24 +33,64 @@
         </RouterView>
       </el-main>
       <el-footer> 
-        <div class="footer-content">
-          <div class="copyright">© 2026 Lark. All Rights Reserved.</div>
-          <div class="copyright">Powered by Vue.js & FastAPI</div>
-          <div class="beian">
-            <div class="beian-item">
-              <img src="https://www.beian.gov.cn/img/ghs.png" class="beian-icon"> 
-              <a class="beian-link" href="https://beian.mps.gov.cn/#/query/webSearch?code=41010502007493" rel="noreferrer" target="_blank">豫公网安备41010502007493号</a>
+        <template v-if="isAuthPage">
+          <div class="auth-page-footer-content">
+            <div class="footer-left">
+              <div class="brand-info">
+                <div class="brand-logo">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lark-logo" aria-hidden="true"> 
+                    <path d="M16 7h.01"></path> 
+                    <path d="M3.4 18H12a8 8 0 0 0 8-8V7a4 4 0 0 0-7.28-2.3L2 20"></path> 
+                    <path d="m20 7 2 .5-2 .5"></path> 
+                    <path d="M10 18v3"></path> 
+                    <path d="M14 17.75V21"></path> 
+                    <path d="M7 18a6 6 0 0 0 3.84-10.61"></path> 
+                  </svg>
+                  <span class="brand-name">云雀 Lark</span>
+                </div>
+                <p class="brand-desc">专注于智慧鸟厂管理系统的研发与服务，以物联网技术赋能传统养殖业，推动行业数字化转型。</p>
+              </div>
             </div>
-            <div class="beian-item">
-              <span class="beian-placeholder"></span>
-              <a class="beian-link" href="https://beian.miit.gov.cn/" target="_blank">豫ICP备2026008104号</a>
-            </div>
-            <div class="beian-item">
-              <img src="https://icp.gov.moe/images/ico64.png" class="beian-icon moe-icon">
-              <a class="beian-link" target="_blank" href="https://icp.gov.moe/?keyword=20261324">萌ICP备20261324号</a>
+            <div class="footer-right">
+              <div class="copyright">© 2026 Lark. All Rights Reserved.</div>
+              <div class="copyright">Powered by Vue.js & FastAPI</div>
+              <div class="beian">
+                <div class="beian-item">
+                  <img src="https://www.beian.gov.cn/img/ghs.png" class="beian-icon"> 
+                  <a class="beian-link" href="https://beian.mps.gov.cn/#/query/webSearch?code=41010502007493" rel="noreferrer" target="_blank">豫公网安备41010502007493号</a>
+                </div>
+                <div class="beian-item">
+                  <span class="beian-placeholder"></span>
+                  <a class="beian-link" href="https://beian.miit.gov.cn/" target="_blank">豫ICP备2026008104号</a>
+                </div>
+                <div class="beian-item">
+                  <img src="https://icp.gov.moe/images/ico64.png" class="beian-icon moe-icon">
+                  <a class="beian-link" target="_blank" href="https://icp.gov.moe/?keyword=20261324">萌ICP备20261324号</a>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+        </template>
+        <template v-else>
+          <div class="footer-content">
+            <div class="copyright">© 2026 Lark. All Rights Reserved.</div>
+            <div class="copyright">Powered by Vue.js & FastAPI</div>
+            <div class="beian">
+              <div class="beian-item">
+                <img src="https://www.beian.gov.cn/img/ghs.png" class="beian-icon"> 
+                <a class="beian-link" href="https://beian.mps.gov.cn/#/query/webSearch?code=41010502007493" rel="noreferrer" target="_blank">豫公网安备41010502007493号</a>
+              </div>
+              <div class="beian-item">
+                <span class="beian-placeholder"></span>
+                <a class="beian-link" href="https://beian.miit.gov.cn/" target="_blank">豫ICP备2026008104号</a>
+              </div>
+              <div class="beian-item">
+                <img src="https://icp.gov.moe/images/ico64.png" class="beian-icon moe-icon">
+                <a class="beian-link" target="_blank" href="https://icp.gov.moe/?keyword=20261324">萌ICP备20261324号</a>
+              </div>
+            </div>
+          </div>
+        </template>
       </el-footer>
     </el-container>
   </div>
@@ -185,7 +225,7 @@ footer {
 
 footer {
   flex-direction: column;
-  padding: 40px 20px 20px;
+  padding: 0;
   background: transparent;
   position: relative;
   z-index: 100;
@@ -196,10 +236,7 @@ footer {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  background: rgba(245, 247, 250, 0.8);
-  padding: 20px 30px;
-  border-radius: 8px;
-  backdrop-filter: blur(10px);
+  width: 100%;
 }
 
 .copyright {
@@ -247,6 +284,107 @@ footer {
 
 .beian-link:hover {
   color: #8bad42;
+}
+
+/* 登录/注册页面专用备案信息样式 */
+.auth-page-footer-content {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(5px);
+  padding: 20px 40px;
+  margin: 0;
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 80px;
+}
+
+.auth-page-footer-content .footer-left {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.auth-page-footer-content .footer-right {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.auth-page-footer-content .brand-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auth-page-footer-content .brand-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.auth-page-footer-content .lark-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  color: #8BAD42;
+  background: rgba(139, 173, 66, 0.1);
+  padding: 8px;
+}
+
+.auth-page-footer-content .brand-name {
+  font-size: 20px;
+  font-weight: 600;
+  color: #333333;
+}
+
+.auth-page-footer-content .brand-desc {
+  font-size: 13px;
+  color: #666666;
+  line-height: 1.6;
+  margin: 0;
+  max-width: 500px;
+}
+
+.auth-page-footer-content .copyright {
+  color: #666666;
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0.3px;
+  font-weight: 400;
+}
+
+.auth-page-footer-content .beian {
+  color: #666666;
+  font-size: 11px;
+  line-height: 1.6;
+  letter-spacing: 0.3px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 16px;
+}
+
+.auth-page-footer-content .beian-item {
+  line-height: 1.6;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.auth-page-footer-content .beian-link {
+  color: #666666;
+  letter-spacing: 0.3px;
+  transition: color 0.2s ease;
+}
+
+.auth-page-footer-content .beian-link:hover {
+  color: #333333;
 }
 
 header {
