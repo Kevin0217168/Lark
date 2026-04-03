@@ -17,6 +17,7 @@
   <!-- 桌面端界面 -->
   <div v-else>
     <el-image
+      v-if="!isAuthPage"
       class="banner"
       src="banner.jpg"
       fit="cover"
@@ -25,7 +26,7 @@
       <el-header>
         <Header />
       </el-header>
-      <Sider @tabChange="handleTabChange" />
+      <Sider v-if="!isAuthPage" @tabChange="handleTabChange" />
       <el-main>
         <RouterView v-slot="{ Component }">
           <component :is="Component" :activeTab="activeTab" />
@@ -57,9 +58,7 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, computed } from "vue";
-import { el } from "element-plus/es/locale/index.mjs";
 import Header from "./components/Header.vue";
-import LoginPage from "./components/LoginPage.vue";
 import Sider from "./components/Sider.vue";
 import MobilePage from "./pages/MobilePage.vue";
 import { shouldUseMobilePage } from "./utils/mobileAdapter";
@@ -188,6 +187,8 @@ footer {
   flex-direction: column;
   padding: 40px 20px 20px;
   background: transparent;
+  position: relative;
+  z-index: 100;
 }
 
 .footer-content {
@@ -195,6 +196,10 @@ footer {
   flex-direction: column;
   align-items: center;
   gap: 8px;
+  background: rgba(245, 247, 250, 0.8);
+  padding: 20px 30px;
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
 }
 
 .copyright {

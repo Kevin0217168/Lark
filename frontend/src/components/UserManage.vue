@@ -8,6 +8,10 @@
             <el-icon><Plus /></el-icon>
             新增用户
           </el-button>
+          <el-button type="success" @click="openInvitationCodeDialog" :disabled="!isRootUser">
+            <el-icon><Tickets /></el-icon>
+            生成邀请码
+          </el-button>
         </div>
         <h3 class="title">用户管理</h3>
         <div class="header-right"></div>
@@ -118,10 +122,16 @@
       <!-- 头部 -->
       <div class="header-section mobile-header">
         <h3>用户管理</h3>
-        <el-button type="primary" size="small" @click="openAddUserDialog">
-          <el-icon><Plus /></el-icon>
-          新增
-        </el-button>
+        <div class="mobile-header-actions">
+          <el-button type="success" size="small" @click="openInvitationCodeDialog" :disabled="!isRootUser">
+            <el-icon><Tickets /></el-icon>
+            邀请码
+          </el-button>
+          <el-button type="primary" size="small" @click="openAddUserDialog">
+            <el-icon><Plus /></el-icon>
+            新增
+          </el-button>
+        </div>
       </div>
 
       <!-- 筛选 -->
@@ -332,6 +342,10 @@
           </el-select>
         </el-form-item>
 
+        <el-form-item label="邀请码" prop="invitationCode">
+          <el-input v-model="addForm.invitationCode" placeholder="请输入邀请码" />
+        </el-form-item>
+
         <el-form-item label="邮箱" prop="email">
           <el-input v-model="addForm.email" placeholder="请输入邮箱（可选）" />
         </el-form-item>
@@ -346,13 +360,87 @@
         <el-button type="primary" @click="handleAddUser" :loading="adding">创建</el-button>
       </template>
     </el-dialog>
+
+    <!-- 生成邀请码对话框 -->
+    <el-dialog
+      v-model="invitationCodeDialogVisible"
+      title="生成邀请码"
+      :width="isMobile ? '90%' : '450px'"
+    >
+      <div v-if="generatedInvitationCode" class="invitation-result">
+        <el-result
+          icon="success"
+          title="邀请码生成成功"
+          sub-title="请立即保存或复制邀请码，关闭后无法再次查看"
+        >
+          <template #extra>
+            <div class="invitation-code-display">
+              <el-input
+                v-model="generatedInvitationCode"
+                readonly
+                size="large"
+                class="invitation-code-input"
+              >
+                <template #append>
+                  <el-button @click="copyInvitationCode">复制</el-button>
+                </template>
+              </el-input>
+            </div>
+            <div class="invitation-details">
+              <p><span class="label">过期时间：</span>{{ formatDateTime(invitationDetails.expiresAt) }}</p>
+              <p><span class="label">最大使用次数：</span>{{ invitationDetails.maxUses }} 次</p>
+            </div>
+          </template>
+        </el-result>
+      </div>
+      <el-form
+        v-else
+        :model="invitationForm"
+        ref="invitationFormRef"
+        :rules="invitationRules"
+        label-width="100px"
+      >
+        <el-form-item label="有效期" prop="expiresIn">
+          <el-select v-model="invitationForm.expiresIn" placeholder="请选择有效期">
+            <el-option label="1 小时" :value="1" />
+            <el-option label="6 小时" :value="6" />
+            <el-option label="12 小时" :value="12" />
+            <el-option label="24 小时" :value="24" />
+            <el-option label="48 小时" :value="48" />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="最大次数" prop="maxUses">
+          <el-select v-model="invitationForm.maxUses" placeholder="请选择最大使用次数">
+            <el-option label="1 次" :value="1" />
+            <el-option label="2 次" :value="2" />
+            <el-option label="3 次" :value="3" />
+            <el-option label="5 次" :value="5" />
+          </el-select>
+        </el-form-item>
+
+        <el-alert
+          title="仅管理员用户可生成邀请码"
+          type="info"
+          :closable="false"
+          style="margin-bottom: 20px;"
+        />
+      </el-form>
+
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button v-if="!generatedInvitationCode" type="primary" @click="handleGenerateInvitationCode" :loading="generating">生成</el-button>
+          <el-button v-else type="primary" @click="closeInvitationCodeDialog">关闭</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { ElMessage, ElMessageBox, ElIcon } from 'element-plus';
-import { Plus, Loading, Warning, Search, Delete } from '@element-plus/icons-vue';
+import { Plus, Loading, Warning, Search, Delete, Tickets } from '@element-plus/icons-vue';
 import { api } from '@/utils/api';
 
 // 检测是否为移动设备
@@ -385,6 +473,12 @@ const selectedUsers = ref<any[]>([]);
 // 当前用户ID
 const currentUserId = ref(0);
 
+// 检查是否为 root 用户
+const isRootUser = computed(() => {
+  const role = localStorage.getItem('role');
+  return role === 'root';
+});
+
 // 编辑用户相关
 const editDialogVisible = ref(false);
 const saving = ref(false);
@@ -415,9 +509,35 @@ const addForm = ref({
   confirmPassword: '',
   nickname: '',
   role: 'user',
+  invitationCode: '',
   email: '',
   avatar: ''
 });
+
+// 邀请码相关
+const invitationCodeDialogVisible = ref(false);
+const generating = ref(false);
+const invitationFormRef = ref();
+const invitationForm = ref({
+  expiresIn: 24,
+  maxUses: 3
+});
+const generatedInvitationCode = ref('');
+const invitationDetails = ref({
+  expiresAt: '',
+  maxUses: 0,
+  createdAt: '',
+  createdByUserId: 0
+});
+
+const invitationRules = {
+  expiresIn: [
+    { required: true, message: '请选择有效期', trigger: 'change' }
+  ],
+  maxUses: [
+    { required: true, message: '请选择最大使用次数', trigger: 'change' }
+  ]
+};
 
 // 编辑用户验证规则
 const editRules = {
@@ -516,6 +636,10 @@ const addRules = {
   role: [
     { required: true, message: '请选择角色', trigger: 'change' }
   ],
+  invitationCode: [
+    { required: true, message: '请输入邀请码', trigger: 'blur' },
+    { min: 9, max: 11, message: '邀请码长度必须为9-11个字符', trigger: 'blur' }
+  ],
   email: [
     { type: 'email', message: '请输入正确的邮箱地址', trigger: 'blur' }
   ],
@@ -611,6 +735,7 @@ const openAddUserDialog = () => {
     confirmPassword: '',
     nickname: '',
     role: 'user',
+    invitationCode: '',
     email: '',
     avatar: ''
   };
@@ -632,7 +757,8 @@ const handleAddUser = async () => {
       username: addForm.value.username,
       password: addForm.value.password,
       nickname: addForm.value.nickname,
-      role: addForm.value.role
+      role: addForm.value.role,
+      invitation_code: addForm.value.invitationCode
     };
 
     // 可选字段
@@ -669,9 +795,13 @@ const handleAddUser = async () => {
     }
   } catch (err: any) {
     const errorMessage = err.message;
+    const status = err.status;
     
     if (errorMessage === '表单验证失败') {
-      // 表单验证失败已经在validate回调中处理过
+    } else if (status === 400) {
+      ElMessage.error(err.data?.msg || '邀请码不存在或已失效');
+    } else if (status === 500) {
+      ElMessage.error('服务器内部错误，请稍后重试');
     } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
       ElMessage.error('网络连接失败，请检查网络设置');
     } else {
@@ -866,6 +996,95 @@ const handleBatchDelete = async () => {
     if (err !== 'cancel') {
       ElMessage.error(err.message || '批量删除失败');
     }
+  }
+};
+
+// 打开生成邀请码对话框
+const openInvitationCodeDialog = () => {
+  if (!isRootUser.value) {
+    ElMessage.warning('仅管理员用户可生成邀请码');
+    return;
+  }
+  invitationForm.value = {
+    expiresIn: 24,
+    maxUses: 3
+  };
+  generatedInvitationCode.value = '';
+  invitationDetails.value = {
+    expiresAt: '',
+    maxUses: 0,
+    createdAt: '',
+    createdByUserId: 0
+  };
+  invitationCodeDialogVisible.value = true;
+};
+
+// 关闭生成邀请码对话框
+const closeInvitationCodeDialog = () => {
+  invitationCodeDialogVisible.value = false;
+  generatedInvitationCode.value = '';
+};
+
+// 生成邀请码
+const handleGenerateInvitationCode = async () => {
+  try {
+    if (!invitationFormRef.value) return;
+    
+    const valid = await invitationFormRef.value.validate();
+    if (!valid) return;
+    
+    generating.value = true;
+    
+    const response = await api.post('/api/invitation-codes', {
+      expiresIn: invitationForm.value.expiresIn,
+      maxUses: invitationForm.value.maxUses
+    });
+    
+    console.log('生成邀请码响应:', response);
+    
+    if (response.code === 201) {
+      generatedInvitationCode.value = response.data.code;
+      invitationDetails.value = {
+        expiresAt: response.data.expiresAt,
+        maxUses: response.data.maxUses,
+        createdAt: response.data.createdAt,
+        createdByUserId: response.data.createdByUserId
+      };
+    } else {
+      throw new Error(response.msg || '生成邀请码失败');
+    }
+  } catch (err: any) {
+    ElMessage.error(err.message || '生成邀请码失败');
+  } finally {
+    generating.value = false;
+  }
+};
+
+// 复制邀请码
+const copyInvitationCode = async () => {
+  try {
+    await navigator.clipboard.writeText(generatedInvitationCode.value);
+    ElMessage.success('邀请码已复制到剪贴板');
+  } catch (err) {
+    ElMessage.error('复制失败');
+  }
+};
+
+// 格式化日期时间
+const formatDateTime = (dateTimeStr: string) => {
+  if (!dateTimeStr) return '-';
+  try {
+    const date = new Date(dateTimeStr);
+    return date.toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+  } catch {
+    return dateTimeStr;
   }
 };
 </script>
@@ -1085,5 +1304,48 @@ const handleBatchDelete = async () => {
 
 .dialog-footer {
   text-align: right;
+}
+
+.mobile-header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.mobile-header-actions .el-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.invitation-result {
+  padding: 20px 0;
+}
+
+.invitation-code-display {
+  margin-bottom: 20px;
+}
+
+.invitation-code-input {
+  font-size: 18px;
+  font-weight: bold;
+  letter-spacing: 2px;
+}
+
+.invitation-details {
+  text-align: left;
+  padding: 15px;
+  background: #f5f7fa;
+  border-radius: 8px;
+}
+
+.invitation-details p {
+  margin: 8px 0;
+  font-size: 14px;
+  color: #606266;
+}
+
+.invitation-details .label {
+  font-weight: 500;
+  color: #303133;
 }
 </style>

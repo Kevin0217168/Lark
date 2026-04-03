@@ -1,7 +1,7 @@
 <template>
-  <LoginPage />
+  <AuthPage />
 </template>
 
 <script setup lang="ts">
-import LoginPage from '@/components/LoginPage.vue';
+import AuthPage from '@/components/AuthPage.vue';
 </script>

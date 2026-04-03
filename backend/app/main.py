@@ -10,6 +10,7 @@ from stream import Stream
 from userapi import User, Login
 from deviceapi import Device
 from sensorapi import SensorData
+from invitationapi import router as invitation_router
 from firmwareapi import Firmware
 from logapi import DeviceLog
 
@@ -56,6 +57,7 @@ app.include_router(User.router)
 app.include_router(Login.router)
 app.include_router(Device.router)
 app.include_router(SensorData.router)
+app.include_router(invitation_router)
 app.include_router(Firmware.router)
 app.include_router(DeviceLog.router)
 

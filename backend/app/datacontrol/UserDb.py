@@ -1,12 +1,20 @@
 from pydantic import BaseModel
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index, Boolean
+from sqlalchemy.orm import relationship
 from typing import Optional, Literal, List
 from sqlalchemy.orm import sessionmaker, Session, declarative_base
 from pwdlib import PasswordHash
+from datetime import datetime, timezone, timedelta
 
 password_hash = PasswordHash.recommended()
 
 UserBase = declarative_base()
+
+# 获取本地时间（UTC+8），使用时区感知时间
+# 兼容后端Token时间校验与未来 Pydantic/SQLAlchemy 时区行为
+def get_local_time():
+    return datetime.now(timezone.utc) + timedelta(hours=8)
+
 
 def VerifyPassword(plain_password, hashed_password):
     return password_hash.verify(plain_password, hashed_password)
@@ -25,7 +33,31 @@ class M_Users(UserBase):
   avatar = Column(String)
   banner = Column(String)
   email = Column(String)
+  invitation_code = Column(String, index=True)  # 注册时使用的邀请码
   
+  # 关联邀请码
+  invitation_codes = relationship("M_InvitationCodes", back_populates="user")
+
+class M_InvitationCodes(UserBase):
+  __tablename__ = "invitation_codes"
+  
+  id = Column(Integer, primary_key=True, index=True)  # 自增主键
+  user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)  # 外键关联用户表
+  created_at = Column(DateTime, nullable=False, default=get_local_time)  # 生成时间，默认当前本地时间
+  code = Column(String, nullable=False, unique=True, index=True)  # 邀请码，唯一
+  expire_at = Column(DateTime, nullable=False, index=True)  # 到期时间
+  remaining_uses = Column(Integer, nullable=False, default=1, index=True)  # 可用剩余次数，默认1
+  is_used = Column(Boolean, nullable=False, default=False, index=True)  # 是否已使用，默认False
+  
+  # 关联用户
+  user = relationship("M_Users", back_populates="invitation_codes")
+  
+  # 复合索引，提高查询性能
+  __table_args__ = (
+      Index('idx_expire_uses', 'expire_at', 'remaining_uses'),
+      Index('idx_used_expire', 'is_used', 'expire_at'),  # 用于过期检查
+  )
+
 class UserOut(BaseModel):
   id: int
   username: str
@@ -34,10 +66,22 @@ class UserOut(BaseModel):
   email: str | None = None
   banner: str | None = None
   avatar: str | None = None
+  invitation_code: str | None = None
 
   class Config:
     from_attributes = True
     
+class InvitationCodeOut(BaseModel):
+  id: int
+  user_id: int
+  created_at: datetime
+  code: str
+  expire_at: datetime
+  remaining_uses: int
+  is_used: bool
+
+  class Config:
+    from_attributes = True
 def GetUsers(db: Session, id=None, username=None, nickname=None, role=None, email=None) -> (List[M_Users]): 
   conditions = []
   if id is not None:
@@ -54,11 +98,11 @@ def GetUsers(db: Session, id=None, username=None, nickname=None, role=None, emai
   users = db.query(M_Users).filter(*conditions).all()
   return users
 
-def RegisterUser(db: Session, username:str, password:str, nickname:str, role:str, email:str=None, avatar:str=None):
+def RegisterUser(db: Session, username:str, password:str, nickname:str, role:str, email:str=None, avatar:str=None, invitation_code:str=None):
   # 计算密码哈希
   password = ConvertHash(password)
   
-  new_user = M_Users(username = username, password=password, nickname=nickname, role=role, email=email, avatar=avatar)
+  new_user = M_Users(username = username, password=password, nickname=nickname, role=role, email=email, avatar=avatar, invitation_code=invitation_code)
   db.add(new_user)
   db.commit()
   db.refresh(new_user)
@@ -107,3 +151,164 @@ def DeleteUser(db: Session, id:int):
   db.delete(user)
   db.commit()
   return 1
+
+
+def CreateInvitationCode(db: Session, user_id: int, code: str, expire_at: datetime, remaining_uses: int = 1):
+  """
+  创建邀请码
+  
+  参数:
+    db: 数据库会话
+    user_id: 生成邀请码的用户ID
+    code: 邀请码字符串
+    expire_at: 到期时间
+    remaining_uses: 可用次数，默认1
+  
+  返回:
+    M_InvitationCodes: 新创建的邀请码对象
+  """
+  new_code = M_InvitationCodes(
+      user_id=user_id,
+      code=code,
+      expire_at=expire_at,
+      remaining_uses=remaining_uses
+  )
+  db.add(new_code)
+  db.commit()
+  db.refresh(new_code)
+  return new_code
+
+
+def GetInvitationCode(db: Session, code: str):
+  """
+  根据邀请码获取邀请码对象
+  
+  参数:
+    db: 数据库会话
+    code: 邀请码字符串
+  
+  返回:
+    M_InvitationCodes: 邀请码对象，不存在返回None
+  """
+  return db.query(M_InvitationCodes).filter(M_InvitationCodes.code == code).first()
+
+
+def GetInvitationCodesByUser(db: Session, user_id: int):
+  """
+  获取用户生成的所有邀请码
+  
+  参数:
+    db: 数据库会话
+    user_id: 用户ID
+  
+  返回:
+    List[M_InvitationCodes]: 邀请码列表
+  """
+  return db.query(M_InvitationCodes).filter(M_InvitationCodes.user_id == user_id).all()
+
+
+def UseInvitationCode(db: Session, code: str):
+  """
+  使用邀请码（减少可用次数）
+  
+  参数:
+    db: 数据库会话
+    code: 邀请码字符串
+  
+  返回:
+    bool: 使用成功返回True，失败返回False
+  """
+  invitation_code = db.query(M_InvitationCodes).filter(
+      M_InvitationCodes.code == code,
+      M_InvitationCodes.remaining_uses > 0,
+      M_InvitationCodes.expire_at > get_local_time()
+  ).first()
+  
+  if not invitation_code:
+    return False
+  
+  invitation_code.remaining_uses -= 1
+  # 只要使用过一次就标记为已使用
+  invitation_code.is_used = True
+  db.commit()
+  return True
+
+
+def CleanupExpiredInvitationCodes(db: Session):
+  """
+  清理过期的邀请码
+  
+  仅删除：未被使用（is_used=False）且已过期的邀请码
+  保留：已被使用（is_used=True）即使已过期的邀请码
+  
+  参数:
+    db: 数据库会话
+  
+  返回:
+    int: 删除的邀请码数量
+  """
+  try:
+    # 查找未被使用且已过期的邀请码
+    expired_codes = db.query(M_InvitationCodes).filter(
+        M_InvitationCodes.is_used == False,
+        M_InvitationCodes.expire_at < get_local_time()
+    ).all()
+    
+    deleted_count = 0
+    for code in expired_codes:
+      db.delete(code)
+      deleted_count += 1
+    
+    db.commit()
+    return deleted_count
+    
+  except Exception as e:
+    db.rollback()
+    raise
+
+
+def GetInvitationCodeStats(db: Session):
+  """
+  获取邀请码统计信息
+  
+  参数:
+    db: 数据库会话
+  
+  返回:
+    dict: 统计信息
+  """
+  total = db.query(M_InvitationCodes).count()
+  used = db.query(M_InvitationCodes).filter(M_InvitationCodes.is_used == True).count()
+  unused = total - used
+  
+  expired_unused = db.query(M_InvitationCodes).filter(
+      M_InvitationCodes.is_used == False,
+      M_InvitationCodes.expire_at < get_local_time()
+  ).count()
+  
+  return {
+      "total": total,
+      "used": used,
+      "unused": unused,
+      "expired_unused": expired_unused
+  }
+
+
+def DeleteInvitationCode(db: Session, code: str):
+  """
+  删除邀请码
+  
+  参数:
+    db: 数据库会话
+    code: 邀请码字符串
+  
+  返回:
+    bool: 删除成功返回True，失败返回False
+  """
+  invitation_code = db.query(M_InvitationCodes).filter(M_InvitationCodes.code == code).first()
+  if not invitation_code:
+    return False
+  
+  db.delete(invitation_code)
+  db.commit()
+  return True
