@@ -90,6 +90,7 @@ class Esp32:
 )
 async def get_devices(
     filter_query: Annotated[DeviceFilter, Query()],
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
     db: Db.Session = Depends(Db.GetDb("GetDevices")),
 ):
     """
@@ -114,6 +115,7 @@ async def get_devices(
 )
 async def get_device(
     id: Annotated[int, Path(title="设备id", description="数据库设备唯一主键id")],
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
     db: Db.Session = Depends(Db.GetDb("GetDevice")),
 ):
     """
@@ -284,6 +286,7 @@ async def _send_device_command(device_id: int, command: dict) -> CommonOut:
 )
 async def restart_device(
     id: Annotated[int, Path(title="设备id", description="数据库设备唯一主键id")],
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
     db: Db.Session = Depends(Db.GetDb("RestartDevice")),
 ):
     """
@@ -315,6 +318,7 @@ async def restart_device(
 )
 async def ota_device(
     id: Annotated[int, Path(title="设备id", description="数据库设备唯一主键id")],
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
     db: Db.Session = Depends(Db.GetDb("OtaDevice")),
 ):
     """
@@ -347,6 +351,7 @@ async def ota_device(
 )
 async def get_device_version(
     id: Annotated[int, Path(title="设备id", description="数据库设备唯一主键id")],
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
     db: Db.Session = Depends(Db.GetDb("GetDeviceVersion")),
 ):
     """

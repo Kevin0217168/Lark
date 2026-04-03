@@ -10,9 +10,10 @@ password_hash = PasswordHash.recommended()
 
 UserBase = declarative_base()
 
-# 获取本地时间（UTC+8），不带时区信息（与SQLite兼容）
+# 获取本地时间（UTC+8），使用时区感知时间
+# 兼容后端Token时间校验与未来 Pydantic/SQLAlchemy 时区行为
 def get_local_time():
-    return datetime.utcnow() + timedelta(hours=8)
+    return datetime.now(timezone.utc) + timedelta(hours=8)
 
 
 def VerifyPassword(plain_password, hashed_password):

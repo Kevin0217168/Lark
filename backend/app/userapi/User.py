@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from typing import Annotated, List
 from fastapi import status, Path, Query, Depends, Body
 from fastapi.responses import JSONResponse
+from datetime import datetime, timezone
 
 from schema import *
 
@@ -32,6 +33,7 @@ async def read_users_me(
 )
 async def get_users(
     filter_query: Annotated[UsersFilter, Query()],
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
     db: Db.Session = Depends(Db.GetDb("GetUsers")),
 ):
 
@@ -58,6 +60,7 @@ async def get_users(
 )
 async def get_users(
     id: Annotated[int, Path(title="用户id", description="数据库用户唯一主键id")],
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
     db: Db.Session = Depends(Db.GetDb("GetUsers")),
 ):
     """
@@ -115,7 +118,16 @@ async def register_user(
             )
         
         # 邀请码已失效（剩余次数为0或已过期）
-        if invitation_code.remaining_uses <= 0 or invitation_code.expire_at < Db.get_local_time():
+        # 统一比较时区：邀请编码可能带有 tzinfo，Db.get_local_time 返回UTC+8
+        code_expire = invitation_code.expire_at
+        local_time = Db.get_local_time()
+        if code_expire is not None:
+            if code_expire.tzinfo is None and local_time.tzinfo is not None:
+                code_expire = code_expire.replace(tzinfo=timezone.utc)
+            elif code_expire.tzinfo is not None and local_time.tzinfo is None:
+                local_time = local_time.replace(tzinfo=timezone.utc)
+
+        if invitation_code.remaining_uses <= 0 or (code_expire is not None and code_expire < local_time):
             await async_log(logger, "warning", f"注册失败: 邀请码已失效 - {body.invitation_code}")
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -190,6 +202,7 @@ async def register_user(
 async def update_user(
     id: Annotated[int, Path(title="用户id", description="数据库用户唯一主键id")],
     body: Annotated[UserUpdateItem, Body()],
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
     db: Db.Session = Depends(Db.GetDb("UpdateUser")),
 ):
     """
