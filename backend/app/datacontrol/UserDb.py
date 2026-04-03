@@ -10,9 +10,9 @@ password_hash = PasswordHash.recommended()
 
 UserBase = declarative_base()
 
-# 获取本地时间（UTC+8）
+# 获取本地时间（UTC+8），不带时区信息（与SQLite兼容）
 def get_local_time():
-    return datetime.now(timezone(timedelta(hours=8)))
+    return datetime.utcnow() + timedelta(hours=8)
 
 
 def VerifyPassword(plain_password, hashed_password):
@@ -32,6 +32,7 @@ class M_Users(UserBase):
   avatar = Column(String)
   banner = Column(String)
   email = Column(String)
+  invitation_code = Column(String, index=True)  # 注册时使用的邀请码
   
   # 关联邀请码
   invitation_codes = relationship("M_InvitationCodes", back_populates="user")
@@ -64,6 +65,7 @@ class UserOut(BaseModel):
   email: str | None = None
   banner: str | None = None
   avatar: str | None = None
+  invitation_code: str | None = None
 
   class Config:
     from_attributes = True
@@ -95,11 +97,11 @@ def GetUsers(db: Session, id=None, username=None, nickname=None, role=None, emai
   users = db.query(M_Users).filter(*conditions).all()
   return users
 
-def RegisterUser(db: Session, username:str, password:str, nickname:str, role:str, email:str=None, avatar:str=None):
+def RegisterUser(db: Session, username:str, password:str, nickname:str, role:str, email:str=None, avatar:str=None, invitation_code:str=None):
   # 计算密码哈希
   password = ConvertHash(password)
   
-  new_user = M_Users(username = username, password=password, nickname=nickname, role=role, email=email, avatar=avatar)
+  new_user = M_Users(username = username, password=password, nickname=nickname, role=role, email=email, avatar=avatar, invitation_code=invitation_code)
   db.add(new_user)
   db.commit()
   db.refresh(new_user)

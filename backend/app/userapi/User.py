@@ -76,15 +76,18 @@ async def get_users(
 @router.post(
     "",
     response_model=CommonOut[Db.UserOut],
-    responses=R400_USER_ALREADY_EXIST,
+    responses={
+        **R400_USER_ALREADY_EXIST,
+        400: {"description": "用户名已存在"},
+    },
 )
 async def register_user(
     body: Annotated[UserItem, Body()],
     db: Db.Session = Depends(Db.GetDb("RegisterUser")),
 ):
     """
-    # 注册新用户 (用户名唯一)
-    规则不符返回422, 用户重复返回400, 注册成功返回当前用户信息
+    # 注册新用户 (用户名唯一，需要邀请码)
+    规则不符返回422, 用户重复返回400, 邀请码无效返回400, 注册成功返回当前用户信息
     
     ## 后端验证规则
     - 用户名 长度3-20 只能包含字母、数字、下划线，且不能以下划线开头或结尾
@@ -92,8 +95,49 @@ async def register_user(
     - 用户昵称 长度1-50
     - 用户权限 必须是["root", "user", "readonly"]其中的一个
     - 图片地址必须以 http:// 或 https:// 开头
+    - 邀请码 长度9-11，必须有效且未过期
     
     """
+    # 1. 验证邀请码
+    try:
+        invitation_code = Db.GetInvitationCode(db, body.invitation_code)
+        
+        # 邀请码不存在
+        if not invitation_code:
+            await async_log(logger, "warning", f"注册失败: 邀请码不存在 - {body.invitation_code}")
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content=CommonOut(
+                    code=status.HTTP_400_BAD_REQUEST, 
+                    msg="邀请码不存在或已失效", 
+                    data=None
+                ).model_dump(),
+            )
+        
+        # 邀请码已失效（已使用或已过期）
+        if invitation_code.is_used or invitation_code.expire_at < Db.get_local_time():
+            await async_log(logger, "warning", f"注册失败: 邀请码已失效 - {body.invitation_code}")
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content=CommonOut(
+                    code=status.HTTP_400_BAD_REQUEST, 
+                    msg="邀请码不存在或已失效", 
+                    data=None
+                ).model_dump(),
+            )
+        
+    except Exception as e:
+        await async_log(logger, "error", f"注册失败: 邀请码验证异常 - {str(e)}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content=CommonOut(
+                code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+                msg="服务器内部错误", 
+                data=None
+            ).model_dump(),
+        )
+    
+    # 2. 检查用户是否已存在
     if len(Db.GetUsers(db, username=body.username)):
         # 用户已存在
         return JSONResponse(
@@ -103,8 +147,38 @@ async def register_user(
             ).model_dump(),
         )
 
-    # 直接注册
-    return CommonOut(data=Db.RegisterUser(db, **body.model_dump(exclude_unset=True)))
+    # 3. 使用邀请码并注册用户
+    try:
+        # 使用邀请码
+        use_success = Db.UseInvitationCode(db, body.invitation_code)
+        if not use_success:
+            await async_log(logger, "warning", f"注册失败: 邀请码使用失败 - {body.invitation_code}")
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content=CommonOut(
+                    code=status.HTTP_400_BAD_REQUEST, 
+                    msg="邀请码不存在或已失效", 
+                    data=None
+                ).model_dump(),
+            )
+        
+        # 注册用户（包含邀请码字段）
+        user_data = body.model_dump(exclude_unset=True)
+        new_user = Db.RegisterUser(db, **user_data)
+        
+        await async_log(logger, "info", f"注册成功: 用户 {body.username} 使用邀请码 {body.invitation_code}")
+        return CommonOut(data=new_user)
+        
+    except Exception as e:
+        await async_log(logger, "error", f"注册失败: {str(e)}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content=CommonOut(
+                code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+                msg="服务器内部错误", 
+                data=None
+            ).model_dump(),
+        )
 
 
 @router.put(

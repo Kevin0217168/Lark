@@ -43,6 +43,10 @@
           <el-input v-model="form.role" readonly></el-input>
         </el-form-item>
 
+        <el-form-item v-if="mode === 'register'" label="邀请码" prop="invitationCode">
+          <el-input v-model="form.invitationCode" placeholder="请输入邀请码"></el-input>
+        </el-form-item>
+
         <el-form-item v-if="mode === 'register'" label="头像" prop="avatar">
           <el-input v-model="form.avatar" placeholder="请输入头像URL（可选）"></el-input>
         </el-form-item>
@@ -104,6 +108,15 @@
               v-model="form.nickname" 
               placeholder="请输入昵称"
               prefix-icon="UserFilled"
+              size="large"
+            />
+          </el-form-item>
+
+          <el-form-item v-if="mode === 'register'" prop="invitationCode">
+            <el-input 
+              v-model="form.invitationCode" 
+              placeholder="请输入邀请码"
+              prefix-icon="Key"
               size="large"
             />
           </el-form-item>
@@ -218,6 +231,7 @@ const loginForm = ref({
   confirmPassword: "",
   nickname: "",
   role: "user",
+  invitationCode: "",
   avatar: "",
 });
 
@@ -228,6 +242,7 @@ const registerForm = ref({
   confirmPassword: "",
   nickname: "",
   role: "user",
+  invitationCode: "",
   avatar: "",
 });
 
@@ -281,6 +296,10 @@ const registerRules = {
   ],
   role: [
     { required: true, message: '请选择角色', trigger: 'change' }
+  ],
+  invitationCode: [
+    { required: true, message: '请输入邀请码', trigger: 'blur' },
+    { min: 9, max: 11, message: '邀请码长度必须为9-11个字符', trigger: 'blur' }
   ],
   avatar: [
     { max: 255, message: '头像URL长度不能超过255个字符', trigger: 'blur' }
@@ -460,15 +479,27 @@ const handleRegister = async () => {
       nickname: registerForm.value.nickname,
       role: registerForm.value.role,
       avatar: registerForm.value.avatar,
+      invitation_code: registerForm.value.invitationCode,
     });
     
     ElMessage.success("注册成功，请登录");
     router.push('/Login');
-  } catch (error) {
+  } catch (error: any) {
     console.error('注册错误:', error);
-    const errorMessage = (error as Error).message;
+    const errorMessage = error.message;
     
     if (errorMessage === '表单验证失败') {
+    } else if (error.response) {
+      const status = error.response.status;
+      const responseData = error.response.data;
+      
+      if (status === 400) {
+        ElMessage.error(responseData?.msg || '邀请码不存在或已失效');
+      } else if (status === 500) {
+        ElMessage.error('服务器内部错误，请稍后重试');
+      } else {
+        ElMessage.error(responseData?.msg || errorMessage || '注册失败，请稍后重试');
+      }
     } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
       ElMessage.error('网络连接失败，请检查网络设置');
     } else {

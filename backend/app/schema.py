@@ -64,6 +64,13 @@ class UserItem(BaseModel):
         examples=[""],
         default=None,
     )
+    invitation_code: str = Field(
+        title="邀请码",
+        description="注册邀请码",
+        examples=["ABC123"],
+        min_length=9,
+        max_length=11,
+    )
 
     @field_validator("password")
     @classmethod

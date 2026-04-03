@@ -6,7 +6,7 @@ from schema import CommonOut
 import Db
 import Security
 from Logset import async_log, logger
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 import secrets
 import string
 
@@ -16,9 +16,8 @@ router = APIRouter(prefix="/invitation-codes", tags=["Invitation Codes"])
 rate_limit_store: Dict[str, Dict[str, any]] = {}
 RATE_LIMIT_PER_MINUTE = 5  # 每分钟最多5次请求
 
-# 获取本地时间（UTC+8）
-def get_local_time():
-    return datetime.now(timezone(timedelta(hours=8)))
+# 获取本地时间（UTC+8），使用Db模块的函数
+from datacontrol.UserDb import get_local_time
 
 
 def generate_invitation_code(length: int = 10) -> str:
