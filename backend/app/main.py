@@ -10,6 +10,7 @@ from stream import Stream
 from userapi import User, Login
 from deviceapi import Device
 from sensorapi import SensorData
+from invitationapi import router as invitation_router
 
 import os
 from Logset import async_log, logger, request_logger, log_executor
@@ -54,6 +55,7 @@ app.include_router(User.router)
 app.include_router(Login.router)
 app.include_router(Device.router)
 app.include_router(SensorData.router)
+app.include_router(invitation_router)
 
 # 挂载静态文件
 from fastapi.staticfiles import StaticFiles
