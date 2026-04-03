@@ -1,6 +1,6 @@
 #include "Wifista.h"
 
-static const char* TAG = "Wifista";
+static const char *TAG = "wifi";
 
 bool Wifi_isConnected = false;
 
@@ -9,11 +9,11 @@ void Wifista_event_handler(void* event_handler_arg, esp_event_base_t event_base,
         if (event_id == WIFI_EVENT_STA_START){
             esp_wifi_connect();
         }else if (event_id == WIFI_EVENT_STA_CONNECTED){
-            ESP_LOGI(TAG, "WIFI connected!");
+            ESP_LOGI(TAG, "WiFi 已连接");
             Wifi_isConnected = true;
 
         }else if (event_id == WIFI_EVENT_STA_DISCONNECTED){
-            ESP_LOGE(TAG, "WIFI disconnected!");
+            ESP_LOGW(TAG, "WiFi 已断开, 3s 后重连");
             Wifi_isConnected = false;
 
             // 试图重连
@@ -24,7 +24,7 @@ void Wifista_event_handler(void* event_handler_arg, esp_event_base_t event_base,
     }else if (event_base == IP_EVENT)
     {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*)event_data;
-        ESP_LOGI(TAG, "get IP address: %d.%d.%d.%d",
+        ESP_LOGI(TAG, "获取 IP: %d.%d.%d.%d",
             esp_ip4_addr1_16(&event->ip_info.ip),
             esp_ip4_addr2_16(&event->ip_info.ip),
             esp_ip4_addr3_16(&event->ip_info.ip),

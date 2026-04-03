@@ -1,17 +1,26 @@
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_app_format.h"
+#include "esp_ota_ops.h"
+#include "esp_partition.h"
 #include "nvs_flash.h"
+
 #include "Wifista.h"
 #include "Camera.h"
 #include "main.h"
 #include "sht4x.h"
+#include "device_secret.h"
+#include "i2c_recovery.h"
+#include "tasks.h"
+#include "remote_log.h"
+
+// OTA 诊断超时配置
+#define WIFI_CONNECT_TIMEOUT_MS     30000   // WiFi 连接超时 30 秒
+#define WS_CONNECT_TIMEOUT_MS       30000   // WebSocket 连接超时 30 秒
 
 static const char *TAG = "main";
-// 设备2
-static const char *secret = "2d3173bfc1f64da0894a3257e1636d72";
-// 设备1
-// static const char *secret = "b1f9562544a348c98c57a66b32a92d32";
+
 extern bool Wifi_isConnected;
 
 Device_t device = {
@@ -21,69 +30,78 @@ Device_t device = {
     .status = DEVICE_OFFLINE,
 };
 
-void register_handler(RequestContext_t *ctx)
-{
-    if (esp_http_client_get_status_code(*(ctx->client)) != 200)
-    {
-        ESP_LOGE(TAG, "注册失败, 状态码: %d", esp_http_client_get_status_code(*(ctx->client)));
-        return;
-    }
-
-    if (ctx->is_json && ctx->json != NULL)
-    {
-        // 根据实际返回字段名修改
-        cJSON *id_item = cJSON_GetObjectItemCaseSensitive(ctx->json, "id");
-        cJSON *name_item = cJSON_GetObjectItemCaseSensitive(ctx->json, "name");
-        cJSON *status_item = cJSON_GetObjectItemCaseSensitive(ctx->json, "status");
-
-        if (cJSON_IsString(id_item) && cJSON_IsString(name_item) && cJSON_IsString(status_item))
-        {
-            // 注意：需要拷贝字符串，因为 ctx->json 即将被释放
-            strncpy(device.uuid, id_item->valuestring, sizeof(device.uuid) - 1);
-            device.uuid[sizeof(device.uuid) - 1] = '\0';
-            strncpy(device.name, name_item->valuestring, sizeof(device.name) - 1);
-            device.name[sizeof(device.name) - 1] = '\0';
-            device.isOnline = (strcasecmp(status_item->valuestring, "online") == 0);
-
-            ESP_LOGI(TAG, "注册成功, 与服务器同步数据:\n名称: %s\nID: %s\n状态: %s",
-                     device.name, device.uuid,
-                     device.isOnline ? "online" : "offline");
-        }
-        else
-        {
-            ESP_LOGE(TAG, "返回的 JSON 缺少必要字段或类型错误");
-        }
-    }
-    else
-    {
-        ESP_LOGW(TAG, "响应不是有效的 JSON 对象");
-    }
-}
-
-void PhotoTransmit(camera_fb_t *fb)
-{
-    WebsocketSendbytes(fb->buf, fb->len);
-}
-
-void camera_transmit_task();
-void sensor_data_transmit_task();
-
-extern void i2c_scan(void);
-
 void app_main(void)
 {
-    printf("Hello ESP-IDF!\n");
-    nvs_flash_init();
-    WifistaInit("关闭", "kaiwen0818");
-    // 等待wifi连接
-    while (!Wifi_isConnected)
-    {
-        vTaskDelay(500 / portTICK_PERIOD_MS);
+    // ---------------------WIFI连接配置-------------------------
+    ESP_LOGI(TAG, "系统启动");
+    esp_err_t nvs_ret = nvs_flash_init();
+    if (nvs_ret == ESP_ERR_NVS_NO_FREE_PAGES || nvs_ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ESP_ERROR_CHECK(nvs_flash_init());
     }
 
+    // 优先从 NVS 读取 secret
+    char nvs_secret[SECRET_MAX_LEN] = {0};
+    if (load_secret_from_nvs(nvs_secret, sizeof(nvs_secret)) == ESP_OK && nvs_secret[0] != '\0') {
+        strncpy(secret, nvs_secret, sizeof(secret) - 1);
+        secret[sizeof(secret) - 1] = '\0';
+        ESP_LOGI(TAG, "NVS 密钥已加载 (..%s)", secret + (strlen(secret) > 4 ? strlen(secret) - 4 : 0));
+    } else {
+        // 第一次启动或未写入过，写入默认密钥
+        save_secret_to_nvs(secret);
+        ESP_LOGI(TAG, "默认密钥已写入 NVS");
+    }
+
+    // ----------------------远程日志 阶段一：安装钩子--------------------------
+    // 在 WiFi 之前安装 vprintf 钩子，WiFi/SNTP/OTA 日志全部缓存到 16KB 环形缓冲区
+    remote_log_early_init();
+
+    // ----------------------OTA 状态早期检测--------------------------
+    // 在 WiFi 之前检测 OTA 状态，用于后续网络连接超时时自动回滚
+    const esp_partition_t *running = esp_ota_get_running_partition();
+    esp_ota_img_states_t ota_state = ESP_OTA_IMG_UNDEFINED;
+    bool ota_state_valid = (esp_ota_get_state_partition(running, &ota_state) == ESP_OK);
+    bool ota_pending = ota_state_valid && (ota_state == ESP_OTA_IMG_PENDING_VERIFY);
+    if (ota_pending) {
+        ESP_LOGW(TAG, "检测到 OTA 待验证状态，将进行完整诊断（硬件 + 网络）");
+    }
+
+    WifistaInit("关闭", "kaiwen0818");
+    // 等待wifi连接（OTA 待验证时设置超时，防止新固件 WiFi 故障导致死锁）
+    {
+        int wifi_wait_ticks = 0;
+        const int wifi_timeout_ticks = WIFI_CONNECT_TIMEOUT_MS / 500;
+        while (!Wifi_isConnected)
+        {
+            vTaskDelay(500 / portTICK_PERIOD_MS);
+            wifi_wait_ticks++;
+            if (ota_pending && wifi_wait_ticks >= wifi_timeout_ticks) {
+                ESP_LOGE(TAG, "WiFi 连接超时 (%d ms), OTA 固件回滚...", WIFI_CONNECT_TIMEOUT_MS);
+                esp_ota_mark_app_invalid_rollback_and_reboot();
+            }
+        }
+    }
+    // SNTP获取时间
     obtain_time();
 
-    // 创建任务执行 HTTPS 请求
+    // ---------------------版本更新检测--------------------------
+    const esp_app_desc_t* desc;
+    desc = esp_app_get_description();
+    ESP_LOGI(TAG, "固件版本: %s", desc->version);
+
+    // OTA 硬件诊断（仅在 OTA 待验证时执行，网络验证推迟到 WS 连接后）
+    if (ota_pending) {
+        ESP_LOGI(TAG, "新版本固件诊断中...");
+        if (!diagnostic()) {
+            ESP_LOGE(TAG, "硬件诊断失败! 回滚到上一个版本...");
+            esp_ota_mark_app_invalid_rollback_and_reboot();
+        }
+        ESP_LOGI(TAG, "硬件诊断通过, 继续验证网络...");
+    } else if (!ota_state_valid) {
+        ESP_LOGW(TAG, "无法获取 OTA 状态 (rollback 可能未启用), 跳过诊断");
+    }
+
+    // ---------------------连接服务器----------------------------
     WifiSecurityClientInit();
 
     // 通过id开启ws连接/stream/viewer/ws
@@ -91,110 +109,100 @@ void app_main(void)
     snprintf(path_data, sizeof(path_data), "/api/stream/device/ws?secret=%s", secret);
     // 注册回调函数
     Websocket_event_handler_register(NULL, ws_text_handler);
-
     WebsocketStart("wss://lark.mintlab.top", path_data, 443);
-    // WebsocketStart("ws://192.168.1.199", path_data, 8080);
+    // WebsocketStart("ws://192.168.1.200", path_data, 8080);
 
-    // 等待ws连接成功
-    while (!WebsocketIsConnected())
+    // 等待ws连接成功（OTA 待验证时设置超时，确保新固件能正常联网）
     {
-        vTaskDelay(500 / portTICK_PERIOD_MS);
+        int ws_wait_ticks = 0;
+        const int ws_timeout_ticks = WS_CONNECT_TIMEOUT_MS / 500;
+        while (!WebsocketIsConnected())
+        {
+            vTaskDelay(500 / portTICK_PERIOD_MS);
+            ws_wait_ticks++;
+            if (ota_pending && ws_wait_ticks >= ws_timeout_ticks) {
+                ESP_LOGE(TAG, "WebSocket 连接超时 (%d ms), OTA 固件回滚...", WS_CONNECT_TIMEOUT_MS);
+                esp_ota_mark_app_invalid_rollback_and_reboot();
+            }
+        }
     }
 
-    // i2c_scan();
+    // ----------------------OTA 验证完成：所有诊断通过--------------------------
+    if (ota_pending) {
+        ESP_LOGI(TAG, "OTA 诊断全部通过, 确认新固件有效");
+        esp_ota_mark_app_valid_cancel_rollback();
+    }
 
-    // /* Initialize the i2c bus for the current platform */
-    // sensirion_i2c_init();
+    // ----------------------远程日志 阶段二：启动 POST 上传--------------------------
+    // 网络已就绪，启动 flush 任务，通过独立 HTTP POST 批量上传日志
+    remote_log_start("https://lark.mintlab.top", "/api/logs", 443, secret);
+    // remote_log_start("http://192.168.1.200", "/api/logs", 8080, secret);
 
-    // /* Busy loop for initialization, because the main loop does not work without
-    //  * a sensor.
-    //  */
-    // while (sht4x_probe() != STATUS_OK)
-    // {
-    //     printf("SHT sensor probing failed\n");
-    //     vTaskDelay(1000 / portTICK_PERIOD_MS);
-    // }
-    // printf("SHT sensor probing successful\n");
+    // ----------------------初始化传感器-----------------------------
+    // 如果不是第一次 OTA 运行（或者已经诊断过），则在这里正常初始化
+    // 第一次运行已经在 diagnostic() 里面初始化过了
+    bool need_sensor_init = !ota_pending;
+    if (need_sensor_init) {
+        // I2C 总线恢复：WDT/软重启后 SHT4x 可能卡住 SDA，需先恢复总线
+        i2c_bus_recovery(I2C_SDA_PIN, I2C_SCL_PIN);
 
-    CameraInit();
+        sensirion_i2c_init();
+        int sht_retry = 0;
+        const int sht_max_retry = 10;
+        while (sht4x_probe() != STATUS_OK && sht_retry < sht_max_retry)
+        {
+            sht_retry++;
+            ESP_LOGW(TAG, "SHT sensor probing failed, retry %d/%d", sht_retry, sht_max_retry);
+            // 每次失败后再尝试一次总线恢复
+            sensirion_i2c_release();
+            i2c_bus_recovery(I2C_SDA_PIN, I2C_SCL_PIN);
+            sensirion_i2c_init();
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+        }
+        if (sht_retry >= sht_max_retry) {
+            ESP_LOGE(TAG, "SHT sensor 初始化失败，已达到最大重试次数 %d", sht_max_retry);
+        } else {
+            ESP_LOGI(TAG, "SHT sensor probing successful");
+        }
+
+        // 摄像头 SCCB I2C (GPIO 26/27) 总线恢复
+        i2c_bus_recovery(26, 27);
+        CameraInit();
+    }
+    
     sensor_t *s = esp_camera_sensor_get();
-    s->set_framesize(s, FRAMESIZE_SVGA);
-    s->set_vflip(s, 1);
+    if (s != NULL) {
+        s->set_framesize(s, FRAMESIZE_SVGA);
+        s->set_vflip(s, 1);
+    }
 
+    // ----------------------OTA 任务（在传感器/摄像头初始化完成后启动）-----------
+    // 注意：OTA 必须在摄像头初始化之后启动，因为 OTA flash 擦写 与
+    // 摄像头 PSRAM DMA 共享 SPI 总线，同时运行会触发 WDT
+    static uint8_t ota_task_Handle_ParameterToPass;
+    TaskHandle_t ota_task_Handle = NULL;
+    xTaskCreate(ota_task, "ota_task", 8192, &ota_task_Handle_ParameterToPass, 1, &ota_task_Handle);
+    configASSERT(ota_task_Handle);
+
+    // -------------------------开启任务-------------------------------
+
+    // 开启图像传输任务
+    camera_stream_sem_init();   // 必须在创建任务之前初始化信号量
     static uint8_t ucParameterToPass;
     TaskHandle_t xHandle = NULL;
     xTaskCreate(camera_transmit_task, "camera_transmit_task", 4096, &ucParameterToPass, 1, &xHandle);
     configASSERT(xHandle);
 
-    // static uint8_t sensor_data_transmit_task_Handle_ParameterToPass;
-    // TaskHandle_t sensor_data_transmit_task_Handle = NULL;
-    // xTaskCreate(sensor_data_transmit_task, "sensor_data_transmit_task", 4096, &sensor_data_transmit_task_Handle_ParameterToPass, 1, &sensor_data_transmit_task_Handle);
-    // configASSERT(xHandle);
-}
+    // 开启传感器传输任务（TLS HTTPS POST 需要至少 8192 字节栈空间）
+    static uint8_t sensor_data_transmit_task_Handle_ParameterToPass;
+    TaskHandle_t sensor_data_transmit_task_Handle = NULL;
+    xTaskCreate(sensor_data_transmit_task, "sensor_data_transmit_task", 8192, &sensor_data_transmit_task_Handle_ParameterToPass, 1, &sensor_data_transmit_task_Handle);
+    configASSERT(sensor_data_transmit_task_Handle);
 
-void sensor_data_transmit_task()
-{
-    time_t now = 0;
-    struct tm timeinfo = {0};
-    while (1)
-    {
-        int32_t temperature, humidity;
-        int8_t ret = sht4x_measure_blocking_read(&temperature, &humidity);
-        if (ret == STATUS_OK)
-        {
-            float temp_c = temperature / 1000.0f;
-            float hum_pct = humidity / 1000.0f;
-            ESP_LOGI(TAG, "measured temperature: %0.2f degreeCelsius, "
-                          "measured humidity: %0.2f percentRH\n",
-                     temp_c, hum_pct);
-
-            time(&now);
-            setenv("TZ", "CST-8", 1);
-            localtime_r(&now, &timeinfo);
-            ESP_LOGI(TAG, "当前时间: %04d-%02d-%02d %02d:%02d:%02d+08:00",
-                     timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
-                     timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
-
-            // 构建 ISO 8601 格式时间戳（可选，不传则后端使用当前时间）
-            char timestamp_str[32];
-            strftime(timestamp_str, sizeof(timestamp_str), "%Y-%m-%dT%H:%M:%S+08:00", &timeinfo);
-
-            char post_data[256];
-            snprintf(post_data, sizeof(post_data),
-                     "{\"secret\":\"%s\",\"temperature\":%.2f,\"humidity\":%.2f,\"timestamp\":\"%s\"}",
-                     secret, temp_c, hum_pct, timestamp_str);
-
-            // 发送 POST 请求到后端
-            // int ret_code = WifiSecurityRequest("http://192.168.1.199", "/sensors", 8080,
-            //                                    WS_CLINENT_METHOD_POST, post_data, NULL);
-            int ret_code = WifiSecurityRequest("https://lark.mintlab.top", "/api/sensors", 443,
-                                               WS_CLINENT_METHOD_POST, post_data, NULL);
-            if (ret_code != ESP_OK)
-            {
-                ESP_LOGE(TAG, "Failed to send sensor data, error=%d", ret_code);
-            }
-        }
-        else
-        {
-            ESP_LOGE(TAG, "error reading measurement\n");
-        }
-
-        vTaskDelay(60000 / portTICK_PERIOD_MS); /* sleep 10s */
-    }
-}
-
-void camera_transmit_task()
-{
-    while (1)
-    {
-        if (device.status == DEVICE_ON_STREAM)
-        {
-            CameraTakePhoto(PhotoTransmit);
-        }
-        else
-        {
-            ESP_LOGI("camera_transmit_task", "待机模式");
-            vTaskDelay(3000 / portTICK_PERIOD_MS);
-        }
-    }
+    // 开启健康监控任务（检测 WiFi/WS 长时间断连自动重启）
+    // 注意：log_system_status() 内有大量 snprintf 格式化，栈需求较大
+    static uint8_t health_monitor_param;
+    TaskHandle_t health_monitor_handle = NULL;
+    xTaskCreate(health_monitor_task, "health_monitor", 4096, &health_monitor_param, 1, &health_monitor_handle);
+    configASSERT(health_monitor_handle);
 }

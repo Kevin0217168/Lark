@@ -58,6 +58,8 @@ extern "C" {
     2500 /* 2.5ms "low repeatability"       \
           */
 
+void i2c_scan(void);
+
 /**
  * Detects if a sensor is connected by reading out the ID register.
  * If the sensor does not answer or if the answer is not the expected value,

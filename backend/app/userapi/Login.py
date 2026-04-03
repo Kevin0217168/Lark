@@ -15,6 +15,7 @@ router = APIRouter(tags=["Login"])
 
 @router.post(
     "/login",
+    summary="用户登录",
     description="用户登录, 记录cookie, 并发放短token",
     responses={**R200_LOGIN_SUCCESS, **R400_LOGIN_INCORRECT},
 )
@@ -57,7 +58,7 @@ def login(
 
 
 @router.post(
-    "/refresh", description="通过cookie验证登录状态, 刷新token", responses=R200_LOGIN_SUCCESS
+    "/refresh", summary="刷新Token", description="通过cookie验证登录状态, 刷新token", responses=R200_LOGIN_SUCCESS
 )
 async def RefreshToken(
     op: Annotated[Db.M_Users, Depends(Security.GetCurrentUserByCookie)],
@@ -69,6 +70,7 @@ async def RefreshToken(
 @router.post(
     "/logout",
     response_model=CommonOut[Db.UserOut],
+    summary="用户退出登录",
 )
 async def logout_user( 
     response: Response,
