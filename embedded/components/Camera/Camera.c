@@ -21,7 +21,7 @@ bool isStreaming = false;
 
 #endif
 
-static const char *TAG = "Camera";
+static const char *TAG = "camera";
 
 void CameraInit()
 {
@@ -59,14 +59,14 @@ void CameraInit()
         size_t psram_size = esp_psram_get_size();
         if (esp_psram_is_initialized() && psram_size > 0)
         {
-            ESP_LOGI(TAG, "PSRAM 已初始化，大小为 %zu 字节\n", psram_size);
+            ESP_LOGI(TAG, "PSRAM 已初始化, 大小: %zu bytes", psram_size);
             config.jpeg_quality = 10;
             config.fb_count = 2;
             config.grab_mode = CAMERA_GRAB_LATEST;
         }
         else
         {
-            ESP_LOGW(TAG, "PSRAM 不可用, 缓冲区将设置到DRAM");
+            ESP_LOGW(TAG, "PSRAM 不可用, 缓冲区将使用 DRAM");
             // Limit the frame size when PSRAM is not available
             config.frame_size = FRAMESIZE_SVGA;
             config.fb_location = CAMERA_FB_IN_DRAM;
@@ -77,7 +77,7 @@ void CameraInit()
     esp_err_t err = esp_camera_init(&config);
     if (err != ESP_OK)
     {
-        ESP_LOGE(TAG, "Camera init failed with error 0x%x", err);
+        ESP_LOGE(TAG, "摄像头初始化失败: 0x%x", err);
         return;
     }
 
@@ -85,7 +85,7 @@ void CameraInit()
     sensor_t *s = esp_camera_sensor_get();
     if (s == NULL)
     {
-        ESP_LOGE(TAG, "Failed to get sensor");
+        ESP_LOGE(TAG, "获取传感器失败");
         return;
     }
 
@@ -131,7 +131,7 @@ void CameraTakePhoto(void(PhotoHandler)(camera_fb_t *))
 
     if (fb == NULL)
     {
-        ESP_LOGE(TAG, "Failed to get frame");
+        ESP_LOGE(TAG, "获取帧失败");
         return;
     }
 
@@ -144,5 +144,5 @@ void CameraTakePhoto(void(PhotoHandler)(camera_fb_t *))
 
     int64_t end_us = esp_timer_get_time();
     float time = (end_us - start_us) / 1000;
-    ESP_LOGI(TAG, "拍摄照片处理用时: %.2f ms (%.2f FPS)", time, 1000 / time);
+    ESP_LOGI(TAG, "拍摄处理: %.2f ms (%.1f FPS)", time, 1000 / time);
 }

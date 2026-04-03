@@ -1,3 +1,7 @@
 .venv/
 __pycache__/
 log/
+firmwares/
+database/*.db
+database/*.db-shm
+database/*.db-wal

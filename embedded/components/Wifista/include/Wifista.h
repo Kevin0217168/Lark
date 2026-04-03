@@ -39,6 +39,8 @@ typedef struct
 
 void WifistaInit();
 void obtain_time(void);
+bool is_time_synced(void);
+bool is_time_valid(void);
 void WifiSecurityClientInit();
 esp_err_t WifiSecurityRequest(const char *host, const char *path, uint16_t port, WifiSecurityMethod_t method,
      char *post_data, void (ResponseUserHandler)(RequestContext_t*));
@@ -50,5 +52,7 @@ void ws_text_handler(void *handler_args, int len, const char *data_ptr);
 bool WebsocketIsConnected();
 bool WebsocketSendbytes(uint8_t *data, int len);
 bool WebsocketSendText(uint8_t *data, int len);
+
+void ota_task(void *pvParameter);
 
 #endif

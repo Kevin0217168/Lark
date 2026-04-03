@@ -14,6 +14,7 @@ class M_Devices(DeviceBase):
     )  # index = True 创建索引, 方便查询
     secret = Column(String, unique=True, index=True)  # 设备密钥
     name = Column(String)  # 设备名称
+    device_type = Column(String)  # 设备类型
     area = Column(String)  # 设备所在区域
     number = Column(Integer)  # 设备所在区域的编号
     isOnline = Column(Boolean)  # 是否连接
@@ -23,6 +24,7 @@ class M_Devices(DeviceBase):
 class DeviceOut(BaseModel):
     id: int
     name: str
+    device_type: Optional[str]
     area: str
     number: int
     isOnline: bool
@@ -37,6 +39,7 @@ def GetDevices(
     id: Optional[int] = None,
     secret: Optional[str] = None,
     name: Optional[str] = None,
+    device_type: Optional[str] = None,
     area: Optional[str] = None,
     number: Optional[int] = None,
     isOnline: Optional[bool] = None,
@@ -53,6 +56,8 @@ def GetDevices(
         conditions.append(M_Devices.secret == secret)
     if name is not None:
         conditions.append(M_Devices.name == name)
+    if device_type is not None:
+        conditions.append(M_Devices.device_type == device_type)
     if area is not None:
         conditions.append(M_Devices.area == area)
     if number is not None:
@@ -72,6 +77,7 @@ def RegisterDevice(
     name: str,
     area: str,
     number: int,
+    device_type: Optional[str] = None,
     isOnline: bool = False,
     status: str = "none",
 ) -> M_Devices:
@@ -82,6 +88,7 @@ def RegisterDevice(
     new_device = M_Devices(
         secret=secret,
         name=name,
+        device_type=device_type,
         area=area,
         number=number,
         isOnline=isOnline,
@@ -97,6 +104,7 @@ def UpdateDevice(
     db: Session,
     id: int,
     name: Optional[str] = None,
+    device_type: Optional[str] = None,
     area: Optional[str] = None,
     number: Optional[int] = None,
     isOnline: Optional[bool] = None,
@@ -117,6 +125,10 @@ def UpdateDevice(
     # 名称：非空字符串才更新
     if name is not None:
         device.name = name if name != "" else None
+
+    # 设备类型：非空字符串才更新
+    if device_type is not None:
+        device.device_type = device_type if device_type != "" else None
 
     # 区域：非空字符串才更新
     if area is not None:
