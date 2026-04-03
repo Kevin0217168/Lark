@@ -57,7 +57,6 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, computed } from "vue";
-import { el } from "element-plus/es/locale/index.mjs";
 import Header from "./components/Header.vue";
 import Sider from "./components/Sider.vue";
 import MobilePage from "./pages/MobilePage.vue";

@@ -114,8 +114,8 @@ async def register_user(
                 ).model_dump(),
             )
         
-        # 邀请码已失效（已使用或已过期）
-        if invitation_code.is_used or invitation_code.expire_at < Db.get_local_time():
+        # 邀请码已失效（剩余次数为0或已过期）
+        if invitation_code.remaining_uses <= 0 or invitation_code.expire_at < Db.get_local_time():
             await async_log(logger, "warning", f"注册失败: 邀请码已失效 - {body.invitation_code}")
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
