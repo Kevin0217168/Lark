@@ -17,6 +17,7 @@
   <!-- 桌面端界面 -->
   <div v-else>
     <el-image
+      v-if="!isAuthPage"
       class="banner"
       src="banner.jpg"
       fit="cover"
@@ -186,6 +187,8 @@ footer {
   flex-direction: column;
   padding: 40px 20px 20px;
   background: transparent;
+  position: relative;
+  z-index: 100;
 }
 
 .footer-content {
@@ -193,6 +196,10 @@ footer {
   flex-direction: column;
   align-items: center;
   gap: 8px;
+  background: rgba(245, 247, 250, 0.8);
+  padding: 20px 30px;
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
 }
 
 .copyright {

@@ -3,6 +3,19 @@ import router from '@/router';
 
 const BASE_URL = '';
 
+// 自定义API错误类
+class ApiError extends Error {
+  status: number;
+  data: any;
+  
+  constructor(message: string, status: number, data: any) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.data = data;
+  }
+}
+
 // 请求拦截器
 const requestInterceptor = (config: RequestInit) => {
   const token = localStorage.getItem('accessToken');
@@ -28,12 +41,13 @@ const responseInterceptor = async (response: Response) => {
     window.dispatchEvent(new Event('loginStatusChanged'));
     ElMessage.error('登录已过期，请重新登录');
     router.push('/Login');
-    throw new Error('Unauthorized');
+    throw new ApiError('Unauthorized', 401, {});
   }
   
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.detail || error.msg || '请求失败');
+    const message = error.detail || error.msg || '请求失败';
+    throw new ApiError(message, response.status, error);
   }
   
   return response.json();

@@ -371,6 +371,7 @@
         <el-result
           icon="success"
           title="邀请码生成成功"
+          sub-title="请立即保存或复制邀请码，关闭后无法再次查看"
         >
           <template #extra>
             <div class="invitation-code-display">
@@ -428,7 +429,6 @@
 
       <template #footer>
         <span class="dialog-footer">
-          <el-button @click="closeInvitationCodeDialog">取消</el-button>
           <el-button v-if="!generatedInvitationCode" type="primary" @click="handleGenerateInvitationCode" :loading="generating">生成</el-button>
           <el-button v-else type="primary" @click="closeInvitationCodeDialog">关闭</el-button>
         </span>
@@ -795,11 +795,11 @@ const handleAddUser = async () => {
     }
   } catch (err: any) {
     const errorMessage = err.message;
-    const status = err.response?.status;
+    const status = err.status;
     
     if (errorMessage === '表单验证失败') {
     } else if (status === 400) {
-      ElMessage.error(err.response?.data?.msg || '邀请码不存在或已失效');
+      ElMessage.error(err.data?.msg || '邀请码不存在或已失效');
     } else if (status === 500) {
       ElMessage.error('服务器内部错误，请稍后重试');
     } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {

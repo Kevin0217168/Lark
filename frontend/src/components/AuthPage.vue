@@ -444,19 +444,13 @@ const handleRegister = async () => {
   } catch (error: any) {
     console.error('注册错误:', error);
     const errorMessage = error.message;
+    const status = error.status;
     
     if (errorMessage === '表单验证失败') {
-    } else if (error.response) {
-      const status = error.response.status;
-      const responseData = error.response.data;
-      
-      if (status === 400) {
-        ElMessage.error(responseData?.msg || '邀请码不存在或已失效');
-      } else if (status === 500) {
-        ElMessage.error('服务器内部错误，请稍后重试');
-      } else {
-        ElMessage.error(responseData?.msg || errorMessage || '注册失败，请稍后重试');
-      }
+    } else if (status === 400) {
+      ElMessage.error(error.data?.msg || '邀请码不存在或已失效');
+    } else if (status === 500) {
+      ElMessage.error('服务器内部错误，请稍后重试');
     } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
       ElMessage.error('网络连接失败，请检查网络设置');
     } else {
