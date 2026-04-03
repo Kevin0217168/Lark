@@ -1,15 +1,7 @@
 <template>
   <div class="auth-container" :class="{ 'mobile': isMobile }">
-    <!-- 桌面端：背景轮播 -->
-    <div v-if="!isMobile" class="background-slider">
-      <FadeSlider
-        :item="sliderItems"
-        :autoplay="true"
-        :interval="6000"
-        :backgroundImage="true"
-        :fullscreen="true"
-      />
-    </div>
+    <!-- 桌面端：背景图片 -->
+    <div v-if="!isMobile" class="background-banner"></div>
     
     <!-- 桌面端：使用 el-card 包装 -->
     <el-card v-if="!isMobile" class="auth-card">
@@ -167,49 +159,14 @@ import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
 import { api } from '../utils/api';
-import FadeSlider from './FadeSlider';
-import type { ItemProps } from './FadeSlider/types';
+
 
 const router = useRouter();
 const route = useRoute();
 const formRef = ref();
 const loading = ref(false);
 
-// 桌面端登录/注册页面轮播数据
-const sliderItems: ItemProps[] = [
-  {
-    src: "/5b60764dabc3bf50c2ad7b5ff8eae80b_2607687582866761407.png",
-    title: "孑遗千星——星之环",
-    content: "分野：无存之仪。特性：万有之星、界域共鸣、星影偕行、天渊易位",
-  },
-  {
-    src: "/fa9fc6e9532e4c56c9ad0e5e9548a06a_2258061419554533859.png",
-    title: "超长文本内容和标题截断示例",
-    content: `崩坏三 LV6 粉丝团17
-5小时前 IP属地：上海
 
-不对，你不是爱酱!你是谁!(芽衣·大荒囚天指)
-
-崩坏三 LV6 粉丝团17
-3小时前 IP属地：上海
-
-(创死他克利希娜)爱酱!撑住啊!我这就来救亻
-
-崩坏三 LV6 粉丝团17
-13分钟前 IP属地：上海
-
-薇塔大人ᐠ( ᑒ )ᐟ 薇塔大人ᐠ( ᑒ )ᐟ 2024-08-31
-
-回复
-
-Lorem ipsum dolor sit amet consectetur adipisicing elit. Deserunt et suscipit repellendus nesciunt nulla eum modi velit sit debitis vel. Beatae exercitationem dolorum vel eos aspernatur voluptates ipsum eum explicabo.`,
-  },
-  {
-    src: "/16de7766a642388d21e4c76cacfde801_5165224128247218265.png",
-    title: "孑遗千星——圣遗物",
-    content: "推荐理由：兼具输出和辅助的配装。武器提高角色的输出和辅助能力。星之环激活时，全队角色可以通过圣痕三件套获得大量增益效果，进一步提高队伍整体输出。",
-  },
-];
 
 // 检测是否为移动设备
 const isMobile = ref(window.innerWidth < 768);
@@ -520,14 +477,15 @@ const handleRegister = async () => {
   z-index: 1;
 }
 
-/* 桌面端背景轮播 */
-.background-slider {
+/* 桌面端背景图片 */
+.background-banner {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
   z-index: 0;
+  background: url('/banner.jpg') center/cover no-repeat;
 }
 
 /* 桌面端样式 */

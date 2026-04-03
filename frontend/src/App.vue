@@ -22,7 +22,7 @@
       fit="cover"
     />
     <el-container class="app-container">
-      <el-header v-if="!isAuthPage">
+      <el-header>
         <Header />
       </el-header>
       <Sider v-if="!isAuthPage" @tabChange="handleTabChange" />
