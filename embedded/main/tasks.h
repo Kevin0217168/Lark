@@ -15,17 +15,24 @@
  */
 bool diagnostic(void);
 
-/** 摄像头推流信号量（进入推流模式时释放，唤醒传输任务） */
+/** 摄像头推流信号量（进入推流模式时释放，唤醒采集任务） */
 extern SemaphoreHandle_t camera_stream_sem;
 
 /** OTA 进行中标志，其他 TLS 任务应跳过 HTTP 请求以释放内部 SRAM */
 extern volatile bool ota_in_progress;
 
-/** 初始化摄像头推流信号量，须在创建 camera_transmit_task 之前调用 */
-void camera_stream_sem_init(void);
+/**
+ * @brief 初始化零拷贝帧队列（信号量 + 深度1队列）
+ * @note  须在创建 camera_capture_task / camera_send_task 之前调用
+ *        相机驱动 fb_count=3 提供三缓冲，本模块不再手动分配 PSRAM
+ */
+void camera_pipeline_init(void);
 
-/** 摄像头图像传输任务（信号量驱动） */
-void camera_transmit_task(void *pvParameter);
+/** 摄像头采集任务：fb_get → 放入队列 */
+void camera_capture_task(void *pvParameter);
+
+/** 摄像头发送任务：从队列取帧 → WS 发送 → fb_return */
+void camera_send_task(void *pvParameter);
 
 /** 传感器数据采集与上报任务 */
 void sensor_data_transmit_task(void *pvParameter);

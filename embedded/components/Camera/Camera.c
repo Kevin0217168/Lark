@@ -61,7 +61,7 @@ void CameraInit()
         {
             ESP_LOGI(TAG, "PSRAM 已初始化, 大小: %zu bytes", psram_size);
             config.jpeg_quality = 10;
-            config.fb_count = 2;
+            config.fb_count = 3;   // 三缓冲：采集、就绪、发送各占一个
             config.grab_mode = CAMERA_GRAB_LATEST;
         }
         else
@@ -135,6 +135,8 @@ void CameraTakePhoto(void(PhotoHandler)(camera_fb_t *))
         return;
     }
 
+    size_t frame_len = fb->len;  // 保存长度，fb_return 后不可再访问 fb
+
     if (PhotoHandler != NULL)
     {
         PhotoHandler(fb);
@@ -147,5 +149,5 @@ void CameraTakePhoto(void(PhotoHandler)(camera_fb_t *))
     float send_ms = (t2 - t1) / 1000.0f;
     float total   = (t2 - t0) / 1000.0f;
     ESP_LOGI(TAG, "帧: %uB | 拍=%0.fms 发=%0.fms 总=%0.fms (%.1f FPS)",
-             (unsigned)fb->len, cap_ms, send_ms, total, 1000.0f / total);
+             (unsigned)frame_len, cap_ms, send_ms, total, 1000.0f / total);
 }

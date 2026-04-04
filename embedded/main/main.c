@@ -174,6 +174,7 @@ void app_main(void)
     if (s != NULL) {
         s->set_framesize(s, FRAMESIZE_SVGA);
         s->set_vflip(s, 1);
+        s->set_quality(s, 20);  // 压缩率 20：帧约 8-12KB，匹配 TCP_SND_BUF=32KB，流畅不断连
     }
 
     // ----------------------OTA 任务（在传感器/摄像头初始化完成后启动）-----------
@@ -208,16 +209,21 @@ void app_main(void)
         if (s2 != NULL) {
             s2->set_framesize(s2, FRAMESIZE_SVGA);
             s2->set_vflip(s2, 1);
+            s2->set_quality(s2, 20);
         }
     }
 
-    // 开启图像传输任务
-    // 用户任务栈显式分配到 PSRAM，释放内部 SRAM 给 TLS / DMA 使用
-    camera_stream_sem_init();   // 必须在创建任务之前初始化信号量
-    static uint8_t ucParameterToPass;
-    TaskHandle_t xHandle = NULL;
-    xTaskCreateWithCaps(camera_transmit_task, "camera_transmit", 4096, &ucParameterToPass, 1, &xHandle, MALLOC_CAP_SPIRAM);
-    configASSERT(xHandle);
+    // 开启图像采集+发送流水线（三缓冲区设计）
+    // 任务栈显式分配到 PSRAM，释放内部 SRAM 给 TLS / DMA 使用
+    camera_pipeline_init();     // 初始化三缓冲区 + 信号量
+
+    TaskHandle_t capture_handle = NULL;
+    xTaskCreateWithCaps(camera_capture_task, "cam_capture", 4096, NULL, 2, &capture_handle, MALLOC_CAP_SPIRAM);
+    configASSERT(capture_handle);
+
+    TaskHandle_t send_handle = NULL;
+    xTaskCreateWithCaps(camera_send_task, "cam_send", 4096, NULL, 1, &send_handle, MALLOC_CAP_SPIRAM);
+    configASSERT(send_handle);
 
     // 开启传感器传输任务（TLS HTTPS POST 需要较大栈空间）
     static uint8_t sensor_data_transmit_task_Handle_ParameterToPass;

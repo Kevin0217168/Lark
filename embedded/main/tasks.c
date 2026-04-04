@@ -4,9 +4,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
+#include "freertos/queue.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_heap_caps.h"
+#include "esp_timer.h"
 
 #include "Wifista.h"
 #include "Camera.h"
@@ -32,10 +34,37 @@ SemaphoreHandle_t camera_stream_sem = NULL;
 /* ───── OTA 进行中标志 ───── */
 volatile bool ota_in_progress = false;
 
-void camera_stream_sem_init(void)
+/* ═══════════════════════════════════════════════════════════════
+ * 零拷贝帧队列流水线
+ * ═══════════════════════════════════════════════════════════════
+ *
+ *  capture_task                queue (depth=1)           send_task
+ *  ────────────                ──────────────            ─────────
+ *  esp_camera_fb_get() ──→ xQueueOverwrite(fb*) ──→ xQueuePeek(fb*)
+ *     (camera 驱动在 PSRAM 管理 3 个 fb)                 ├→ WS send
+ *                                                        └→ esp_camera_fb_return()
+ *
+ *  - Camera fb_count=3: 驱动在 PSRAM 预分配 3 块帧缓冲区
+ *  - CAMERA_GRAB_LATEST: fb_get() 总是返回最新帧
+ *  - 队列深度 1 + overwrite: 如果发送慢于采集，队列中旧 fb
+ *    先被归还相机池再覆盖，始终只发送最新帧，无 memcpy
+ * ═══════════════════════════════════════════════════════════════ */
+
+static QueueHandle_t      frame_queue    = NULL;  /* 队列元素 = camera_fb_t* */
+static SemaphoreHandle_t  send_start_sem = NULL;  /* 采集任务唤醒发送任务 */
+
+void camera_pipeline_init(void)
 {
     camera_stream_sem = xSemaphoreCreateBinary();
     configASSERT(camera_stream_sem);
+
+    send_start_sem = xSemaphoreCreateBinary();
+    configASSERT(send_start_sem);
+
+    frame_queue = xQueueCreate(1, sizeof(camera_fb_t *));
+    configASSERT(frame_queue);
+
+    ESP_LOGI(TAG, "零拷贝帧队列已初始化 (camera fb_count=3, queue depth=1)");
 }
 
 /* ───────────────── 诊断 ───────────────── */
@@ -66,53 +95,140 @@ bool diagnostic(void)
     return true;
 }
 
-/* ───────────────── 摄像头图像传输 ───────────────── */
+/* ───────────────── 摄像头图像传输（零拷贝队列流水线） ───────────────── */
 
-/* 推流发送超时（ms）——超过则丢弃当前帧，保持流畅 */
-#define STREAM_SEND_TIMEOUT_MS  2000
+/* 推流发送超时（ms）——超过则丢弃当前帧 */
+#define STREAM_SEND_TIMEOUT_MS      1500
 
-static void PhotoTransmit(camera_fb_t *fb)
+/* 帧间隔下限/上限（ms）——自适应区间 */
+#define STREAM_MIN_INTERVAL_MS      30
+#define STREAM_MAX_INTERVAL_MS      500
+
+/* ─── 采集任务：fb_get → 放入队列（若满则先归还旧帧再覆盖） ─── */
+void camera_capture_task(void *pvParameter)
 {
-    if (!WebsocketSendbytesTimeout(fb->buf, fb->len, pdMS_TO_TICKS(STREAM_SEND_TIMEOUT_MS))) {
-        ESP_LOGW(TAG, "帧发送超时/失败 (size=%u), 丢弃", (unsigned)fb->len);
+    (void)pvParameter;
+
+    while (1)
+    {
+        ESP_LOGI(TAG, "[采集] 待机, 等待推流信号");
+        xSemaphoreTake(camera_stream_sem, portMAX_DELAY);
+        ESP_LOGI(TAG, "[采集] 开始采集");
+
+        /* 唤醒发送任务 */
+        xSemaphoreGive(send_start_sem);
+
+        int captured = 0, replaced = 0;
+
+        while (device.status == DEVICE_ON_STREAM)
+        {
+            camera_fb_t *fb = esp_camera_fb_get();
+            if (fb == NULL) {
+                ESP_LOGE(TAG, "[采集] 获取帧失败");
+                vTaskDelay(pdMS_TO_TICKS(50));
+                continue;
+            }
+
+            /* 尝试立即放入队列 */
+            if (xQueueSend(frame_queue, &fb, 0) != pdTRUE) {
+                /* 队列满：取出旧帧归还相机池，再放入新帧 */
+                camera_fb_t *old_fb = NULL;
+                xQueueReceive(frame_queue, &old_fb, 0);
+                if (old_fb) {
+                    esp_camera_fb_return(old_fb);
+                }
+                xQueueSend(frame_queue, &fb, 0);
+                replaced++;
+            }
+            captured++;
+
+            /* 让出 CPU 一个 tick，避免饿死低优先级任务 */
+            taskYIELD();
+        }
+
+        /* 推流结束：清空队列中残留帧 */
+        camera_fb_t *drain = NULL;
+        while (xQueueReceive(frame_queue, &drain, 0) == pdTRUE) {
+            if (drain) esp_camera_fb_return(drain);
+        }
+
+        ESP_LOGI(TAG, "[采集] 已停止 (采集=%d, 覆盖=%d)", captured, replaced);
     }
 }
 
-/* 推流帧间延迟（ms）——让 WS 任务处理 PING/PONG */
-#define STREAM_INTER_FRAME_DELAY_MS  1
-
-void camera_transmit_task(void *pvParameter)
+/* ─── 发送任务：从队列取帧 → WS 发送 → 归还相机池 ─── */
+void camera_send_task(void *pvParameter)
 {
     (void)pvParameter;
+
     while (1)
     {
-        /* 阻塞等待信号量，直到被唤醒才开始推流，不占用 CPU */
-        ESP_LOGI(TAG, "摄像头待机, 等待推流信号");
-        xSemaphoreTake(camera_stream_sem, portMAX_DELAY);
+        /* ── 阻塞等待推流开始，不占 CPU ── */
+        ESP_LOGI(TAG, "[发送] 待机, 等待推流信号");
+        xSemaphoreTake(send_start_sem, portMAX_DELAY);
+        ESP_LOGI(TAG, "[发送] 开始发送");
 
-        ESP_LOGI(TAG, "开始图像推流");
-        /* 持续推流，直到状态不再是 DEVICE_ON_STREAM */
+        int total_sent  = 0;
+        int total_drop  = 0;
+        int total_skip  = 0;
+        int interval_ms = STREAM_MIN_INTERVAL_MS;
+
+        /* ── 推流循环：核心逻辑 = 发送 → 按耗时算下次间隔 ── */
         while (device.status == DEVICE_ON_STREAM)
         {
-            /* 检查 WebSocket 是否仍在线 */
+            camera_fb_t *fb = NULL;
+
+            /* 自适应节拍等待 */
+            vTaskDelay(pdMS_TO_TICKS(interval_ms));
+
+            if (xQueueReceive(frame_queue, &fb, pdMS_TO_TICKS(200)) != pdTRUE || fb == NULL)
+                continue;
+
             if (!WebsocketIsConnected()) {
-                ESP_LOGW(TAG, "推流中断: WebSocket 已断开, 等待重连...");
-                /* 等待 WS 重连，但每秒检查一次状态是否已切换 */
-                while (!WebsocketIsConnected() && device.status == DEVICE_ON_STREAM) {
-                    vTaskDelay(pdMS_TO_TICKS(1000));
-                }
-                if (device.status != DEVICE_ON_STREAM) break;
-                ESP_LOGI(TAG, "WebSocket 已重连, 继续推流");
+                esp_camera_fb_return(fb);
+                total_skip++;
+                interval_ms = STREAM_MIN_INTERVAL_MS;
+                vTaskDelay(pdMS_TO_TICKS(200));
+                continue;
             }
 
-            CameraTakePhoto(PhotoTransmit);
+            /* 零拷贝发送 */
+            size_t len = fb->len;
+            int64_t t0 = esp_timer_get_time();
+            bool ok = WebsocketSendbytesTimeout(fb->buf, len,
+                                                 pdMS_TO_TICKS(STREAM_SEND_TIMEOUT_MS));
+            float send_ms = (esp_timer_get_time() - t0) / 1000.0f;
+            esp_camera_fb_return(fb);
 
-            /* 帧间延迟：让出 CPU，让 WS 任务处理 PING/PONG 和其他协议帧 */
-            vTaskDelay(pdMS_TO_TICKS(STREAM_INTER_FRAME_DELAY_MS));
+            if (!ok) {
+                total_drop++;
+                interval_ms = STREAM_MAX_INTERVAL_MS;   /* 失败：最大退避 */
+                ESP_LOGW(TAG, "[发送] 超时 %uB %.0fms [drop=%d/%d]",
+                         (unsigned)len, send_ms, total_drop, total_sent + total_drop);
+            } else {
+                total_sent++;
+                ESP_LOGI(TAG, "[发送] %uB %.0fms (%.1f FPS)",
+                         (unsigned)len, send_ms, 1000.0f / send_ms);
+                /*
+                 * 自适应间隔：interval = send_ms × 0.3
+                 *   - 发送快 (50ms)  → 间隔 15ms  → ~15 FPS
+                 *   - 发送慢 (500ms) → 间隔 150ms → ~1.5 FPS
+                 *   - 结果钳制在 [MIN, MAX] 范围内
+                 */
+                interval_ms = (int)(send_ms * 0.3f);
+                if (interval_ms < STREAM_MIN_INTERVAL_MS) interval_ms = STREAM_MIN_INTERVAL_MS;
+                if (interval_ms > STREAM_MAX_INTERVAL_MS) interval_ms = STREAM_MAX_INTERVAL_MS;
+            }
         }
-        ESP_LOGI(TAG, "推流已停止");
-        /* 状态已切换，回到外层循环重新等待信号量 */
-    }
+
+        /* 推流结束，清空队列残留帧 */
+        camera_fb_t *drain = NULL;
+        while (xQueueReceive(frame_queue, &drain, 0) == pdTRUE) {
+            if (drain) esp_camera_fb_return(drain);
+        }
+        ESP_LOGI(TAG, "[发送] 推流结束 (发送=%d, 丢弃=%d, 跳过=%d)",
+                 total_sent, total_drop, total_skip);
+    }  /* while(1) — 回到外层等待信号量 */
 }
 
 /* ───────────────── 传感器数据采集与上报 ───────────────── */
@@ -165,7 +281,7 @@ void sensor_data_transmit_task(void *pvParameter)
                          secret, temp_c, hum_pct);
             }
 
-            // 带重试的 HTTPS POST（并发 TLS 握手可能偶发失败）
+            // 带重试的 HTTPS POST（TLS 连接持久化，不会重复握手）
             int ret_code = ESP_FAIL;
             if (ota_in_progress) {
                 ESP_LOGW(TAG, "OTA 进行中，跳过传感器上报");

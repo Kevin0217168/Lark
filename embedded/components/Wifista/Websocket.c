@@ -87,11 +87,14 @@ void WebsocketStart(const char *host, const char *path, uint16_t port)
     websocket_cfg.port = port;
     websocket_cfg.crt_bundle_attach = esp_crt_bundle_attach;
     // websocket_cfg.disable_auto_reconnect = true;
-    websocket_cfg.buffer_size = 2048;          // 接收缓冲区（仅收 JSON 指令，不需要大）
+    websocket_cfg.buffer_size = 2048;          // 收发缓冲区 2KB（收 JSON 指令足够，发送由 transport 层分片）
     websocket_cfg.task_stack = 6144;
-    websocket_cfg.reconnect_timeout_ms = 10000;
-    websocket_cfg.pingpong_timeout_sec = 30;   // 推流大帧发送可能耗时较长，留足 PONG 裕量
+    websocket_cfg.reconnect_timeout_ms = 5000; // 断连后 5 秒重连
+    websocket_cfg.network_timeout_ms = 10000;  // 传输层读写超时 10 秒
+    websocket_cfg.ping_interval_sec = 20;      // PING 间隔 20s——推流时发送密集，无需频繁 PING
+    websocket_cfg.pingpong_timeout_sec = 40;   // PONG 等待 40s——推流密集写入可能延迟 PONG 处理
     websocket_cfg.enable_close_reconnect = true;
+    websocket_cfg.task_prio = 6;               // WS 任务优先级 6
 
     // 初始化客户端
     Websocket_client = esp_websocket_client_init(&websocket_cfg);
