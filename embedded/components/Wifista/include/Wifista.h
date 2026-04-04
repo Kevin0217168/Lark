@@ -58,6 +58,7 @@ void Websocket_event_handler_register(void (*ws_disconnected_handler)(void *hand
 void ws_text_handler(void *handler_args, int len, const char *data_ptr);
 bool WebsocketIsConnected();
 bool WebsocketSendbytes(uint8_t *data, int len);
+bool WebsocketSendbytesTimeout(uint8_t *data, int len, TickType_t timeout);
 bool WebsocketSendText(uint8_t *data, int len);
 
 void ota_task(void *pvParameter);

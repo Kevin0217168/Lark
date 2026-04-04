@@ -87,10 +87,10 @@ void WebsocketStart(const char *host, const char *path, uint16_t port)
     websocket_cfg.port = port;
     websocket_cfg.crt_bundle_attach = esp_crt_bundle_attach;
     // websocket_cfg.disable_auto_reconnect = true;
-    websocket_cfg.buffer_size = 64 * 1024;
+    websocket_cfg.buffer_size = 2048;          // 接收缓冲区（仅收 JSON 指令，不需要大）
     websocket_cfg.task_stack = 6144;
     websocket_cfg.reconnect_timeout_ms = 10000;
-    websocket_cfg.pingpong_timeout_sec = 10;
+    websocket_cfg.pingpong_timeout_sec = 30;   // 推流大帧发送可能耗时较长，留足 PONG 裕量
     websocket_cfg.enable_close_reconnect = true;
 
     // 初始化客户端
@@ -108,9 +108,14 @@ void WebsocketStart(const char *host, const char *path, uint16_t port)
 
 bool WebsocketSendbytes(uint8_t *data, int len)
 {
+    return WebsocketSendbytesTimeout(data, len, pdMS_TO_TICKS(15000));
+}
+
+bool WebsocketSendbytesTimeout(uint8_t *data, int len, TickType_t timeout)
+{
     if (Websocket_isConnected)
     {
-        int num = esp_websocket_client_send_bin(Websocket_client, data, len, portMAX_DELAY);
+        int num = esp_websocket_client_send_bin(Websocket_client, data, len, timeout);
         if (num != -1)
         {
             ESP_LOGD(TAG, "发送 bin: %d bytes", num);
@@ -118,7 +123,7 @@ bool WebsocketSendbytes(uint8_t *data, int len)
         }
         else
         {
-            ESP_LOGE(TAG, "bin 发送失败: 缓冲区满");
+            ESP_LOGD(TAG, "bin 发送超时/失败 (len=%d)", len);
             return false;
         }
     }

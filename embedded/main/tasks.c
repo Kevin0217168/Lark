@@ -15,6 +15,7 @@
 #include "device_secret.h"
 #include "i2c_recovery.h"
 #include "tasks.h"
+#include "remote_log.h"
 
 static const char *TAG = "task";
 
@@ -67,10 +68,18 @@ bool diagnostic(void)
 
 /* ───────────────── 摄像头图像传输 ───────────────── */
 
+/* 推流发送超时（ms）——超过则丢弃当前帧，保持流畅 */
+#define STREAM_SEND_TIMEOUT_MS  2000
+
 static void PhotoTransmit(camera_fb_t *fb)
 {
-    WebsocketSendbytes(fb->buf, fb->len);
+    if (!WebsocketSendbytesTimeout(fb->buf, fb->len, pdMS_TO_TICKS(STREAM_SEND_TIMEOUT_MS))) {
+        ESP_LOGW(TAG, "帧发送超时/失败 (size=%u), 丢弃", (unsigned)fb->len);
+    }
 }
+
+/* 推流帧间延迟（ms）——让 WS 任务处理 PING/PONG */
+#define STREAM_INTER_FRAME_DELAY_MS  1
 
 void camera_transmit_task(void *pvParameter)
 {
@@ -85,8 +94,23 @@ void camera_transmit_task(void *pvParameter)
         /* 持续推流，直到状态不再是 DEVICE_ON_STREAM */
         while (device.status == DEVICE_ON_STREAM)
         {
+            /* 检查 WebSocket 是否仍在线 */
+            if (!WebsocketIsConnected()) {
+                ESP_LOGW(TAG, "推流中断: WebSocket 已断开, 等待重连...");
+                /* 等待 WS 重连，但每秒检查一次状态是否已切换 */
+                while (!WebsocketIsConnected() && device.status == DEVICE_ON_STREAM) {
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                }
+                if (device.status != DEVICE_ON_STREAM) break;
+                ESP_LOGI(TAG, "WebSocket 已重连, 继续推流");
+            }
+
             CameraTakePhoto(PhotoTransmit);
+
+            /* 帧间延迟：让出 CPU，让 WS 任务处理 PING/PONG 和其他协议帧 */
+            vTaskDelay(pdMS_TO_TICKS(STREAM_INTER_FRAME_DELAY_MS));
         }
+        ESP_LOGI(TAG, "推流已停止");
         /* 状态已切换，回到外层循环重新等待信号量 */
     }
 }
@@ -94,14 +118,16 @@ void camera_transmit_task(void *pvParameter)
 /* ───────────────── 传感器数据采集与上报 ───────────────── */
 
 // 传感器上报重试配置
-#define SENSOR_POST_MAX_RETRY   3       // 最大重试次数
+#define SENSOR_POST_MAX_RETRY   3       // 每轮最大重试次数
 #define SENSOR_POST_RETRY_MS    3000    // 重试间隔 3 秒（等待其他 TLS 连接释放内部 SRAM）
+#define SENSOR_CONSEC_FAIL_MAX  5       // 连续多轮全失败后重启（即连续5分钟全失败）
 
 void sensor_data_transmit_task(void *pvParameter)
 {
     (void)pvParameter;
     time_t now = 0;
     struct tm timeinfo = {0};
+    int consec_fail_rounds = 0;  // 连续多轮全失败计数
 
     // 启动后延迟 5 秒，错开 OTA/rlog 首次 TLS 握手的内存高峰
     vTaskDelay(pdMS_TO_TICKS(5000));
@@ -161,8 +187,19 @@ void sensor_data_transmit_task(void *pvParameter)
             }
             if (ret_code != ESP_OK)
             {
-                ESP_LOGE(TAG, "传感器数据上报失败 (已重试 %d 次), err=%d",
-                         SENSOR_POST_MAX_RETRY, ret_code);
+                consec_fail_rounds++;
+                ESP_LOGE(TAG, "传感器数据上报失败 (已重试 %d 次), 连续失败轮数=%d/%d",
+                         SENSOR_POST_MAX_RETRY, consec_fail_rounds, SENSOR_CONSEC_FAIL_MAX);
+                if (consec_fail_rounds >= SENSOR_CONSEC_FAIL_MAX) {
+                    ESP_LOGE(TAG, "传感器上报连续 %d 轮失败，可能内存碎片化或网络故障，重启设备...",
+                             consec_fail_rounds);
+                    remote_log_flush_sync();
+                    esp_restart();
+                }
+            }
+            else
+            {
+                consec_fail_rounds = 0;
             }
         }
         else
@@ -213,12 +250,11 @@ static void log_system_status(void)
         (unsigned)free_spiram, (unsigned)total_spiram, pct_spiram);
 
     /* ── 任务列表（逐条打印，每条 < 120 字节，远程日志不会截断） ── */
+    /* 使用静态数组避免反复 malloc/free 加剧内存碎片化 */
+    #define MAX_MONITORED_TASKS 20
+    static TaskStatus_t task_array[MAX_MONITORED_TASKS];
     UBaseType_t task_count = uxTaskGetNumberOfTasks();
-    TaskStatus_t *task_array = malloc(task_count * sizeof(TaskStatus_t));
-    if (task_array == NULL) {
-        ESP_LOGW(TAG, "[系统状态] 任务快照分配失败");
-        return;
-    }
+    if (task_count > MAX_MONITORED_TASKS) task_count = MAX_MONITORED_TASKS;
 
     UBaseType_t got = uxTaskGetSystemState(task_array, task_count, NULL);
 
@@ -237,7 +273,6 @@ static void log_system_status(void)
                  (unsigned)(task_array[i].usStackHighWaterMark * sizeof(StackType_t)));
     }
 
-    free(task_array);
 }
 
 void health_monitor_task(void *pvParameter)
@@ -294,12 +329,25 @@ void health_monitor_task(void *pvParameter)
         if (wifi_disconnect_count >= HEALTH_MAX_DISCONNECT_COUNT) {
             ESP_LOGE(TAG, "[健康监控] WiFi 持续断开超过 %d 秒，重启设备...",
                      HEALTH_MAX_DISCONNECT_COUNT * HEALTH_CHECK_INTERVAL_MS / 1000);
+            remote_log_flush_sync();
             esp_restart();
         }
         if (ws_disconnect_count >= HEALTH_MAX_DISCONNECT_COUNT) {
             ESP_LOGE(TAG, "[健康监控] WebSocket 持续断开超过 %d 秒，重启设备...",
                      HEALTH_MAX_DISCONNECT_COUNT * HEALTH_CHECK_INTERVAL_MS / 1000);
+            remote_log_flush_sync();
             esp_restart();
+        }
+
+        // 内存碎片化监控（仅记录日志，不主动重启）
+        // 实际重启由传感器上报连续失败 / WiFi/WS 断连检测触发
+        {
+            size_t largest_block = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
+            size_t free_internal = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+            if (largest_block < 12288) {
+                ESP_LOGW(TAG, "[健康监控] 内存碎片化: 内部空闲=%u B, 最大连续块=%u B",
+                         (unsigned)free_internal, (unsigned)largest_block);
+            }
         }
     }
 }

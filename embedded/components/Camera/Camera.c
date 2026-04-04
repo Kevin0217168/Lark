@@ -125,9 +125,9 @@ void CameraInit()
 
 void CameraTakePhoto(void(PhotoHandler)(camera_fb_t *))
 {
-    int64_t start_us = esp_timer_get_time();
-
+    int64_t t0 = esp_timer_get_time();
     camera_fb_t *fb = esp_camera_fb_get();
+    int64_t t1 = esp_timer_get_time();
 
     if (fb == NULL)
     {
@@ -140,9 +140,12 @@ void CameraTakePhoto(void(PhotoHandler)(camera_fb_t *))
         PhotoHandler(fb);
     }
 
+    int64_t t2 = esp_timer_get_time();
     esp_camera_fb_return(fb);
 
-    int64_t end_us = esp_timer_get_time();
-    float time = (end_us - start_us) / 1000;
-    ESP_LOGI(TAG, "拍摄处理: %.2f ms (%.1f FPS)", time, 1000 / time);
+    float cap_ms  = (t1 - t0) / 1000.0f;
+    float send_ms = (t2 - t1) / 1000.0f;
+    float total   = (t2 - t0) / 1000.0f;
+    ESP_LOGI(TAG, "帧: %uB | 拍=%0.fms 发=%0.fms 总=%0.fms (%.1f FPS)",
+             (unsigned)fb->len, cap_ms, send_ms, total, 1000.0f / total);
 }

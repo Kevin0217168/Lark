@@ -6,6 +6,7 @@
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
 #include "nvs_flash.h"
+#include "esp_heap_caps.h"
 
 #include "Wifista.h"
 #include "Camera.h"
@@ -211,23 +212,23 @@ void app_main(void)
     }
 
     // 开启图像传输任务
-    // 所有用户任务栈分配到 PSRAM，释放 ~32KB 内部 SRAM 给 TLS 握手使用
+    // 用户任务栈显式分配到 PSRAM，释放内部 SRAM 给 TLS / DMA 使用
     camera_stream_sem_init();   // 必须在创建任务之前初始化信号量
     static uint8_t ucParameterToPass;
     TaskHandle_t xHandle = NULL;
-    xTaskCreate(camera_transmit_task, "camera_transmit_task", 4096, &ucParameterToPass, 1, &xHandle);
+    xTaskCreateWithCaps(camera_transmit_task, "camera_transmit", 4096, &ucParameterToPass, 1, &xHandle, MALLOC_CAP_SPIRAM);
     configASSERT(xHandle);
 
-    // 开启传感器传输任务（TLS HTTPS POST 需要至少 8192 字节栈空间）
+    // 开启传感器传输任务（TLS HTTPS POST 需要较大栈空间）
     static uint8_t sensor_data_transmit_task_Handle_ParameterToPass;
     TaskHandle_t sensor_data_transmit_task_Handle = NULL;
-    xTaskCreate(sensor_data_transmit_task, "sensor_data_transmit_task", 6144, &sensor_data_transmit_task_Handle_ParameterToPass, 1, &sensor_data_transmit_task_Handle);
+    xTaskCreateWithCaps(sensor_data_transmit_task, "sensor_data_tra", 6144, &sensor_data_transmit_task_Handle_ParameterToPass, 1, &sensor_data_transmit_task_Handle, MALLOC_CAP_SPIRAM);
     configASSERT(sensor_data_transmit_task_Handle);
 
     // 开启健康监控任务（检测 WiFi/WS 长时间断连自动重启）
     // 注意：log_system_status() 内有大量 snprintf 格式化，栈需求较大
     static uint8_t health_monitor_param;
     TaskHandle_t health_monitor_handle = NULL;
-    xTaskCreate(health_monitor_task, "health_monitor", 4096, &health_monitor_param, 1, &health_monitor_handle);
+    xTaskCreateWithCaps(health_monitor_task, "health_monitor", 4096, &health_monitor_param, 1, &health_monitor_handle, MALLOC_CAP_SPIRAM);
     configASSERT(health_monitor_handle);
 }

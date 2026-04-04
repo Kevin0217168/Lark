@@ -35,6 +35,7 @@
 #include "esp_log.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
+#include "esp_heap_caps.h"
 #include "remote_log.h"
 
 /* ======================== 配置 ======================== */
@@ -51,6 +52,20 @@
 static const char *TAG = "remote_log";
 
 static RingbufHandle_t s_ringbuf = NULL;
+/*
+ * 环形缓冲区采用 Static 方式创建:
+ *   - 控制结构 (StaticRingbuffer_t) 留在内部 SRAM —— 含 FreeRTOS 互斥锁/信号量，
+ *     ISR 和调度器需要快速访问，不能放 PSRAM
+ *   - 数据存储区 (12 KB) 放在 PSRAM —— 释放宝贵的内部 SRAM
+ *
+ * SPI 总线安全:
+ *   ESP32 上 PSRAM 和 Flash 共享 SPI 总线。Flash 擦写期间 cache 被临时禁用，
+ *   此时不能访问 PSRAM。但 ESP-IDF 在 spi_flash_write 时会 stall 双核，
+ *   所有任务冻结，vprintf 钩子不会被调用，因此 PSRAM 缓冲区安全。
+ *   CONFIG_SPIRAM_CACHE_WORKAROUND=y (已启用) 提供额外保护。
+ */
+static StaticRingbuffer_t s_ringbuf_struct;
+static uint8_t *s_ringbuf_storage = NULL;
 static TaskHandle_t s_flush_task_handle = NULL;
 static vprintf_like_t s_original_vprintf = NULL;
 static volatile bool s_hook_installed = false;  // 阶段一完成
@@ -197,7 +212,8 @@ static esp_err_t remote_log_http_post(const char *data, int len)
 /* ======================== Flush 任务 ======================== */
 static void remote_log_flush_task(void *pvParameters)
 {
-    char *flush_buf = heap_caps_malloc(RLOG_FLUSH_BUF_SIZE, MALLOC_CAP_DEFAULT);
+    /* flush 缓冲区放 PSRAM，节省 4 KB 内部 SRAM（仅在任务上下文中使用，无 DMA） */
+    char *flush_buf = heap_caps_malloc(RLOG_FLUSH_BUF_SIZE, MALLOC_CAP_SPIRAM);
     if (flush_buf == NULL) {
         vTaskDelete(NULL);
         return;
@@ -288,10 +304,18 @@ esp_err_t remote_log_early_init(void)
         return ESP_ERR_INVALID_STATE;
     }
 
-    /* 1. 创建环形缓冲区 */
-    s_ringbuf = xRingbufferCreate(RLOG_RINGBUF_SIZE, RINGBUF_TYPE_BYTEBUF);
+    /* 1. 创建环形缓冲区 —— 数据区域放 PSRAM，控制结构留内部 SRAM */
+    s_ringbuf_storage = heap_caps_malloc(RLOG_RINGBUF_SIZE, MALLOC_CAP_SPIRAM);
+    if (s_ringbuf_storage == NULL) {
+        ESP_LOGE(TAG, "无法从 PSRAM 分配环形缓冲区存储 (%d bytes)", RLOG_RINGBUF_SIZE);
+        return ESP_ERR_NO_MEM;
+    }
+    s_ringbuf = xRingbufferCreateStatic(RLOG_RINGBUF_SIZE, RINGBUF_TYPE_BYTEBUF,
+                                         s_ringbuf_storage, &s_ringbuf_struct);
     if (s_ringbuf == NULL) {
-        ESP_LOGE(TAG, "无法创建环形缓冲区 (%d bytes)", RLOG_RINGBUF_SIZE);
+        ESP_LOGE(TAG, "无法创建环形缓冲区");
+        heap_caps_free(s_ringbuf_storage);
+        s_ringbuf_storage = NULL;
         return ESP_ERR_NO_MEM;
     }
 
@@ -321,12 +345,13 @@ esp_err_t remote_log_start(const char *base_url, const char *path,
 
     ESP_LOGI(TAG, "日志上传地址: %s", s_upload_url);
 
-    /* 2. 启动 flush 任务 */
+    /* 2. 启动 flush 任务（栈放 PSRAM，节省内部 SRAM） */
     s_upload_started = true;
-    BaseType_t ret = xTaskCreate(
+    BaseType_t ret = xTaskCreateWithCaps(
         remote_log_flush_task, "rlog_flush",
         RLOG_TASK_STACK_SIZE, NULL,
-        RLOG_TASK_PRIORITY, &s_flush_task_handle);
+        RLOG_TASK_PRIORITY, &s_flush_task_handle,
+        MALLOC_CAP_SPIRAM);
     if (ret != pdPASS) {
         ESP_LOGE(TAG, "无法创建 flush 任务");
         s_upload_started = false;
@@ -354,6 +379,42 @@ void remote_log_resume(void)
     ESP_LOGI(TAG, "远程日志上传已恢复");
 }
 
+void remote_log_flush_sync(void)
+{
+    if (!s_upload_started || s_ringbuf == NULL || s_paused) {
+        return;
+    }
+
+    /* 临时 flush 缓冲区（复用栈上的小块 + 多次循环，避免额外 malloc） */
+    char tmp[512];
+    int rounds = 0;
+    const int max_rounds = (RLOG_RINGBUF_SIZE / sizeof(tmp)) + 2; // 防止无限循环
+
+    while (rounds < max_rounds) {
+        int total_len = 0;
+        size_t item_size = 0;
+        void *item = NULL;
+
+        while (total_len < (int)sizeof(tmp) - 1) {
+            size_t remain = sizeof(tmp) - 1 - total_len;
+            item = xRingbufferReceiveUpTo(s_ringbuf, &item_size, 0, remain);
+            if (item == NULL || item_size == 0) {
+                if (item) vRingbufferReturnItem(s_ringbuf, item);
+                break;
+            }
+            memcpy(tmp + total_len, item, item_size);
+            total_len += item_size;
+            vRingbufferReturnItem(s_ringbuf, item);
+        }
+
+        if (total_len == 0) break; // 缓冲区已空
+
+        tmp[total_len] = '\0';
+        remote_log_http_post(tmp, total_len);
+        rounds++;
+    }
+}
+
 void remote_log_deinit(void)
 {
     /* 1. 先恢复原始 vprintf */
@@ -373,10 +434,11 @@ void remote_log_deinit(void)
     /* 3. 销毁持久 HTTP client */
     rlog_destroy_client();
 
-    /* 4. 释放缓冲区 */
-    if (s_ringbuf) {
-        vRingbufferDelete(s_ringbuf);
-        s_ringbuf = NULL;
+    /* 4. 释放缓冲区（静态创建的 ring buffer 不能调用 vRingbufferDelete） */
+    s_ringbuf = NULL;
+    if (s_ringbuf_storage) {
+        heap_caps_free(s_ringbuf_storage);
+        s_ringbuf_storage = NULL;
     }
 
     ESP_LOGI(TAG, "远程日志模块已停止");

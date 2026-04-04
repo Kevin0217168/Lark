@@ -7,6 +7,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "tasks.h"
+#include "remote_log.h"
 
 static const char *TAG = "ws_cmd";
 
@@ -190,7 +191,8 @@ static bool set_device(const char *key, cJSON *values_item, cJSON *json)
         ESP_LOGW(TAG, "收到重启指令，设备即将重启...");
         ws_reply(1, "设备即将重启.", key, "ok");
         cJSON_Delete(json);
-        vTaskDelay(500 / portTICK_PERIOD_MS);
+        remote_log_flush_sync();
+        vTaskDelay(200 / portTICK_PERIOD_MS);
         esp_restart();
         return true;  /* 不会到达，但保持语义完整 */
     }

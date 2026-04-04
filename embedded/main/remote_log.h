@@ -61,6 +61,14 @@ void remote_log_pause(void);
 void remote_log_resume(void);
 
 /**
+ * @brief 重启前同步刷新：立即将缓冲区中的日志通过 HTTP POST 发出
+ *
+ * 在调用 esp_restart() 前调用此函数，确保缓冲区中的日志不会丢失。
+ * 同步执行，不超过几百毫秒。
+ */
+void remote_log_flush_sync(void);
+
+/**
  * @brief 停止远程日志（恢复默认 vprintf）
  */
 void remote_log_deinit(void);
