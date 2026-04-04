@@ -10,20 +10,6 @@ WS_Context_t ws_context;
 
 bool Websocket_isConnected = false;
 
-// static void reconnect_timer_callback(void *arg)
-// {
-//     ESP_LOGI(TAG, "Attempting to reconnect WebSocket...");
-//     // 销毁旧客户端（如果还存在）
-//     if (Websocket_client != NULL)
-//     {
-//         esp_websocket_client_stop(Websocket_client);
-//         esp_websocket_client_destroy(Websocket_client);
-//         Websocket_client = NULL;
-//     }
-//     // 重新启动连接
-//     WebsocketStart(websocket_cfg.host, websocket_cfg.path, websocket_cfg.port);
-// }
-
 void Websocket_event_handler_register(void (*ws_disconnected_handler)(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data),
                                        void (* ws_text_handler)(void *handler_args, int len, const char *data_ptr))
 {
@@ -91,8 +77,8 @@ void WebsocketStart(const char *host, const char *path, uint16_t port)
     websocket_cfg.task_stack = 6144;
     websocket_cfg.reconnect_timeout_ms = 5000; // 断连后 5 秒重连
     websocket_cfg.network_timeout_ms = 10000;  // 传输层读写超时 10 秒
-    websocket_cfg.ping_interval_sec = 20;      // PING 间隔 20s——推流时发送密集，无需频繁 PING
-    websocket_cfg.pingpong_timeout_sec = 40;   // PONG 等待 40s——推流密集写入可能延迟 PONG 处理
+    websocket_cfg.ping_interval_sec = 30;      // PING 间隔 30s——推流时数据帧本身就是心跳
+    websocket_cfg.disable_pingpong_discon = true; // 禁止 PONG 超时断连——推流拥塞时 PONG 会延迟，不应因此断连
     websocket_cfg.enable_close_reconnect = true;
     websocket_cfg.task_prio = 6;               // WS 任务优先级 6
 

@@ -200,8 +200,8 @@ void app_main(void)
     xSemaphoreTake(ota_sem, portMAX_DELAY);
     ESP_LOGI(TAG, "OTA 任务已完成，继续启动其他任务...");
 
-    // OTA 待验证流程中，摄像头在 OTA 任务写 flash 前被关闭，需要重新初始化
-    if (ota_pending) {
+    // OTA 任务入口处 esp_camera_deinit() 释放了内存，无论是否有更新都需要重新初始化
+    {
         ESP_LOGI(TAG, "重新初始化摄像头...");
         i2c_bus_recovery(26, 27);
         CameraInit();

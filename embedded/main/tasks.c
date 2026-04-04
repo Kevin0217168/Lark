@@ -97,11 +97,14 @@ bool diagnostic(void)
 
 /* ───────────────── 摄像头图像传输（零拷贝队列流水线） ───────────────── */
 
-/* 推流发送超时（ms）——超过则丢弃当前帧 */
-#define STREAM_SEND_TIMEOUT_MS      1500
+/* 推流发送超时（ms）——每个 2KB 分块的 poll_write 等待上限
+ * 必须足够长：10KB 帧在 WiFi+TLS 15~40KB/s 下需要 250ms~700ms 才能完全离开设备。
+ * 若 TCP 缓冲区(32KB)满，排空需 800ms~2s。1500ms 不够，5000ms 足矣。
+ * 超时≠阻塞：TCP 有空间时 poll_write 立即返回，不影响 FPS。 */
+#define STREAM_SEND_TIMEOUT_MS      10000
 
 /* 帧间隔下限/上限（ms）——自适应区间 */
-#define STREAM_MIN_INTERVAL_MS      30
+#define STREAM_MIN_INTERVAL_MS      10
 #define STREAM_MAX_INTERVAL_MS      500
 
 /* ─── 采集任务：fb_get → 放入队列（若满则先归还旧帧再覆盖） ─── */
