@@ -1,1 +1,3 @@
-
+# 忽略所有 .DS_Store 文件
+.DS_Store
+**/.DS_Store
