@@ -62,7 +62,7 @@ class UserOut(BaseModel):
   id: int
   username: str
   nickname: str
-  role: Literal["root", "user", "readonly"]
+  role: Literal["root", "user", "clouduser"]
   email: str | None = None
   banner: str | None = None
   avatar: str | None = None

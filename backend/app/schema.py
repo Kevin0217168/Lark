@@ -24,7 +24,7 @@ class UsersFilter(BaseModel):
     nickname: Optional[str] = Field(
         title="用户昵称", description="数据库用户昵称", default=None
     )
-    role: Optional[Literal["root", "user", "readonly"]] = Field(
+    role: Optional[Literal["root", "user", "clouduser"]] = Field(
         title="用户权限", description="数据库用户权限", default=None
     )
     email: Optional[str] = Field(
@@ -44,7 +44,7 @@ class UserItem(BaseModel):
     password: str = Field(
         title="用户密码",
         description="用户密码",
-        examples=["123456789"],
+        examples=["12345678a"],
         min_length=8,
         max_length=32,
     )
@@ -55,7 +55,7 @@ class UserItem(BaseModel):
         min_length=1,
         max_length=50,
     )
-    role: Literal["root", "user", "readonly"] = Field(
+    role: Literal["root", "user", "clouduser"] = Field(
         title="用户权限", description="数据库用户权限", examples=["root"]
     )
     avatar: Optional[str] = Field(
@@ -121,7 +121,7 @@ class UserUpdateItem(BaseModel):
         examples=["猫猫"],
         default=None,
     )
-    role: Optional[Literal["root", "user", "readonly"]] = Field(
+    role: Optional[Literal["root", "user", "clouduser"]] = Field(
         title="用户权限", description="数据库用户权限", examples=["root"], default=None
     )
     avatar: Optional[str] = Field(

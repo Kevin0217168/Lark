@@ -31,7 +31,15 @@ const requestInterceptor = (config: RequestInit) => {
 
 // 响应拦截器
 const responseInterceptor = async (response: Response) => {
-  if (response.status === 401) {
+  // 检查是否在登录注册界面
+  const currentPath = window.location.pathname;
+  const isAuthPage = 
+    currentPath === '/Login' || 
+    currentPath === '/Register' || 
+    currentPath === '/cloud/login' || 
+    currentPath === '/cloud/register';
+  
+  if (response.status === 401 && !isAuthPage) {
     // 处理401错误
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
@@ -40,7 +48,10 @@ const responseInterceptor = async (response: Response) => {
     localStorage.removeItem('role');
     window.dispatchEvent(new Event('loginStatusChanged'));
     ElMessage.error('登录已过期，请重新登录');
-    router.push('/Login');
+    
+    // 检查当前是否在云养鸟系统页面
+    const isCloudPage = currentPath.startsWith('/cloud');
+    router.push(isCloudPage ? '/cloud/login' : '/Login');
     throw new ApiError('Unauthorized', 401, {});
   }
   
