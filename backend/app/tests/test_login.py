@@ -35,6 +35,7 @@ def fake_user():
     user.avatar = None
     user.banner = None
     user.invitation_code = None
+    user.extra = None
     return user
 
 
@@ -45,6 +46,7 @@ def test_login_success(mock_create_access_token, mock_verify_password, mock_get_
     fake_user = MagicMock(spec=Db.M_Users)
     fake_user.username = "user1"
     fake_user.password = "hashed_password"
+    fake_user.extra = None
     mock_get_users.return_value = [fake_user]
     mock_verify_password.return_value = True
     mock_create_access_token.side_effect = ["token-abc", "cookie-token-xyz"]
@@ -67,6 +69,7 @@ def test_login_invalid_password(mock_verify_password, mock_get_users, client):
     fake_user = MagicMock(spec=Db.M_Users)
     fake_user.username = "user1"
     fake_user.password = "hashed_password"
+    fake_user.extra = None
     mock_get_users.return_value = [fake_user]
     mock_verify_password.return_value = False
 

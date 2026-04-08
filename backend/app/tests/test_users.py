@@ -174,6 +174,7 @@ def test_register_user(mock_get_users, mock_get_invitation_code, mock_use_invita
         "avatar": None,
         "banner": None,
         "invitation_code": None,
+        "extra": None,
     }
     mock_register_user.return_value = new_user
 
@@ -350,6 +351,7 @@ def test_update_user(mock_update_user, client, app):
         "avatar": None,
         "banner": None,
         "invitation_code": None,
+        "extra": None,
     }
     mock_update_user.return_value = updated
 
