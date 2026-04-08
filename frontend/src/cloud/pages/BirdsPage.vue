@@ -1,11 +1,11 @@
 <template>
   <div class="birds-page">
     <div class="page-content">
-      <h1 class="page-title">幼鸟列表</h1>
+      <h1 class="page-title">雏鸟列表</h1>
       <div class="placeholder-content">
         <div class="placeholder-card">
           <div class="placeholder-icon">🐦</div>
-          <p class="placeholder-text">幼鸟列表内容区域</p>
+          <p class="placeholder-text">雏鸟列表内容区域</p>
         </div>
       </div>
     </div>

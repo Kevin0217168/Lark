@@ -32,7 +32,7 @@ const router = createRouter({
       name: 'CloudBirds',
       component: () => import('./pages/BirdsPage.vue'),
       meta: {
-        title: '幼鸟列表'
+        title: '雏鸟列表'
       }
     },
     {
@@ -48,7 +48,7 @@ const router = createRouter({
       name: 'CloudBirdDetail',
       component: () => import('./pages/BirdDetailPage.vue'),
       meta: {
-        title: '幼鸟详情'
+        title: '雏鸟详情'
       }
     }
   ]

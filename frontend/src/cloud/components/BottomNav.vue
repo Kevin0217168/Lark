@@ -45,7 +45,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { path: '/cloud/home', label: '首页', icon: 'home' },
-  { path: '/cloud/birds', label: '幼鸟', icon: 'birds' },
+  { path: '/cloud/birds', label: '雏鸟', icon: 'birds' },
   { path: '/cloud/my', label: '我的', icon: 'my' }
 ];
 

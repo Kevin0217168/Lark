@@ -29,6 +29,7 @@
             <el-option label="全部角色" value="" />
             <el-option label="管理员" value="root" />
             <el-option label="普通用户" value="user" />
+            <el-option label="云养用户" value="clouduser" />
           </el-select>
           <el-button 
             type="danger" 
@@ -84,8 +85,8 @@
           <el-table-column prop="nickname" label="昵称" min-width="100" />
           <el-table-column prop="role" label="角色" width="100" align="center">
             <template #default="scope">
-              <el-tag :type="scope.row.role === 'root' ? 'danger' : 'info'">
-                {{ scope.row.role === 'root' ? '管理员' : '普通用户' }}
+              <el-tag :type="getRoleTagType(scope.row.role)">
+                {{ getRoleLabel(scope.row.role) }}
               </el-tag>
             </template>
           </el-table-column>
@@ -146,6 +147,7 @@
           <el-option label="全部角色" value="" />
           <el-option label="管理员" value="root" />
           <el-option label="普通用户" value="user" />
+          <el-option label="云养用户" value="clouduser" />
         </el-select>
         <el-input
           v-model="searchUsername"
@@ -198,8 +200,8 @@
             </div>
             <div class="user-info">
               <h4>{{ user.nickname || user.username }}</h4>
-              <el-tag :type="user.role === 'root' ? 'danger' : 'info'" size="small">
-                {{ user.role === 'root' ? '管理员' : '普通用户' }}
+              <el-tag :type="getRoleTagType(user.role)" size="small">
+                {{ getRoleLabel(user.role) }}
               </el-tag>
             </div>
             <div class="user-checkbox">
@@ -274,6 +276,7 @@
           <el-select v-model="editForm.role" placeholder="请选择角色" :disabled="editForm.id === currentUserId">
             <el-option label="管理员" value="root" />
             <el-option label="普通用户" value="user" />
+            <el-option label="云养用户" value="clouduser" />
           </el-select>
           <span v-if="editForm.id === currentUserId" class="role-hint">不能修改自己的角色</span>
         </el-form-item>
@@ -339,6 +342,7 @@
           <el-select v-model="addForm.role" placeholder="请选择角色">
             <el-option label="管理员" value="root" />
             <el-option label="普通用户" value="user" />
+            <el-option label="云养用户" value="clouduser" />
           </el-select>
         </el-form-item>
 
@@ -478,6 +482,32 @@ const isRootUser = computed(() => {
   const role = localStorage.getItem('role');
   return role === 'root';
 });
+
+// 获取角色标签类型
+const getRoleTagType = (role: string) => {
+  switch (role) {
+    case 'root':
+      return 'danger';
+    case 'clouduser':
+      return 'success';
+    case 'user':
+    default:
+      return 'info';
+  }
+};
+
+// 获取角色标签名称
+const getRoleLabel = (role: string) => {
+  switch (role) {
+    case 'root':
+      return '管理员';
+    case 'clouduser':
+      return '云养用户';
+    case 'user':
+    default:
+      return '普通用户';
+  }
+};
 
 // 编辑用户相关
 const editDialogVisible = ref(false);

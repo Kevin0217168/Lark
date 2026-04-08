@@ -8,6 +8,7 @@ import traceback
 import json
 from stream import Stream
 from userapi import User, Login
+from userapi import Bird as BirdApi
 from deviceapi import Device
 from sensorapi import SensorData
 from invitationapi import router as invitation_router
@@ -55,6 +56,7 @@ app = FastAPI(
 app.include_router(Stream.router)
 app.include_router(User.router)
 app.include_router(Login.router)
+app.include_router(BirdApi.router)
 app.include_router(Device.router)
 app.include_router(SensorData.router)
 app.include_router(invitation_router)

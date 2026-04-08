@@ -1,7 +1,8 @@
 from pydantic import BaseModel
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index, Boolean
+from sqlalchemy.dialects.sqlite import JSON
 from sqlalchemy.orm import relationship
-from typing import Optional, Literal, List
+from typing import Optional, Literal, List, Dict, Any
 from sqlalchemy.orm import sessionmaker, Session, declarative_base
 from pwdlib import PasswordHash
 from datetime import datetime, timezone, timedelta
@@ -34,6 +35,7 @@ class M_Users(UserBase):
   banner = Column(String)
   email = Column(String)
   invitation_code = Column(String, index=True)  # 注册时使用的邀请码
+  extra = Column(JSON, nullable=True, default=None)  # 额外信息，字典类型，默认为null
   
   # 关联邀请码
   invitation_codes = relationship("M_InvitationCodes", back_populates="user")
@@ -67,6 +69,7 @@ class UserOut(BaseModel):
   banner: str | None = None
   avatar: str | None = None
   invitation_code: str | None = None
+  extra: Dict[str, Any] | None = None
 
   class Config:
     from_attributes = True
@@ -98,17 +101,17 @@ def GetUsers(db: Session, id=None, username=None, nickname=None, role=None, emai
   users = db.query(M_Users).filter(*conditions).all()
   return users
 
-def RegisterUser(db: Session, username:str, password:str, nickname:str, role:str, email:str=None, avatar:str=None, invitation_code:str=None):
+def RegisterUser(db: Session, username:str, password:str, nickname:str, role:str, email:str=None, avatar:str=None, invitation_code:str=None, extra:Dict[str, Any]=None):
   # 计算密码哈希
   password = ConvertHash(password)
   
-  new_user = M_Users(username = username, password=password, nickname=nickname, role=role, email=email, avatar=avatar, invitation_code=invitation_code)
+  new_user = M_Users(username = username, password=password, nickname=nickname, role=role, email=email, avatar=avatar, invitation_code=invitation_code, extra=extra)
   db.add(new_user)
   db.commit()
   db.refresh(new_user)
   return new_user
 
-def UpdateUser(db: Session, id:int, username:str=None, password:str=None, nickname:str=None, role:str=None, email:str=None, avatar:str=None, banner:str=None):
+def UpdateUser(db: Session, id:int, username:str=None, password:str=None, nickname:str=None, role:str=None, email:str=None, avatar:str=None, banner:str=None, extra:Dict[str, Any]=None):
   # 查找用户
   user = db.query(M_Users).filter(M_Users.id == id).first()
   if not user:
@@ -137,6 +140,10 @@ def UpdateUser(db: Session, id:int, username:str=None, password:str=None, nickna
       user.avatar = avatar if avatar != "" else None
   if banner is not None:
       user.banner = banner if banner != "" else None
+  
+  # 更新额外信息字段
+  if extra is not None:
+      user.extra = extra
 
   db.commit()
   db.refresh(user)  # 刷新以获取数据库中的最新数据（如触发器生成的值）

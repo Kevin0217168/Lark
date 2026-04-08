@@ -1,5 +1,5 @@
 import re
-from typing import Annotated, List, Optional, Literal, Generic, TypeVar
+from typing import Annotated, List, Optional, Literal, Generic, TypeVar, Dict, Any
 from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 
@@ -62,6 +62,11 @@ class UserItem(BaseModel):
         title="用户头像",
         description="用户头像图片访问地址",
         examples=[""],
+        default=None,
+    )
+    extra: Optional[Dict[str, Any]] = Field(
+        title="额外信息",
+        description="用户额外信息，字典类型",
         default=None,
     )
     invitation_code: str = Field(
@@ -140,6 +145,11 @@ class UserUpdateItem(BaseModel):
         title="用户邮箱",
         description="数据库用户邮箱",
         examples=["BI6PPD@163.com"],
+        default=None,
+    )
+    extra: Optional[Dict[str, Any]] = Field(
+        title="额外信息",
+        description="用户额外信息，字典类型",
         default=None,
     )
 
