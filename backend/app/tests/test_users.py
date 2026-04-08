@@ -325,6 +325,7 @@ def test_get_users_me(client, app):
     fake_user.avatar = None
     fake_user.banner = None
     fake_user.invitation_code = None
+    fake_user.extra = None
 
     app.dependency_overrides[Security.GetCurrentUser] = lambda: fake_user
 
