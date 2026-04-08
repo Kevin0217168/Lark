@@ -52,6 +52,7 @@ def default_authenticated_user(app):
     fake_user.avatar = None
     fake_user.banner = None
     fake_user.invitation_code = None
+    fake_user.extra = None
 
     app.dependency_overrides[Security.GetCurrentUser] = lambda: fake_user
     yield
@@ -71,6 +72,7 @@ def test_get_users(mock_get_users, client, app):
             "avatar": None,
             "banner": None,
             "invitation_code": None,
+            "extra": None,
         },
         {
             "id": 2,
@@ -81,6 +83,7 @@ def test_get_users(mock_get_users, client, app):
             "avatar": None,
             "banner": None,
             "invitation_code": None,
+            "extra": None,
         },
     ]
     mock_get_users.return_value = fake_users
@@ -121,6 +124,7 @@ def test_get_user_by_id(mock_get_users, client, app):
             "avatar": None,
             "banner": None,
             "invitation_code": None,
+            "extra": None,
         }
     ]
     mock_get_users.return_value = fake_user
