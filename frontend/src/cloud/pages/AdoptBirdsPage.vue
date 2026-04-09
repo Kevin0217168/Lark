@@ -1,0 +1,1135 @@
+<template>
+  <div class="adopt-birds-page">
+    <!-- 背景装饰 -->
+    <div class="background-decorations">
+      <div class="decoration decoration-1"></div>
+      <div class="decoration decoration-2"></div>
+      <div class="decoration decoration-3"></div>
+      <div class="floating-elements">
+        <div class="floating-element"></div>
+        <div class="floating-element"></div>
+        <div class="floating-element"></div>
+        <div class="floating-element"></div>
+      </div>
+    </div>
+    
+    <!-- 页面头部 -->
+    <div class="page-header">
+      <h1 class="page-title">认领雏鸟</h1>
+      <p class="page-subtitle">找到属于你的专属雏鸟</p>
+    </div>
+    
+    <!-- 搜索筛选区域 -->
+    <div class="search-container">
+      <div class="search-card">
+        <div class="search-row">
+          <el-input 
+            v-model="searchParams.name" 
+            placeholder="输入雏鸟名称"
+            class="modern-input"
+            size="large"
+            prefix-icon="Search"
+          />
+        </div>
+        <div class="search-row">
+          <el-select 
+            v-model="searchParams.species" 
+            placeholder="选择品种"
+            class="modern-select"
+            size="large"
+            popper-class="modern-select-dropdown"
+          >
+            <el-option label="所有品种" value="" />
+            <el-option label="鹦鹉" value="鹦鹉" />
+            <el-option label="鸽子" value="鸽子" />
+            <el-option label="文鸟" value="文鸟" />
+            <el-option label="白脸角鸮" value="白脸角鸮" />
+          </el-select>
+          <el-select 
+            v-model="searchParams.status" 
+            placeholder="选择状态"
+            class="modern-select"
+            size="large"
+            popper-class="modern-select-dropdown"
+          >
+            <el-option label="所有状态" value="" />
+            <el-option label="可认领" value="available" />
+            <el-option label="已认领" value="adopted" />
+            <el-option label="已长成" value="grown" />
+          </el-select>
+        </div>
+        <div class="search-row">
+          <el-input 
+            v-model="searchParams.device_id" 
+            placeholder="设备ID"
+            type="number"
+            class="modern-input"
+            size="large"
+          />
+          <el-button 
+            type="primary" 
+            @click="searchBirds" 
+            class="modern-button"
+            size="large"
+            :loading="loading"
+          >
+            <el-icon><search /></el-icon>
+            开始搜索
+          </el-button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 雏鸟列表 -->
+    <div class="birds-grid" v-if="birds.length > 0">
+      <div 
+        v-for="(bird, index) in birds" 
+        :key="bird.id" 
+        class="bird-card"
+        :style="{ animationDelay: `${index * 0.1}s` }"
+      >
+        <div class="card-header">
+          <div class="status-indicator" :class="`status-${bird.status}`">
+            {{ getStatusLabel(bird.status) }}
+          </div>
+        </div>
+        <div class="card-image">
+          <img 
+            :src="bird.avatar_url || 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=cute%20baby%20bird%20avatar%20cartoon%20style&image_size=square'" 
+            :alt="bird.name"
+            class="bird-avatar"
+          />
+        </div>
+        <div class="card-body">
+          <h3 class="bird-name">{{ bird.name }}</h3>
+          <div class="bird-meta">
+            <span class="meta-item">
+              <el-icon class="meta-icon"><InfoFilled /></el-icon>
+              {{ bird.species }}
+            </span>
+            <span class="meta-item">
+              <el-icon class="meta-icon"><Calendar /></el-icon>
+              {{ bird.birth_date }}
+            </span>
+            <span class="meta-item" v-if="bird.device_id">
+              <el-icon class="meta-icon"><Monitor /></el-icon>
+              设备 {{ bird.device_id }}
+            </span>
+          </div>
+          <p class="bird-description" v-if="bird.description">
+            {{ bird.description }}
+          </p>
+        </div>
+        <div class="card-footer">
+          <el-button 
+            type="primary" 
+            @click="adoptBird(bird)"
+            :disabled="bird.status !== 'available'"
+            class="adopt-button"
+          >
+            {{ bird.status === 'available' ? '立即认领' : '已认领' }}
+          </el-button>
+          <el-button 
+            @click="viewBirdDetail(bird.id)"
+            class="detail-button"
+          >
+            查看详情
+          </el-button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 空状态 -->
+    <div class="empty-container" v-else-if="!loading">
+      <div class="empty-card">
+        <div class="empty-icon">🐣</div>
+        <h3 class="empty-title">暂无雏鸟</h3>
+        <p class="empty-text">没有找到符合条件的雏鸟，请尝试调整搜索条件</p>
+        <el-button @click="resetSearch" class="reset-button">
+          重置搜索
+        </el-button>
+      </div>
+    </div>
+    
+    <!-- 加载状态 -->
+    <div class="loading-container" v-else>
+      <div class="loading-grid">
+        <div v-for="i in 6" :key="i" class="loading-card">
+          <el-skeleton :rows="6" animated />
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import { api } from '@/utils/api';
+import { ElMessage, ElSkeleton, ElButton, ElInput, ElSelect, ElOption } from 'element-plus';
+import { Search, InfoFilled, Calendar, Monitor } from '@element-plus/icons-vue';
+
+const router = useRouter();
+
+// 搜索参数
+const searchParams = ref({
+  name: '',
+  species: '',
+  status: '',
+  device_id: ''
+});
+
+// 雏鸟列表
+const birds = ref<any[]>([]);
+const loading = ref(false);
+
+// 状态标签
+const getStatusLabel = (status: string) => {
+  switch (status) {
+    case 'available': return '可认领';
+    case 'adopted': return '已认领';
+    case 'grown': return '已长成';
+    default: return status;
+  }
+};
+
+// 搜索雏鸟
+const searchBirds = async () => {
+  loading.value = true;
+  try {
+    // 构建查询参数，只包含非空值
+    const params: any = {};
+    
+    if (searchParams.value.name.trim()) {
+      params.name = searchParams.value.name.trim();
+    }
+    
+    if (searchParams.value.species) {
+      params.species = searchParams.value.species;
+    }
+    
+    if (searchParams.value.status) {
+      params.status = searchParams.value.status;
+    }
+    
+    if (searchParams.value.device_id) {
+      params.device_id = parseInt(searchParams.value.device_id, 10);
+    }
+    
+    console.log('查询参数:', params);
+    
+    // 调用后端 API
+    const response = await api.get('/api/birds', params);
+    
+    console.log('查询响应:', response);
+    
+    if (response.code === 200) {
+      birds.value = response.data || [];
+      console.log('获取到的雏鸟列表:', birds.value);
+    } else {
+      ElMessage.error('获取雏鸟列表失败');
+      console.log('获取失败，响应码:', response.code);
+    }
+  } catch (error) {
+    ElMessage.error('网络请求失败');
+    console.error('Error fetching birds:', error);
+  } finally {
+    loading.value = false;
+  }
+};
+
+// 重置搜索
+const resetSearch = () => {
+  searchParams.value = {
+    name: '',
+    species: '',
+    status: '',
+    device_id: ''
+  };
+  searchBirds();
+};
+
+// 认领雏鸟
+const adoptBird = (bird: any) => {
+  console.log('认领雏鸟:', bird);
+  // 这里可以添加认领逻辑
+  ElMessage.success(`已成功认领雏鸟 ${bird.name}`);
+  console.log('雏鸟认领成功:', bird.name);
+};
+
+// 查看雏鸟详情
+const viewBirdDetail = (birdId: number) => {
+  router.push(`/cloud/birds/${birdId}`);
+};
+
+// 初始加载
+onMounted(() => {
+  searchBirds();
+});
+</script>
+
+<style scoped>
+/* 全局样式 */
+.adopt-birds-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 50%, #bbf7d0 100%);
+  padding: 20px 16px 100px;
+  position: relative;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* 背景装饰 */
+.background-decorations {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+}
+
+.decoration {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(167, 243, 208, 0.4);
+  filter: blur(60px);
+  animation: float 8s ease-in-out infinite;
+}
+
+.decoration-1 {
+  top: 10%;
+  left: 10%;
+  width: 200px;
+  height: 200px;
+  background: rgba(110, 231, 183, 0.3);
+  animation-delay: 0s;
+}
+
+.decoration-2 {
+  top: 60%;
+  right: 10%;
+  width: 150px;
+  height: 150px;
+  background: rgba(167, 243, 208, 0.2);
+  animation-delay: 2s;
+}
+
+.decoration-3 {
+  bottom: 20%;
+  left: 20%;
+  width: 180px;
+  height: 180px;
+  background: rgba(74, 222, 128, 0.25);
+  animation-delay: 4s;
+}
+
+/* 浮动元素 */
+.floating-elements {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+}
+
+.floating-element {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: rgba(74, 222, 128, 0.6);
+  border-radius: 50%;
+  animation: floatUp 6s ease-in-out infinite;
+}
+
+.floating-element:nth-child(1) {
+  top: 20%;
+  left: 20%;
+  animation-delay: 0s;
+}
+
+.floating-element:nth-child(2) {
+  top: 40%;
+  right: 30%;
+  animation-delay: 1s;
+  background: rgba(110, 231, 183, 0.5);
+}
+
+.floating-element:nth-child(3) {
+  bottom: 30%;
+  left: 40%;
+  animation-delay: 2s;
+  background: rgba(167, 243, 208, 0.4);
+}
+
+.floating-element:nth-child(4) {
+  top: 60%;
+  left: 70%;
+  animation-delay: 3s;
+  background: rgba(74, 222, 128, 0.5);
+}
+
+/* 浮动动画 */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px) translateX(0px);
+  }
+  25% {
+    transform: translateY(-20px) translateX(10px);
+  }
+  50% {
+    transform: translateY(10px) translateX(-10px);
+  }
+  75% {
+    transform: translateY(-15px) translateX(5px);
+  }
+}
+
+/* 上浮动画 */
+@keyframes floatUp {
+  0% {
+    transform: translateY(100vh) scale(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+    transform: translateY(80vh) scale(1);
+  }
+  90% {
+    opacity: 1;
+    transform: translateY(20vh) scale(1);
+  }
+  100% {
+    transform: translateY(-20vh) scale(0);
+    opacity: 0;
+  }
+}
+
+/* 页面头部 */
+.page-header {
+  text-align: center;
+  margin-bottom: 32px;
+  position: relative;
+  z-index: 2;
+  animation: fadeInUp 0.8s ease-out forwards;
+}
+
+@keyframes fadeInUp {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+}
+
+.page-title {
+  font-size: 32px;
+  font-weight: 800;
+  color: #166534;
+  margin: 0 0 8px 0;
+  background: linear-gradient(135deg, #16a34a, #15803d);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: 1px;
+}
+
+.page-subtitle {
+  font-size: 16px;
+  color: #16a34a;
+  margin: 0;
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+/* 搜索容器 */
+.search-container {
+  margin-bottom: 32px;
+  position: relative;
+  z-index: 2;
+  animation: slideIn 0.6s ease-out 0.2s both;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.search-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 
+    0 12px 40px rgba(0, 0, 0, 0.08),
+    0 4px 16px rgba(0, 0, 0, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(209, 213, 219, 0.3);
+  transition: all 0.3s ease;
+}
+
+.search-card:hover {
+  box-shadow: 
+    0 16px 48px rgba(0, 0, 0, 0.12),
+    0 6px 24px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  transform: translateY(-2px);
+}
+
+.search-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  align-items: center;
+}
+
+.search-row:last-child {
+  margin-bottom: 0;
+}
+
+.modern-input {
+  flex: 1;
+  border-radius: 16px !important;
+  border: 2px solid rgba(74, 222, 128, 0.2) !important;
+  transition: all 0.3s ease !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  height: 56px !important;
+}
+
+.modern-input:focus {
+  border-color: #16a34a !important;
+  box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.1) !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+}
+
+.modern-input .el-input__wrapper {
+  border-radius: 16px !important;
+  box-shadow: none !important;
+  overflow: visible;
+}
+
+.modern-input .el-input__inner {
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  color: #166534 !important;
+}
+
+.modern-input .el-input__placeholder {
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  color: rgba(22, 163, 74, 0.5) !important;
+}
+
+.modern-select {
+  flex: 1;
+  border-radius: 16px !important;
+  border: 2px solid rgba(74, 222, 128, 0.2) !important;
+  transition: all 0.3s ease !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  height: 56px !important;
+}
+
+.modern-select:focus {
+  border-color: #16a34a !important;
+  box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.1) !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+}
+
+.modern-select .el-select__wrapper {
+  border-radius: 16px !important;
+  box-shadow: none !important;
+}
+
+.modern-select .el-select__wrapper .el-input__wrapper {
+  border-radius: 16px !important;
+  box-shadow: none !important;
+  overflow: visible;
+}
+
+.modern-select .el-select__placeholder {
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  color: rgba(22, 163, 74, 0.5) !important;
+}
+
+.modern-select .el-select__selected-item {
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  color: #166534 !important;
+}
+
+.modern-button {
+  border-radius: 16px !important;
+  padding: 16px 32px !important;
+  font-weight: 700 !important;
+  font-size: 16px !important;
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%) !important;
+  border: none !important;
+  transition: all 0.3s ease !important;
+  box-shadow: 0 4px 16px rgba(22, 163, 74, 0.3) !important;
+  min-width: 120px;
+  position: relative;
+  overflow: hidden;
+}
+
+.modern-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.6s ease;
+}
+
+.modern-button:hover::before {
+  left: 100%;
+}
+
+.modern-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(22, 163, 74, 0.4) !important;
+}
+
+.modern-button:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.3) !important;
+}
+
+/* 雏鸟网格 */
+.birds-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+  position: relative;
+  z-index: 2;
+}
+
+/* 雏鸟卡片 */
+.bird-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: 
+    0 12px 40px rgba(0, 0, 0, 0.08),
+    0 4px 16px rgba(0, 0, 0, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(209, 213, 219, 0.3);
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  animation: slideInUp 0.6s ease-out both;
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.bird-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 
+    0 16px 48px rgba(0, 0, 0, 0.12),
+    0 6px 24px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.card-header {
+  padding: 16px 20px 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.status-indicator {
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-available {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.status-adopted {
+  background: rgba(22, 163, 74, 0.1);
+  color: #16a34a;
+}
+
+.status-grown {
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+}
+
+.card-image {
+  padding: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+}
+
+.bird-avatar {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 4px 16px rgba(74, 222, 128, 0.2);
+  transition: transform 0.3s ease;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 4px 16px rgba(74, 222, 128, 0.2);
+  }
+  50% {
+    box-shadow: 0 6px 20px rgba(74, 222, 128, 0.3);
+  }
+}
+
+.bird-card:hover .bird-avatar {
+  transform: scale(1.05);
+}
+
+.card-body {
+  padding: 20px;
+  flex: 1;
+}
+
+.bird-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: #166534;
+  margin: 0 0 12px 0;
+}
+
+.bird-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #6b7280;
+  opacity: 0.9;
+}
+
+.meta-icon {
+  font-size: 16px;
+  color: #9ca3af;
+  opacity: 0.8;
+}
+
+.bird-description {
+  font-size: 14px;
+  color: #6b7280;
+  opacity: 0.8;
+  line-height: 1.5;
+  margin: 0 0 20px 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.card-footer {
+  padding: 0 20px 20px;
+  display: flex;
+  gap: 12px;
+}
+
+.adopt-button {
+  flex: 2;
+  border-radius: 12px !important;
+  padding: 12px !important;
+  font-weight: 600 !important;
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%) !important;
+  border: none !important;
+  transition: all 0.3s ease !important;
+  box-shadow: 0 4px 16px rgba(22, 163, 74, 0.3) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+.adopt-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.6s ease;
+}
+
+.adopt-button:hover::before {
+  left: 100%;
+}
+
+.adopt-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(22, 163, 74, 0.4) !important;
+}
+
+.detail-button {
+  flex: 1;
+  border-radius: 12px !important;
+  padding: 12px !important;
+  font-weight: 600 !important;
+  background: rgba(243, 244, 246, 0.8) !important;
+  color: #6b7280 !important;
+  border: 1px solid rgba(209, 213, 219, 0.5) !important;
+  transition: all 0.3s ease !important;
+}
+
+.detail-button:hover {
+  background: rgba(229, 231, 235, 0.9) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+  color: #4b5563 !important;
+}
+
+/* 空状态 */
+.empty-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+  position: relative;
+  z-index: 2;
+  animation: fadeIn 1s ease-out 0.4s both;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.empty-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  border-radius: 24px;
+  padding: 48px 32px;
+  text-align: center;
+  box-shadow: 
+    0 12px 40px rgba(0, 0, 0, 0.08),
+    0 4px 16px rgba(0, 0, 0, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(209, 213, 219, 0.3);
+  max-width: 400px;
+  width: 100%;
+}
+
+.empty-icon {
+  font-size: 80px;
+  margin-bottom: 24px;
+  animation: bounce 2s infinite;
+}
+
+@keyframes bounce {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-20px);
+  }
+  60% {
+    transform: translateY(-10px);
+  }
+}
+
+.empty-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #166534;
+  margin: 0 0 12px 0;
+}
+
+.empty-text {
+  font-size: 16px;
+  color: #6b7280;
+  opacity: 0.9;
+  margin: 0 0 24px 0;
+  line-height: 1.5;
+}
+
+.reset-button {
+  border-radius: 12px !important;
+  padding: 12px 24px !important;
+  font-weight: 600 !important;
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%) !important;
+  border: none !important;
+  transition: all 0.3s ease !important;
+  box-shadow: 0 4px 16px rgba(22, 163, 74, 0.3) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+.reset-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.6s ease;
+}
+
+.reset-button:hover::before {
+  left: 100%;
+}
+
+.reset-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(22, 163, 74, 0.4) !important;
+}
+
+/* 加载状态 */
+.loading-container {
+  position: relative;
+  z-index: 2;
+}
+
+.loading-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.loading-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  border-radius: 24px;
+  padding: 20px;
+  box-shadow: 
+    0 12px 40px rgba(0, 0, 0, 0.08),
+    0 4px 16px rgba(0, 0, 0, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(209, 213, 219, 0.3);
+  animation: fadeIn 0.6s ease-out both;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .adopt-birds-page {
+    padding: 16px 12px 90px;
+  }
+  
+  .page-title {
+    font-size: 24px;
+  }
+  
+  .search-card {
+    padding: 16px;
+  }
+  
+  .search-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .birds-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .bird-card {
+    border-radius: 20px;
+  }
+  
+  .card-body {
+    padding: 16px;
+  }
+  
+  .card-footer {
+    padding: 0 16px 16px;
+  }
+  
+  .empty-card {
+    padding: 32px 24px;
+    margin: 0 16px;
+  }
+  
+  .loading-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+/* 移动端优化 */
+@media (max-width: 480px) {
+  .page-header {
+    margin-bottom: 24px;
+  }
+  
+  .search-container {
+    margin-bottom: 24px;
+  }
+  
+  .bird-name {
+    font-size: 18px;
+  }
+  
+  .bird-avatar {
+    width: 100px;
+    height: 100px;
+  }
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(74, 222, 128, 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(74, 222, 128, 0.5);
+}
+</style>
+
+<style>
+/* 现代化下拉选项样式 */
+.modern-select-dropdown {
+  padding: 8px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(20px);
+  box-shadow: 
+    0 12px 40px rgba(74, 222, 128, 0.15),
+    0 4px 16px rgba(74, 222, 128, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  overflow: hidden;
+  min-width: 200px !important;
+  width: max-content !important;
+  max-width: 90vw;
+}
+
+.modern-select-dropdown .el-select-dropdown__list {
+  padding: 0;
+}
+
+.modern-select-dropdown .el-select-dropdown__item {
+  border-radius: 12px;
+  margin: 4px 8px;
+  padding: 12px 16px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #166534;
+  transition: all 0.2s ease;
+  position: relative;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  width: auto;
+  max-width: 100%;
+  line-height: 1.5;
+}
+
+.modern-select-dropdown .el-select-dropdown__item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(135deg, #16a34a, #15803d);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.modern-select-dropdown .el-select-dropdown__item:hover {
+  background: linear-gradient(135deg, rgba(22, 163, 74, 0.08), rgba(21, 128, 61, 0.08));
+  color: #16a34a;
+  transform: translateX(2px);
+}
+
+.modern-select-dropdown .el-select-dropdown__item:hover::before {
+  opacity: 1;
+}
+
+.modern-select-dropdown .el-select-dropdown__item.is-selected {
+  background: linear-gradient(135deg, rgba(22, 163, 74, 0.12), rgba(21, 128, 61, 0.12));
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.modern-select-dropdown .el-select-dropdown__item.is-selected::before {
+  opacity: 1;
+}
+
+.modern-select-dropdown .el-select-dropdown__empty {
+  padding: 24px;
+  color: #16a34a;
+  opacity: 0.6;
+  font-size: 14px;
+}
+
+/* 下拉选项滚动条 */
+.modern-select-dropdown .el-scrollbar__bar.is-vertical {
+  right: 4px;
+}
+
+.modern-select-dropdown .el-scrollbar__thumb {
+  background: rgba(74, 222, 128, 0.3);
+  border-radius: 4px;
+}
+
+.modern-select-dropdown .el-scrollbar__thumb:hover {
+  background: rgba(74, 222, 128, 0.5);
+}
+
+/* 下拉框的三角形指示器 */
+.el-popper.is-modern-select-dropdown[data-popper-placement^="bottom"] .el-popper__arrow {
+  display: none;
+}
+
+.el-popper.is-modern-select-dropdown[data-popper-placement^="top"] .el-popper__arrow {
+  display: none;
+}
+</style>

@@ -72,6 +72,10 @@ const router = createRouter({
           component: () => import('@/cloud/pages/BirdsPage.vue')
         },
         {
+          path: 'adopt-birds',
+          component: () => import('@/cloud/pages/AdoptBirdsPage.vue')
+        },
+        {
           path: 'my',
           component: () => import('@/cloud/pages/MyPage.vue')
         },

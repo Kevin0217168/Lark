@@ -36,6 +36,14 @@ const router = createRouter({
       }
     },
     {
+      path: '/cloud/adopt-birds',
+      name: 'CloudAdoptBirds',
+      component: () => import('./pages/AdoptBirdsPage.vue'),
+      meta: {
+        title: '认领雏鸟'
+      }
+    },
+    {
       path: '/cloud/my',
       name: 'CloudMy',
       component: () => import('./pages/MyPage.vue'),
