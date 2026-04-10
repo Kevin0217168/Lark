@@ -319,3 +319,134 @@ def DeleteInvitationCode(db: Session, code: str):
   db.delete(invitation_code)
   db.commit()
   return True
+
+
+def AdoptBird(db: Session, user_id: int, bird_id: int) -> dict:
+  """
+  用户认领雏鸟
+  
+  每个用户只能认领一只雏鸟，认领后会更新用户的extra字段，添加已认领雏鸟的信息
+  
+  参数:
+    db: 数据库会话
+    user_id: 用户ID
+    bird_id: 雏鸟ID
+  
+  返回:
+    dict: 包含操作结果和相关信息的字典
+  """
+  from .BirdDb import GetBirdById, UpdateBirdStatus
+  
+  # 1. 检查用户是否存在
+  user = db.query(M_Users).filter(M_Users.id == user_id).first()
+  if not user:
+    return {"success": False, "message": "用户不存在"}
+  
+  # 2. 检查用户是否已经认领了雏鸟
+  if user.extra and user.extra.get("adopted_bird"):
+    return {"success": False, "message": "您已经认领了一只雏鸟，不能再认领"}
+  
+  # 3. 检查雏鸟是否存在
+  bird = GetBirdById(db, bird_id)
+  if not bird:
+    return {"success": False, "message": "雏鸟不存在"}
+  
+  # 4. 检查雏鸟是否可认领
+  if bird.status != "available":
+    return {"success": False, "message": "该雏鸟不可认领"}
+  
+  # 5. 更新用户的extra字段，添加已认领雏鸟信息
+  extra = user.extra or {}
+  extra["adopted_bird"] = {
+    "bird_id": bird.id,
+    "bird_name": bird.name,
+    "bird_species": bird.species,
+    "birth_date": bird.birth_date.isoformat() if bird.birth_date else None,
+    "description": bird.description,
+    "adopted_at": get_local_time().isoformat()
+  }
+  
+  user.extra = extra
+  
+  # 6. 更新雏鸟状态为已认领
+  updated_bird = UpdateBirdStatus(db, bird_id, "adopted")
+  if not updated_bird:
+    db.rollback()
+    return {"success": False, "message": "更新雏鸟状态失败"}
+  
+  # 7. 提交事务
+  db.commit()
+  
+  return {
+    "success": True,
+    "message": "认领雏鸟成功",
+    "adopted_bird": extra["adopted_bird"]
+  }
+
+
+def GetUserAdoptedBird(db: Session, user_id: int) -> dict:
+  """
+  获取用户已认领的雏鸟信息
+  
+  参数:
+    db: 数据库会话
+    user_id: 用户ID
+  
+  返回:
+    dict: 已认领雏鸟的信息，如果没有则返回空字典
+  """
+  user = db.query(M_Users).filter(M_Users.id == user_id).first()
+  if not user or not user.extra:
+    return {}
+  
+  return user.extra.get("adopted_bird", {})
+
+
+def ReleaseAdoptedBird(db: Session, user_id: int) -> dict:
+  """
+  用户释放已认领的雏鸟
+  
+  参数:
+    db: 数据库会话
+    user_id: 用户ID
+  
+  返回:
+    dict: 包含操作结果和相关信息的字典
+  """
+  from .BirdDb import UpdateBirdStatus
+  
+  # 1. 检查用户是否存在
+  user = db.query(M_Users).filter(M_Users.id == user_id).first()
+  if not user:
+    return {"success": False, "message": "用户不存在"}
+  
+  # 2. 检查用户是否有已认领的雏鸟
+  if not user.extra or not user.extra.get("adopted_bird"):
+    return {"success": False, "message": "您没有已认领的雏鸟"}
+  
+  # 3. 获取已认领雏鸟的ID
+  adopted_bird = user.extra["adopted_bird"]
+  bird_id = adopted_bird.get("bird_id")
+  
+  if not bird_id:
+    return {"success": False, "message": "已认领雏鸟信息不完整"}
+  
+  # 4. 更新雏鸟状态为可认领
+  updated_bird = UpdateBirdStatus(db, bird_id, "available")
+  if not updated_bird:
+    db.rollback()
+    return {"success": False, "message": "更新雏鸟状态失败"}
+  
+  # 5. 从用户的extra字段中移除已认领雏鸟信息
+  extra = user.extra
+  del extra["adopted_bird"]
+  user.extra = extra if extra else None
+  
+  # 6. 提交事务
+  db.commit()
+  
+  return {
+    "success": True,
+    "message": "释放雏鸟成功",
+    "released_bird": adopted_bird
+  }

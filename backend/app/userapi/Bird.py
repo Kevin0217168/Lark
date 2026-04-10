@@ -489,3 +489,164 @@ async def update_bird_status(
                 data=None,
             ).model_dump(),
         )
+
+
+@router.post(
+    "/{bird_id}/adopt",
+    response_model=CommonOut[dict],
+    responses={**R404_BIRD_NOT_FOUND, **R400_BAD_REQUEST},
+    summary="认领雏鸟",
+)
+async def adopt_bird(
+    bird_id: Annotated[int, Path(title="雏鸟ID", description="雏鸟唯一标识")],
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
+    db: Db.Session = Depends(Db.GetDb("AdoptBird")),
+):
+    """
+    # 认领雏鸟
+    
+    用户认领雏鸟，每个用户只能认领一只雏鸟。
+    认领成功后，雏鸟状态会更新为已认领，用户的 extra 字段会添加已认领雏鸟的信息。
+    
+    ## 路径参数
+    - **bird_id**: 雏鸟唯一ID
+    
+    ## 响应
+    - 成功：返回 200 和已认领雏鸟信息
+    - 失败：返回 404 雏鸟不存在 或 400 无法认领（如已认领过或雏鸟不可认领）
+    """
+    try:
+        # 调用认领雏鸟函数
+        result = Db.AdoptBird(db, current_user.id, bird_id)
+        
+        if not result["success"]:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content=CommonOut(
+                    code=status.HTTP_400_BAD_REQUEST,
+                    msg=result["message"],
+                    data=None,
+                ).model_dump(),
+            )
+        
+        await async_log(
+            logger,
+            "info",
+            f"用户 {current_user.username} 成功认领雏鸟 ID={bird_id}"
+        )
+        
+        return CommonOut(
+            data={
+                "adopted_bird": result["adopted_bird"],
+                "message": result["message"]
+            }
+        )
+        
+    except Exception as e:
+        await async_log(logger, "error", f"认领雏鸟失败: {str(e)}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content=CommonOut(
+                code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                msg="服务器内部错误",
+                data=None,
+            ).model_dump(),
+        )
+
+
+@router.delete(
+    "/adopted/me",
+    response_model=CommonOut[dict],
+    responses={**R400_BAD_REQUEST},
+    summary="释放已认领的雏鸟",
+)
+async def release_bird(
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
+    db: Db.Session = Depends(Db.GetDb("ReleaseAdoptedBird")),
+):
+    """
+    # 释放已认领的雏鸟
+    
+    用户释放已认领的雏鸟，释放后雏鸟状态会更新为可认领，用户的 extra 字段会移除已认领雏鸟的信息。
+    
+    ## 响应
+    - 成功：返回 200 和已释放雏鸟信息
+    - 失败：返回 400 无法释放（如没有已认领的雏鸟）
+    """
+    try:
+        # 调用释放雏鸟函数
+        result = Db.ReleaseAdoptedBird(db, current_user.id)
+        
+        if not result["success"]:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content=CommonOut(
+                    code=status.HTTP_400_BAD_REQUEST,
+                    msg=result["message"],
+                    data=None,
+                ).model_dump(),
+            )
+        
+        await async_log(
+            logger,
+            "info",
+            f"用户 {current_user.username} 成功释放雏鸟 ID={result['released_bird'].get('bird_id')}"
+        )
+        
+        return CommonOut(
+            data={
+                "released_bird": result["released_bird"],
+                "message": result["message"]
+            }
+        )
+        
+    except Exception as e:
+        await async_log(logger, "error", f"释放雏鸟失败: {str(e)}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content=CommonOut(
+                code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                msg="服务器内部错误",
+                data=None,
+            ).model_dump(),
+        )
+
+
+@router.get(
+    "/adopted/me",
+    response_model=CommonOut[dict],
+    summary="获取当前用户已认领的雏鸟",
+)
+async def get_my_adopted_bird(
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
+    db: Db.Session = Depends(Db.GetDb("GetUserAdoptedBird")),
+):
+    """
+    # 获取当前用户已认领的雏鸟信息
+    
+    返回当前登录用户已认领的雏鸟详细信息。
+    
+    ## 响应
+    - 成功：返回 200 和已认领雏鸟信息（如果有）
+    - 无已认领雏鸟：返回 200 和空对象
+    """
+    try:
+        # 获取用户已认领的雏鸟信息
+        adopted_bird = Db.GetUserAdoptedBird(db, current_user.id)
+        
+        return CommonOut(
+            data={
+                "adopted_bird": adopted_bird
+            }
+        )
+        
+    except Exception as e:
+        await async_log(logger, "error", f"获取已认领雏鸟信息失败: {str(e)}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content=CommonOut(
+                code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                msg="服务器内部错误",
+                data=None,
+            ).model_dump(),
+        )

@@ -250,11 +250,37 @@ const resetSearch = () => {
 };
 
 // 认领雏鸟
-const adoptBird = (bird: any) => {
-  console.log('认领雏鸟:', bird);
-  // 这里可以添加认领逻辑
-  ElMessage.success(`已成功认领雏鸟 ${bird.name}`);
-  console.log('雏鸟认领成功:', bird.name);
+const adoptBird = async (bird: any) => {
+  try {
+    console.log('要认领的雏鸟:', bird);
+    
+    // 调用后端 API 进行认领操作
+    const response = await fetch(`/api/birds/${bird.id}/adopt`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+      }
+    });
+    
+    console.log('认领响应:', response);
+    
+    const data = await response.json();
+    console.log('认领结果:', data);
+    
+    if (data.code === 200 && data.data) {
+      ElMessage.success(data.data.message || `已成功认领雏鸟 ${bird.name}`);
+      // 跳转到我的雏鸟界面
+      setTimeout(() => {
+        router.push('/cloud/birds');
+      }, 1000);
+    } else {
+      ElMessage.error(data.msg || '认领失败，请重试');
+    }
+  } catch (error) {
+    console.error('认领失败:', error);
+    ElMessage.error('网络错误，请检查网络连接');
+  }
 };
 
 // 查看雏鸟详情

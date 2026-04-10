@@ -1,80 +1,94 @@
 <template>
   <div class="my-page">
-    <div class="page-content">
-      <!-- 头像区域 - 毛玻璃效果 -->
-      <div class="profile-section">
-        <div class="avatar-glass">
-          <div class="avatar-container">
-            <div v-if="userInfo.avatar" class="avatar-circle">
-              <img :src="userInfo.avatar" :alt="userInfo.nickname" />
-            </div>
-            <div v-else class="avatar-circle default-avatar">
-              <span>{{ userInfo.nickname ? userInfo.nickname.charAt(0) : '?' }}</span>
-            </div>
+    <!-- 背景装饰 -->
+    <div class="bg-decoration">
+      <div class="bg-ball bg-ball-1"></div>
+      <div class="bg-ball bg-ball-2"></div>
+      <div class="bg-ball bg-ball-3"></div>
+      <div class="floating-element floating-1"></div>
+      <div class="floating-element floating-2"></div>
+      <div class="floating-element floating-3"></div>
+      <div class="floating-element floating-4"></div>
+    </div>
+
+    <!-- 主内容区 -->
+    <div class="main-content">
+      <!-- 头像和用户信息 -->
+      <div class="profile-header" :class="{ 'fade-in': isLoaded }">
+        <div class="avatar-container">
+          <div v-if="userInfo.avatar" class="avatar-circle">
+            <img :src="userInfo.avatar" :alt="userInfo.nickname" />
           </div>
-          <h2 class="username">{{ userInfo.nickname || userInfo.username }}</h2>
-          <span class="role-badge" :class="getRoleBadgeClass(userInfo.role)">
-            {{ getRoleLabel(userInfo.role) }}
-          </span>
+          <div v-else class="avatar-circle default-avatar">
+            <span>{{ userInfo.nickname ? userInfo.nickname.charAt(0) : '?' }}</span>
+          </div>
         </div>
+        <h1 class="username">{{ userInfo.nickname || userInfo.username }}</h1>
+        <span class="role-badge" :class="getRoleBadgeClass(userInfo.role)">
+          {{ getRoleLabel(userInfo.role) }}
+        </span>
       </div>
 
       <!-- 加载状态 -->
       <div v-if="loading" class="loading-section">
-        <div class="loading-glass">
-          <div class="spinner"></div>
-          <span class="loading-text">加载中...</span>
-        </div>
+        <div class="spinner"></div>
+        <span class="loading-text">加载中...</span>
       </div>
 
       <!-- 错误状态 -->
       <div v-else-if="error" class="error-section">
-        <div class="error-glass">
-          <span class="error-icon">⚠️</span>
-          <span class="error-text">{{ error }}</span>
-          <button class="retry-btn" @click="fetchUserInfo">重新加载</button>
+        <span class="error-icon">⚠️</span>
+        <span class="error-text">{{ error }}</span>
+        <button class="retry-btn" @click="fetchUserInfo">重新加载</button>
+      </div>
+
+      <!-- 个人信息区域 -->
+      <div v-else class="info-section" :class="{ 'fade-in': isLoaded }">
+        <h2 class="section-title">个人信息</h2>
+        
+        <div class="info-grid">
+          <div class="info-item">
+            <div class="info-icon">👤</div>
+            <div class="info-content">
+              <div class="info-label">用户名</div>
+              <div class="info-value">{{ userInfo.username }}</div>
+            </div>
+          </div>
+          
+          <div class="info-item">
+            <div class="info-icon">🏷️</div>
+            <div class="info-content">
+              <div class="info-label">昵称</div>
+              <div class="info-value">{{ userInfo.nickname || '未设置' }}</div>
+            </div>
+          </div>
+          
+          <div class="info-item">
+            <div class="info-icon">📧</div>
+            <div class="info-content">
+              <div class="info-label">邮箱</div>
+              <div class="info-value">{{ userInfo.email || '未设置' }}</div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- 用户信息卡片 -->
-      <div v-else class="info-sections">
-        <!-- 信息卡片 - 毛玻璃效果 -->
-        <div class="info-glass-card">
-          <div class="info-title">个人信息</div>
-          
-          <div class="info-row">
-            <span class="info-label">用户名</span>
-            <span class="info-value">{{ userInfo.username }}</span>
-          </div>
-          
-          <div class="info-row">
-            <span class="info-label">昵称</span>
-            <span class="info-value">{{ userInfo.nickname || '未设置' }}</span>
-          </div>
-          
-          <div class="info-row">
-            <span class="info-label">邮箱</span>
-            <span class="info-value">{{ userInfo.email || '未设置' }}</span>
-          </div>
-        </div>
+      <!-- 操作按钮区域 -->
+      <div v-if="!loading && !error" class="action-section" :class="{ 'fade-in': isLoaded }">
+        <button v-if="showSwitchToAdmin" class="action-btn admin-btn" @click="goToAdmin">
+          <span class="btn-icon">🏠</span>
+          <span class="btn-text">鸟场管理系统</span>
+        </button>
 
-        <!-- 操作按钮区域 -->
-        <div class="action-section">
-          <button v-if="showSwitchToAdmin" class="action-btn admin-btn" @click="goToAdmin">
-            <span class="btn-icon">🏠</span>
-            <span class="btn-text">鸟场管理系统</span>
-          </button>
+        <button class="action-btn logout-btn" @click="handleLogout">
+          <span class="btn-icon">🚪</span>
+          <span class="btn-text">退出登录</span>
+        </button>
 
-          <button class="action-btn logout-btn" @click="handleLogout">
-            <span class="btn-icon">🚪</span>
-            <span class="btn-text">退出登录</span>
-          </button>
-
-          <button class="action-btn delete-btn" @click="openDeleteAccountDialog">
-            <span class="btn-icon">🗑️</span>
-            <span class="btn-text">注销账号</span>
-          </button>
-        </div>
+        <button class="action-btn delete-btn" @click="openDeleteAccountDialog">
+          <span class="btn-icon">🗑️</span>
+          <span class="btn-text">注销账号</span>
+        </button>
       </div>
     </div>
 
@@ -138,6 +152,7 @@ const deletingAccount = ref(false);
 const verifyPasswordDialogVisible = ref(false);
 const verifyingPassword = ref(false);
 const showPassword = ref(false);
+const isLoaded = ref(false);
 
 const userInfo = ref({
   id: 0,
@@ -208,6 +223,10 @@ const fetchUserInfo = async () => {
     error.value = (err as Error).message || '获取用户信息失败';
   } finally {
     loading.value = false;
+    // 延迟显示动画
+    setTimeout(() => {
+      isLoaded.value = true;
+    }, 100);
   }
 };
 
@@ -356,44 +375,150 @@ onMounted(() => {
 <style scoped>
 .my-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #f5f7fa 0%, #e8f5e9 100%);
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  position: relative;
+  overflow: hidden;
   padding: 20px 16px;
   padding-bottom: 100px;
   box-sizing: border-box;
 }
 
-.page-content {
+/* 背景装饰 */
+.bg-decoration {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.bg-ball {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(40px);
+  opacity: 0.3;
+}
+
+.bg-ball-1 {
+  width: 300px;
+  height: 300px;
+  background: #a3e635;
+  top: -100px;
+  right: -100px;
+  animation: float 6s ease-in-out infinite;
+}
+
+.bg-ball-2 {
+  width: 200px;
+  height: 200px;
+  background: #65a30d;
+  bottom: -50px;
+  left: -50px;
+  animation: float 8s ease-in-out infinite reverse;
+}
+
+.bg-ball-3 {
+  width: 150px;
+  height: 150px;
+  background: #84cc16;
+  top: 50%;
+  left: 20%;
+  animation: float 10s ease-in-out infinite;
+}
+
+.floating-element {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: rgba(139, 173, 66, 0.6);
+  border-radius: 50%;
+  animation: floatUp 10s linear infinite;
+}
+
+.floating-1 {
+  top: 20%;
+  left: 10%;
+  animation-delay: 0s;
+}
+
+.floating-2 {
+  top: 60%;
+  right: 15%;
+  animation-delay: 2s;
+}
+
+.floating-3 {
+  top: 40%;
+  left: 80%;
+  animation-delay: 4s;
+}
+
+.floating-4 {
+  top: 80%;
+  right: 25%;
+  animation-delay: 6s;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-20px) rotate(180deg);
+  }
+}
+
+@keyframes floatUp {
+  0% {
+    transform: translateY(100vh) scale(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-100px) scale(1);
+    opacity: 0;
+  }
+}
+
+/* 主内容区 */
+.main-content {
+  position: relative;
+  z-index: 1;
   max-width: 400px;
   margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
 }
 
-/* 头像区域 */
-.profile-section {
-  margin-bottom: 20px;
-}
-
-.avatar-glass {
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-radius: 24px;
-  padding: 32px 20px;
+/* 头像和用户信息 */
+.profile-header {
   text-align: center;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  padding: 20px 0;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.6s ease-out;
 }
 
 .avatar-container {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .avatar-circle {
-  width: 96px;
-  height: 96px;
+  width: 120px;
+  height: 120px;
   border-radius: 50%;
   overflow: hidden;
   margin: 0 auto;
-  box-shadow: 0 4px 16px rgba(139, 173, 66, 0.25);
+  box-shadow: 0 8px 32px rgba(139, 173, 66, 0.3);
+  border: 4px solid rgba(255, 255, 255, 0.8);
+  transition: all 0.3s ease;
+}
+
+.avatar-circle:hover {
+  transform: scale(1.05);
+  box-shadow: 0 12px 40px rgba(139, 173, 66, 0.4);
 }
 
 .avatar-circle img {
@@ -408,25 +533,33 @@ onMounted(() => {
   justify-content: center;
   align-items: center;
   color: white;
-  font-size: 36px;
+  font-size: 48px;
   font-weight: bold;
 }
 
 .username {
-  margin: 0 0 8px 0;
-  font-size: 22px;
-  font-weight: 600;
-  color: #1a1a1a;
+  margin: 0 0 12px 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: #166534;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .role-badge {
   display: inline-block;
   color: white;
-  padding: 6px 16px;
-  border-radius: 20px;
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.3px;
+  padding: 8px 20px;
+  border-radius: 24px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
+}
+
+.role-badge:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
 }
 
 /* 管理员 - 红色 */
@@ -445,30 +578,22 @@ onMounted(() => {
 }
 
 /* 加载状态 */
-.loading-section,
-.error-section {
-  margin-bottom: 20px;
-}
-
-.loading-glass,
-.error-glass {
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-radius: 20px;
-  padding: 40px 20px;
-  text-align: center;
-  border: 1px solid rgba(255, 255, 255, 0.4);
+.loading-section {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 300px;
+  gap: 16px;
 }
 
 .spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid rgba(139, 173, 66, 0.2);
+  width: 50px;
+  height: 50px;
+  border: 4px solid rgba(139, 173, 66, 0.2);
   border-top-color: #8BAD42;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
-  margin: 0 auto 12px;
 }
 
 @keyframes spin {
@@ -476,154 +601,230 @@ onMounted(() => {
 }
 
 .loading-text {
-  color: #666;
-  font-size: 14px;
+  color: #6b7280;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+/* 错误状态 */
+.error-section {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 300px;
+  gap: 16px;
+  text-align: center;
+  padding: 0 20px;
 }
 
 .error-icon {
-  font-size: 40px;
+  font-size: 64px;
   display: block;
-  margin-bottom: 12px;
 }
 
 .error-text {
   display: block;
   color: #f56c6c;
-  font-size: 14px;
-  margin-bottom: 16px;
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 8px;
 }
 
 .retry-btn {
   background: linear-gradient(135deg, #8BAD42 0%, #6A9A35 100%);
   color: white;
   border: none;
-  padding: 10px 24px;
-  border-radius: 12px;
-  font-size: 14px;
-  font-weight: 500;
+  padding: 12px 28px;
+  border-radius: 16px;
+  font-size: 16px;
+  font-weight: 600;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(139, 173, 66, 0.3);
 }
 
 .retry-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(139, 173, 66, 0.3);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(139, 173, 66, 0.4);
+  background: linear-gradient(135deg, #6A9A35 0%, #8BAD42 100%);
 }
 
 .retry-btn:active {
   transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(139, 173, 66, 0.3);
 }
 
-/* 信息卡片 */
-.info-sections {
+/* 个人信息区域 */
+.info-section {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 24px;
+  padding: 32px 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.6s ease-out 0.2s;
+}
+
+.section-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #166534;
+  margin: 0 0 24px 0;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.info-grid {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 
-.info-glass-card {
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-radius: 20px;
-  padding: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-}
-
-.info-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1a1a1a;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(139, 173, 66, 0.15);
-}
-
-.info-row {
+.info-item {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 12px 0;
+  gap: 16px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 16px;
+  transition: all 0.3s ease;
 }
 
-.info-row:not(:last-child) {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+.info-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.info-icon {
+  font-size: 24px;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(139, 173, 66, 0.1);
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.info-content {
+  flex: 1;
 }
 
 .info-label {
   font-size: 14px;
-  color: #666;
+  color: #6b7280;
+  font-weight: 500;
+  margin-bottom: 4px;
 }
 
 .info-value {
-  font-size: 14px;
-  color: #1a1a1a;
-  font-weight: 500;
+  font-size: 16px;
+  color: #166534;
+  font-weight: 600;
 }
 
-/* 操作按钮 */
+/* 操作按钮区域 */
 .action-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.6s ease-out 0.4s;
 }
 
 .action-btn {
   width: 100%;
-  height: 52px;
+  height: 56px;
   border-radius: 16px;
   border: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 12px;
   font-size: 16px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.action-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.6s ease;
+}
+
+.action-btn:hover::before {
+  left: 100%;
+}
+
+.action-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
 }
 
 .action-btn:active {
-  transform: scale(0.96);
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .logout-btn {
-  background: rgba(139, 173, 66, 0.1);
-  color: #8BAD42;
-  border: 1.5px solid rgba(139, 173, 66, 0.3);
+  background: linear-gradient(135deg, #8BAD42 0%, #A4C65F 100%);
+  color: white;
+  box-shadow: 0 4px 16px rgba(139, 173, 66, 0.3);
 }
 
 .logout-btn:hover {
-  background: rgba(139, 173, 66, 0.15);
+  background: linear-gradient(135deg, #6A9A35 0%, #8BAD42 100%);
+  box-shadow: 0 6px 20px rgba(139, 173, 66, 0.4);
 }
 
 .delete-btn {
-  background: rgba(245, 108, 108, 0.1);
-  color: #f56c6c;
-  border: 1.5px solid rgba(245, 108, 108, 0.3);
+  background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+  color: white;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.3);
 }
 
 .delete-btn:hover {
-  background: rgba(245, 108, 108, 0.15);
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
 }
 
 .admin-btn {
-  background: rgba(64, 158, 255, 0.1);
-  color: #409eff;
-  border: 1.5px solid rgba(64, 158, 255, 0.3);
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
 }
 
 .admin-btn:hover {
-  background: rgba(64, 158, 255, 0.15);
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
 }
 
 .btn-icon {
-  font-size: 18px;
+  font-size: 20px;
 }
 
 .btn-text {
-  font-weight: 500;
+  font-weight: 600;
+}
+
+/* 动画类 */
+.fade-in {
+  opacity: 1 !important;
+  transform: translateY(0) !important;
 }
 
 /* 对话框 */
@@ -643,62 +844,97 @@ onMounted(() => {
 
 .dialog-content {
   background: white;
-  border-radius: 20px;
-  padding: 24px;
+  border-radius: 24px;
+  padding: 32px 24px;
   width: 100%;
   max-width: 340px;
   animation: slideUp 0.3s ease;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.5);
 }
 
 @keyframes slideUp {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(20px) scale(0.95);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
 .dialog-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #1a1a1a;
-  margin-bottom: 12px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #166534;
+  margin-bottom: 16px;
+  text-align: center;
 }
 
 .dialog-message {
-  font-size: 14px;
-  color: #666;
+  font-size: 16px;
+  color: #6b7280;
   line-height: 1.6;
   margin-bottom: 24px;
+  text-align: center;
 }
 
 .dialog-actions {
   display: flex;
-  gap: 12px;
+  gap: 16px;
 }
 
 .dialog-btn {
   flex: 1;
-  height: 44px;
+  height: 48px;
   border-radius: 12px;
   border: none;
-  font-size: 15px;
-  font-weight: 500;
+  font-size: 16px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.dialog-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.6s ease;
+}
+
+.dialog-btn:hover::before {
+  left: 100%;
 }
 
 .cancel-btn {
   background: #f5f7fa;
-  color: #666;
+  color: #6b7280;
+  border: 1px solid rgba(209, 213, 219, 0.5);
+}
+
+.cancel-btn:hover {
+  background: #e5e7eb;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .confirm-btn {
-  background: linear-gradient(135deg, #f56c6c 0%, #e64a4a 100%);
+  background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
   color: white;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+.confirm-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4);
 }
 
 .confirm-btn:disabled {
@@ -707,46 +943,48 @@ onMounted(() => {
 }
 
 .dialog-btn:active:not(:disabled) {
-  transform: scale(0.96);
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 /* 密码输入框样式 */
 .password-input-wrapper {
   position: relative;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .password-input {
   width: 100%;
-  height: 48px;
-  padding: 0 48px 0 16px;
-  border: 1.5px solid #e0e0e0;
-  border-radius: 12px;
-  font-size: 15px;
-  color: #1a1a1a;
-  background: #f9f9f9;
+  height: 52px;
+  padding: 0 52px 0 20px;
+  border: 2px solid rgba(209, 213, 219, 0.5);
+  border-radius: 16px;
+  font-size: 16px;
+  color: #166534;
+  background: rgba(255, 255, 255, 0.8);
   box-sizing: border-box;
-  transition: all 0.2s;
+  transition: all 0.3s ease;
 }
 
 .password-input:focus {
   outline: none;
   border-color: #8BAD42;
   background: white;
+  box-shadow: 0 0 0 4px rgba(139, 173, 66, 0.1);
 }
 
 .password-input::placeholder {
-  color: #999;
+  color: #9ca3af;
 }
 
 .toggle-password-btn {
   position: absolute;
-  right: 12px;
+  right: 16px;
   top: 50%;
   transform: translateY(-50%);
   background: none;
   border: none;
-  font-size: 20px;
+  font-size: 24px;
   cursor: pointer;
   padding: 4px;
   opacity: 0.7;
@@ -755,5 +993,127 @@ onMounted(() => {
 
 .toggle-password-btn:hover {
   opacity: 1;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .my-page {
+    padding: 16px 12px;
+    padding-bottom: 80px;
+  }
+  
+  .main-content {
+    gap: 24px;
+  }
+  
+  .profile-header {
+    padding: 16px 0;
+  }
+  
+  .avatar-circle {
+    width: 100px;
+    height: 100px;
+    border-width: 3px;
+  }
+  
+  .default-avatar {
+    font-size: 40px;
+  }
+  
+  .username {
+    font-size: 24px;
+    margin-bottom: 10px;
+  }
+  
+  .role-badge {
+    padding: 6px 16px;
+    font-size: 13px;
+  }
+  
+  .info-section {
+    padding: 24px 20px;
+    border-radius: 20px;
+  }
+  
+  .section-title {
+    font-size: 18px;
+    margin-bottom: 20px;
+  }
+  
+  .info-item {
+    padding: 12px;
+    gap: 12px;
+  }
+  
+  .info-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+  
+  .info-value {
+    font-size: 14px;
+  }
+  
+  .action-btn {
+    height: 52px;
+    font-size: 15px;
+  }
+  
+  .dialog-content {
+    padding: 24px 20px;
+    border-radius: 20px;
+  }
+  
+  .dialog-title {
+    font-size: 18px;
+  }
+  
+  .dialog-message {
+    font-size: 14px;
+  }
+  
+  .dialog-btn {
+    height: 44px;
+    font-size: 15px;
+  }
+  
+  .password-input {
+    height: 48px;
+    padding: 0 48px 0 16px;
+  }
+  
+  .toggle-password-btn {
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .avatar-circle {
+    width: 80px;
+    height: 80px;
+  }
+  
+  .default-avatar {
+    font-size: 32px;
+  }
+  
+  .username {
+    font-size: 20px;
+  }
+  
+  .info-section {
+    padding: 20px 16px;
+  }
+  
+  .info-item {
+    gap: 10px;
+  }
+  
+  .info-icon {
+    width: 36px;
+    height: 36px;
+    font-size: 18px;
+  }
 }
 </style>
