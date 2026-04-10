@@ -12,12 +12,17 @@ from Logset import async_log, logger
 SQLALCHEMY_DATABASE_URL = "sqlite:///../database/lark.db"
 
 engine = create_engine(
-  SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread":False}
+  SQLALCHEMY_DATABASE_URL,
+  connect_args={"check_same_thread": False},
+  pool_size=15,
+  max_overflow=0,
+  pool_timeout=3,
 )
 
 # SQLite 性能优化: WAL 模式 + synchronous=NORMAL
 # WAL: 读写互不阻塞, commit 延迟从 ~70ms 降到 ~1-5ms
 # NORMAL: WAL 下仍安全, 仅 OS 级崩溃可能丢最后一个事务
+# 这里 pool_size=3 且 max_overflow=0，保持连接数与并发限制一致，避免高并发时阻塞
 @event.listens_for(engine, "connect")
 def _set_sqlite_pragma(dbapi_conn, connection_record):
     cursor = dbapi_conn.cursor()

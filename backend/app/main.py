@@ -16,6 +16,7 @@ from logapi import DeviceLog
 import os
 from Logset import async_log, logger, request_logger, log_executor
 from contextlib import asynccontextmanager
+import asyncio
 
 
 @asynccontextmanager
@@ -125,66 +126,91 @@ async def global_exception_handler(request: Request, exc: Exception):
         status_code=500, content={"message": "内部服务器错误", "error_id": error_id}
     )
 
+class RequestLimiter:
+    def __init__(self, max_concurrent: int):
+        self._max = max_concurrent
+        self._current = 0
+        self._lock = asyncio.Lock()
+
+    async def acquire(self) -> bool:
+        async with self._lock:
+            if self._current >= self._max:
+                return False
+            self._current += 1
+            return True
+
+    async def release(self) -> None:
+        async with self._lock:
+            if self._current > 0:
+                self._current -= 1
+
+request_limiter = RequestLimiter(5)
 
 # 请求日志中间件
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    # 记录请求开始时间
-    start_time = time.time()
+    if not await request_limiter.acquire():
+        return JSONResponse({"detail": "server busy"}, status_code=503)
 
-    # 获取请求信息
-    request_info = {
-        "method": request.method,
-        "url": str(request.url),
-        "path": request.url.path,
-        "query_params": dict(request.query_params),
-        "client": {"host": request.client.host, "port": request.client.port},
-        "headers": dict(request.headers),
-    }
-
-    # 记录请求体（对于非表单数据）
     try:
-        if request.method in ["POST", "PUT", "PATCH"]:
-            body = await request.body()
-            if body:
-                try:
-                    request_info["body"] = json.loads(body)
-                except json.JSONDecodeError:
-                    request_info["body"] = body.decode("utf-8")
-    except Exception:
-        request_info["body"] = "无法解析请求体"
+        # 记录请求开始时间
+        start_time = time.time()
 
-    # 处理请求
-    response = await call_next(request)
+        # 获取请求信息
+        request_info = {
+            "method": request.method,
+            "url": str(request.url),
+            "path": request.url.path,
+            "query_params": dict(request.query_params),
+            "client": {"host": request.client.host, "port": request.client.port},
+            "headers": dict(request.headers),
+        }
 
-    # 计算处理时间
-    process_time = (time.time() - start_time) * 1000
+        # 记录请求体（对于非表单数据）
+        try:
+            if request.method in ["POST", "PUT", "PATCH"]:
+                body = await request.body()
+                if body:
+                    try:
+                        request_info["body"] = json.loads(body)
+                    except json.JSONDecodeError:
+                        request_info["body"] = body.decode("utf-8")
+        except Exception:
+            request_info["body"] = "无法解析请求体"
 
-    # 安全获取原因短语
-    status_code = response.status_code
-    try:
-        reason = http.HTTPStatus(status_code).phrase
-    except ValueError:
-        reason = "Unknown"  # 处理非标准状态码
+        # 处理请求
+        response = await call_next(request)
 
-    # 记录响应信息
-    await async_log(
-        logger,
-        "info",
-        f"{request.method} {request.url.path} - "
-        f"{response.status_code} {reason}",
-    )
+        # 计算处理时间
+        process_time = (time.time() - start_time) * 1000
 
-    await async_log(
-        request_logger,
-        "info",
-        f"{request.method} {request.url.path} - "
-        f"{response.status_code} {reason} - "
-        f"处理时间: {process_time:.2f}ms\n"
-        f"请求详情: {json.dumps(request_info, ensure_ascii=False, default=str)}\n",
-    )
+        # 安全获取原因短语
+        status_code = response.status_code
+        try:
+            reason = http.HTTPStatus(status_code).phrase
+        except ValueError:
+            reason = "Unknown"  # 处理非标准状态码
 
-    return response
+        # 记录响应信息
+        await async_log(
+            logger,
+            "info",
+            f"{request.method} {request.url.path} - "
+            f"{response.status_code} {reason}",
+        )
+
+        await async_log(
+            request_logger,
+            "info",
+            f"{request.method} {request.url.path} - "
+            f"{response.status_code} {reason} - "
+            f"处理时间: {process_time:.2f}ms\n"
+            f"请求详情: {json.dumps(request_info, ensure_ascii=False, default=str)}\n",
+        )
+
+        return response
+    finally:
+        await request_limiter.release()
 
 
 if __name__ == "__main__":
