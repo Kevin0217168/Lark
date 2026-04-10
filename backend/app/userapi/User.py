@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from typing import Annotated, List
 from fastapi import status, Path, Query, Depends, Body
 from fastapi.responses import JSONResponse
+from datetime import datetime, timezone
 
 from schema import *
 
@@ -32,6 +33,7 @@ async def read_users_me(
 )
 async def get_users(
     filter_query: Annotated[UsersFilter, Query()],
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
     db: Db.Session = Depends(Db.GetDb("GetUsers")),
 ):
 
@@ -58,6 +60,7 @@ async def get_users(
 )
 async def get_users(
     id: Annotated[int, Path(title="用户id", description="数据库用户唯一主键id")],
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
     db: Db.Session = Depends(Db.GetDb("GetUsers")),
 ):
     """
@@ -86,8 +89,8 @@ async def register_user(
     db: Db.Session = Depends(Db.GetDb("RegisterUser")),
 ):
     """
-    # 注册新用户 (用户名唯一)
-    规则不符返回422, 用户重复返回400, 注册成功返回当前用户信息
+    # 注册新用户 (用户名唯一，需要邀请码)
+    规则不符返回422, 用户重复返回400, 邀请码无效返回400, 注册成功返回当前用户信息
     
     ## 后端验证规则
     - 用户名 长度3-20 只能包含字母、数字、下划线，且不能以下划线开头或结尾
@@ -95,8 +98,58 @@ async def register_user(
     - 用户昵称 长度1-50
     - 用户权限 必须是["root", "user", "readonly"]其中的一个
     - 图片地址必须以 http:// 或 https:// 开头
+    - 邀请码 长度9-11，必须有效且未过期
     
     """
+    # 1. 验证邀请码
+    try:
+        invitation_code = Db.GetInvitationCode(db, body.invitation_code)
+        
+        # 邀请码不存在
+        if not invitation_code:
+            await async_log(logger, "warning", f"注册失败: 邀请码不存在 - {body.invitation_code}")
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content=CommonOut(
+                    code=status.HTTP_400_BAD_REQUEST, 
+                    msg="邀请码不存在或已失效", 
+                    data=None
+                ).model_dump(),
+            )
+        
+        # 邀请码已失效（剩余次数为0或已过期）
+        # 统一比较时区：邀请编码可能带有 tzinfo，Db.get_local_time 返回UTC+8
+        code_expire = invitation_code.expire_at
+        local_time = Db.get_local_time()
+        if code_expire is not None:
+            if code_expire.tzinfo is None and local_time.tzinfo is not None:
+                code_expire = code_expire.replace(tzinfo=timezone.utc)
+            elif code_expire.tzinfo is not None and local_time.tzinfo is None:
+                local_time = local_time.replace(tzinfo=timezone.utc)
+
+        if invitation_code.remaining_uses <= 0 or (code_expire is not None and code_expire < local_time):
+            await async_log(logger, "warning", f"注册失败: 邀请码已失效 - {body.invitation_code}")
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content=CommonOut(
+                    code=status.HTTP_400_BAD_REQUEST, 
+                    msg="邀请码不存在或已失效", 
+                    data=None
+                ).model_dump(),
+            )
+        
+    except Exception as e:
+        await async_log(logger, "error", f"注册失败: 邀请码验证异常 - {str(e)}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content=CommonOut(
+                code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+                msg="服务器内部错误", 
+                data=None
+            ).model_dump(),
+        )
+    
+    # 2. 检查用户是否已存在
     if len(Db.GetUsers(db, username=body.username)):
         # 用户已存在
         return JSONResponse(
@@ -106,8 +159,38 @@ async def register_user(
             ).model_dump(),
         )
 
-    # 直接注册
-    return CommonOut(data=Db.RegisterUser(db, **body.model_dump(exclude_unset=True)))
+    # 3. 使用邀请码并注册用户
+    try:
+        # 使用邀请码
+        use_success = Db.UseInvitationCode(db, body.invitation_code)
+        if not use_success:
+            await async_log(logger, "warning", f"注册失败: 邀请码使用失败 - {body.invitation_code}")
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content=CommonOut(
+                    code=status.HTTP_400_BAD_REQUEST, 
+                    msg="邀请码不存在或已失效", 
+                    data=None
+                ).model_dump(),
+            )
+        
+        # 注册用户（包含邀请码字段）
+        user_data = body.model_dump(exclude_unset=True)
+        new_user = Db.RegisterUser(db, **user_data)
+        
+        await async_log(logger, "info", f"注册成功: 用户 {body.username} 使用邀请码 {body.invitation_code}")
+        return CommonOut(data=new_user)
+        
+    except Exception as e:
+        await async_log(logger, "error", f"注册失败: {str(e)}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content=CommonOut(
+                code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+                msg="服务器内部错误", 
+                data=None
+            ).model_dump(),
+        )
 
 
 @router.put(
@@ -119,6 +202,7 @@ async def register_user(
 async def update_user(
     id: Annotated[int, Path(title="用户id", description="数据库用户唯一主键id")],
     body: Annotated[UserUpdateItem, Body()],
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
     db: Db.Session = Depends(Db.GetDb("UpdateUser")),
 ):
     """

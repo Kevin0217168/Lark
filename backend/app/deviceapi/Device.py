@@ -90,6 +90,7 @@ class Esp32:
 )
 async def get_devices(
     filter_query: Annotated[DeviceFilter, Query()],
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
     db: Db.Session = Depends(Db.GetDb("GetDevices")),
 ):
     """
@@ -114,6 +115,7 @@ async def get_devices(
 )
 async def get_device(
     id: Annotated[int, Path(title="设备id", description="数据库设备唯一主键id")],
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
     db: Db.Session = Depends(Db.GetDb("GetDevice")),
 ):
     """
@@ -133,18 +135,31 @@ async def get_device(
 @router.post(
     "",
     response_model=CommonOut[Db.DeviceOut],
-    responses=R400_DEVICE_ALREADY_EXIST,
+    responses={**R400_DEVICE_ALREADY_EXIST, **R403_FORBIDDEN},
     summary="注册新设备",
 )
 async def register_device(
     body: Annotated[DeviceItem, Body()],
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
     db: Db.Session = Depends(Db.GetDb("RegisterDevice")),
 ):
     """
     # 注册新设备（设备密钥唯一）
     
     区域+编号不可出现重复
+    
+    ## 权限要求
+    仅 root 用户可操作
     """
+    # 检查权限
+    if current_user.role != "root":
+        return JSONResponse(
+            status_code=403,
+            content=CommonOut(
+                code=403, msg="Permission denied.", data=None
+            ).model_dump(),
+        )
+    
     # 检查密钥和区域+编号
     s = Db.GetDevices(db, secret=body.secret)
     an = Db.GetDevices(db, area=body.area, number=body.number)
@@ -162,12 +177,13 @@ async def register_device(
 @router.put(
     "/{id}",
     response_model=CommonOut[Db.DeviceOut],
-    responses=R404_DEVICE_NOT_FOUND,
+    responses={**R404_DEVICE_NOT_FOUND, **R403_FORBIDDEN},
     summary="更新设备信息",
 )
 async def update_device(
     id: Annotated[int, Path(title="设备id", description="数据库设备唯一主键id")],
     body: Annotated[DeviceUpdateItem, Body()],
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
     db: Db.Session = Depends(Db.GetDb("UpdateDevice")),
 ):
     """
@@ -177,7 +193,19 @@ async def update_device(
     ## 字段更新规则：
     - 字符串字段：若传入 NULL 则不更新；若传入空字符串则置为 NULL; 否则更新为新值。
     - 布尔/整数字段：仅当传入非 NULL 时更新
+    
+    ## 权限要求
+    仅 root 用户可操作
     """
+    # 检查权限
+    if current_user.role != "root":
+        return JSONResponse(
+            status_code=403,
+            content=CommonOut(
+                code=403, msg="Permission denied.", data=None
+            ).model_dump(),
+        )
+    
     updated = Db.UpdateDevice(db, id=id, **body.model_dump(exclude_unset=True))
     if not updated:
         return JSONResponse(
@@ -258,6 +286,7 @@ async def _send_device_command(device_id: int, command: dict) -> CommonOut:
 )
 async def restart_device(
     id: Annotated[int, Path(title="设备id", description="数据库设备唯一主键id")],
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
     db: Db.Session = Depends(Db.GetDb("RestartDevice")),
 ):
     """
@@ -289,6 +318,7 @@ async def restart_device(
 )
 async def ota_device(
     id: Annotated[int, Path(title="设备id", description="数据库设备唯一主键id")],
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
     db: Db.Session = Depends(Db.GetDb("OtaDevice")),
 ):
     """
@@ -321,6 +351,7 @@ async def ota_device(
 )
 async def get_device_version(
     id: Annotated[int, Path(title="设备id", description="数据库设备唯一主键id")],
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
     db: Db.Session = Depends(Db.GetDb("GetDeviceVersion")),
 ):
     """

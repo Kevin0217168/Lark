@@ -10,6 +10,7 @@ from stream import Stream
 from userapi import User, Login
 from deviceapi import Device
 from sensorapi import SensorData
+from invitationapi import router as invitation_router
 from firmwareapi import Firmware
 from logapi import DeviceLog
 
@@ -30,8 +31,8 @@ async def lifespan(app: FastAPI):
 
 
 isDeploy = os.environ.get("FASTAPI_DEPLOY", None)
-prepath = "/api" if isDeploy is None else ""
-prefix = "api" if isDeploy is None else ""
+prepath = "" if isDeploy is None else "/"
+prefix = "/api" if isDeploy is None else ""
 
 app = FastAPI(
     lifespan=lifespan,
@@ -57,13 +58,14 @@ app.include_router(User.router)
 app.include_router(Login.router)
 app.include_router(Device.router)
 app.include_router(SensorData.router)
+app.include_router(invitation_router)
 app.include_router(Firmware.router)
 app.include_router(DeviceLog.router)
 
 # 挂载静态文件
 from fastapi.staticfiles import StaticFiles
 
-app.mount(path=f"{prepath}/static", app=StaticFiles(directory="static"), name="static")
+app.mount(path=f"{prefix}/static", app=StaticFiles(directory="static"), name="static")
 
 from fastapi.openapi.docs import (
     get_redoc_html,
@@ -79,8 +81,8 @@ async def custom_swagger_ui_html():
         title=app.title + " - Swagger UI",
         oauth2_redirect_url=app.swagger_ui_oauth2_redirect_url,
         openapi_url="openapi.json",
-        swagger_js_url=f"{prefix}/static/swagger-ui-bundle.js",
-        swagger_css_url=f"{prefix}/static/swagger-ui.css",
+        swagger_js_url=f"{prepath}api/static/swagger-ui-bundle.js",
+        swagger_css_url=f"{prepath}api/static/swagger-ui.css",
     )
 
 
@@ -95,7 +97,7 @@ async def redoc_html():
     return get_redoc_html(
         title=app.title + " - ReDoc",
         openapi_url="openapi.json",
-        redoc_js_url=f"{prefix}/static/redoc.standalone.js",
+        redoc_js_url=f"{prepath}api/static/redoc.standalone.js",
     )
 
 

@@ -26,6 +26,7 @@ router = APIRouter(prefix="/sensors", tags=["Sensors"])
 
 @router.get("/grouped", response_model=CommonOut[List[GroupedDataItem]], responses=R200_SENSOR_GROUP, summary="获取分组统计数据")
 async def get_grouped_data(
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
     now: Annotated[Optional[datetime], Query()] = None,
     period: Annotated[int, Query(ge=1, description="时间段（秒）", examples=[86400])] = 86400,
     group: Annotated[int, Query(ge=1, le=100, description="分组数", examples=[24])] = 24,
@@ -109,6 +110,7 @@ async def get_grouped_data(
 
 @router.get("/summary", response_model=CommonOut[SummaryData], responses=R200_SENSOR_SUMMARY, summary="获取数据统计摘要")
 async def get_summary_data(
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
     now: Annotated[Optional[datetime], Query(description="当前时间（不传则使用服务器时间）")] = None,
     period: Annotated[int, Query(ge=1, description="时间段（秒），以 now 向前计算", examples=[86400])] = 86400,
     device_id: Annotated[Optional[int], Query(description="设备ID，不传则统计所有设备")] = None,
@@ -176,6 +178,7 @@ async def get_summary_data(
 )
 async def get_sensors_data_by_device(
     device_id: Annotated[int, Path(title="设备ID", description="数据库设备唯一主键id")],
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
     start_time: Annotated[Optional[datetime], Query()] = None,
     end_time: Annotated[Optional[datetime], Query()] = None,
     skip: Annotated[int, Query(ge=0)] = 0,
@@ -216,6 +219,7 @@ async def get_sensors_data_by_device(
     summary="查询所有传感器数据",
 )
 async def get_sensors_data(
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
     start_time: Annotated[Optional[datetime], Query()] = None,
     end_time: Annotated[Optional[datetime], Query()] = None,
     skip: Annotated[int, Query(ge=0)] = 0,

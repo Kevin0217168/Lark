@@ -1,63 +1,133 @@
 <template>
-  <el-card class="profile-card">
-    <h3 class="title">个人信息</h3>
+  <div class="profile-container" :class="{ 'mobile': isMobile }">
+    <!-- 桌面端：使用 el-card 包装 -->
+    <el-card v-if="!isMobile" class="profile-card">
+      <h3 class="title">个人信息</h3>
 
-    <!-- 头像显示 -->
-    <div class="avatar-wrapper">
-      <div v-if="userInfo.avatar" class="avatar-circle">
-        <el-image :src="userInfo.avatar" :alt="userInfo.nickname" fit="cover" />
+      <!-- 头像显示 -->
+      <div class="avatar-wrapper">
+        <div v-if="userInfo.avatar" class="avatar-circle">
+          <el-image :src="userInfo.avatar" :alt="userInfo.nickname" fit="cover" />
+        </div>
+        <div v-else class="avatar-circle default-avatar">
+          <span>{{ userInfo.nickname ? userInfo.nickname.charAt(0) : '?' }}</span>
+        </div>
       </div>
-      <div v-else class="avatar-circle default-avatar">
-        <span>{{ userInfo.nickname ? userInfo.nickname.charAt(0) : '?' }}</span>
+
+      <div v-if="loading" class="loading-container">
+        <el-icon class="is-loading"><svg-icon /></el-icon>
+        <span>加载中...</span>
       </div>
-    </div>
 
-    <div v-if="loading" class="loading-container">
-      <el-icon class="is-loading"><svg-icon /></el-icon>
-      <span>加载中...</span>
-    </div>
+      <div v-else-if="error" class="error-container">
+        <el-icon><warning /></el-icon>
+        <span>{{ error }}</span>
+        <el-button type="primary" @click="fetchUserInfo">重新加载</el-button>
+      </div>
 
-    <div v-else-if="error" class="error-container">
-      <el-icon><warning /></el-icon>
-      <span>{{ error }}</span>
-      <el-button type="primary" @click="fetchUserInfo">重新加载</el-button>
-    </div>
+      <el-form v-else :model="userInfo" label-width="120px">
+        <el-form-item label="用户名">
+          <el-input v-model="userInfo.username" readonly />
+        </el-form-item>
 
-    <el-form v-else :model="userInfo" label-width="120px">
-      <el-form-item label="用户名">
-        <el-input v-model="userInfo.username" readonly />
-      </el-form-item>
+        <el-form-item label="昵称">
+          <el-input v-model="userInfo.nickname" readonly />
+        </el-form-item>
 
-      <el-form-item label="昵称">
-        <el-input v-model="userInfo.nickname" readonly />
-      </el-form-item>
+        <el-form-item label="账号类型">
+          <el-input :model-value="userInfo.role === 'root' ? '管理员' : '普通用户'" readonly />
+        </el-form-item>
 
-      <el-form-item label="账号类型">
-        <el-input :model-value="userInfo.role === 'root' ? '管理员' : '普通用户'" readonly />
-      </el-form-item>
+        <el-form-item label="邮箱">
+          <el-input v-model="userInfo.email" readonly placeholder="暂无邮箱" />
+        </el-form-item>
+      </el-form>
 
-      <el-form-item label="邮箱">
-        <el-input v-model="userInfo.email" readonly placeholder="暂无邮箱" />
-      </el-form-item>
-    </el-form>
+      <div class="action-container">
+        <el-button type="primary" @click="openEditDialog">修改账号信息</el-button>
+        <el-button type="danger" @click="handleLogout">退出登录</el-button>
+        <el-button type="danger" @click="openDeleteAccountDialog">注销账号</el-button>
+      </div>
+    </el-card>
 
-    <div class="action-container">
-      <el-button type="primary" @click="openEditDialog">修改账号信息</el-button>
-      <el-button type="danger" @click="handleLogout">退出登录</el-button>
-      <el-button type="danger" @click="openDeleteAccountDialog">注销账号</el-button>
+    <!-- 移动端：全屏设计 -->
+    <div v-else class="mobile-profile">
+      <!-- 头像显示 -->
+      <div class="avatar-section">
+        <div v-if="userInfo.avatar" class="avatar-circle">
+          <el-image :src="userInfo.avatar" :alt="userInfo.nickname" fit="cover" />
+        </div>
+        <div v-else class="avatar-circle default-avatar">
+          <span>{{ userInfo.nickname ? userInfo.nickname.charAt(0) : '?' }}</span>
+        </div>
+        <h3 class="username">{{ userInfo.nickname || userInfo.username }}</h3>
+        <el-tag :type="userInfo.role === 'root' ? 'danger' : 'info'" size="small">
+          {{ userInfo.role === 'root' ? '管理员' : '普通用户' }}
+        </el-tag>
+      </div>
+
+      <div v-if="loading" class="loading-container">
+        <el-icon class="is-loading"><loading /></el-icon>
+        <span>加载中...</span>
+      </div>
+
+      <div v-else class="info-section">
+        <!-- 错误信息 -->
+        <div v-if="error" class="error-container">
+          <el-icon><warning /></el-icon>
+          <span>{{ error }}</span>
+          <el-button type="primary" size="small" @click="fetchUserInfo">重新加载</el-button>
+        </div>
+
+        <!-- 用户信息卡片 -->
+        <div v-if="!error" class="info-card">
+          <div class="info-item">
+            <span class="label">用户名</span>
+            <span class="value">{{ userInfo.username }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">昵称</span>
+            <span class="value">{{ userInfo.nickname || '未设置' }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">邮箱</span>
+            <span class="value">{{ userInfo.email || '未设置' }}</span>
+          </div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="action-section">
+          <el-button v-if="!error" type="primary" @click="openEditDialog" class="action-btn">
+            <el-icon><edit /></el-icon>
+            修改账号信息
+          </el-button>
+          <el-button v-if="!error && isAdmin" type="warning" @click="goToUserManage" class="action-btn">
+            <el-icon><user /></el-icon>
+            用户管理
+          </el-button>
+          <el-button v-if="!error" type="danger" plain @click="openDeleteAccountDialog" class="action-btn">
+            <el-icon><delete /></el-icon>
+            注销账号
+          </el-button>
+          <el-button type="danger" @click="handleLogout" class="action-btn">
+            <el-icon><switch-button /></el-icon>
+            退出登录
+          </el-button>
+        </div>
+      </div>
     </div>
 
     <!-- 验证密码对话框 -->
     <el-dialog
       v-model="verifyPasswordDialogVisible"
       title="验证密码"
-      width="400px"
+      :width="isMobile ? '90%' : '400px'"
     >
       <el-form
         :model="verifyPasswordForm"
         ref="verifyPasswordFormRef"
         :rules="verifyPasswordRules"
-        label-width="100px"
+        :label-width="isMobile ? '100px' : '100px'"
       >
         <el-form-item label="当前密码" prop="password">
           <el-input v-model="verifyPasswordForm.password" type="password" placeholder="请输入当前密码" />
@@ -76,7 +146,7 @@
     <el-dialog
       v-model="confirmDeleteDialogVisible"
       title="确认注销账号"
-      width="400px"
+      :width="isMobile ? '90%' : '400px'"
     >
       <p>确定要注销账号吗？此操作不可恢复，您的所有数据将被永久删除。</p>
 
@@ -92,13 +162,13 @@
     <el-dialog
       v-model="editDialogVisible"
       title="修改账号信息"
-      width="500px"
+      :width="isMobile ? '90%' : '500px'"
     >
       <el-form
         :model="editForm"
         ref="editFormRef"
         :rules="editRules"
-        label-width="120px"
+        :label-width="isMobile ? '100px' : '120px'"
       >
         <el-form-item label="用户名" prop="username">
           <el-input v-model="editForm.username" />
@@ -140,13 +210,15 @@
         </span>
       </template>
     </el-dialog>
-  </el-card>
+  </div>
 </template>
 
-<script lang="ts" setup>
-import { ref, onMounted } from "vue";
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted, computed } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
+import { Edit, SwitchButton, Delete, Loading, Warning, User } from '@element-plus/icons-vue';
+import { api } from '../utils/api';
 
 const router = useRouter();
 const loading = ref(false);
@@ -160,10 +232,27 @@ const verifyingPassword = ref(false);
 const deletingAccount = ref(false);
 const verifyPasswordFormRef = ref();
 
+// 检测是否为移动设备
+const isMobile = ref(window.innerWidth < 768);
+
+// 监听窗口大小变化
+const handleWindowResize = () => {
+  isMobile.value = window.innerWidth < 768;
+};
+
+onMounted(() => {
+  window.addEventListener('resize', handleWindowResize);
+  fetchUserInfo();
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleWindowResize);
+});
+
 const editForm = ref({
   username: '',
   nickname: '',
-  email: null,
+  email: null as string | null,
   avatar: '',
   changePassword: false,
   currentPassword: '',
@@ -177,7 +266,7 @@ const verifyPasswordForm = ref({
 
 const verifyPasswordRules = {
   password: [
-  { required: true, message: '请输入当前密码', trigger: 'blur' },
+    { required: true, message: '请输入当前密码', trigger: 'blur' },
     { min: 6, max: 20, message: '密码长度在 6 到 20 个字符', trigger: 'blur' }
   ]
 };
@@ -213,7 +302,7 @@ const editRules = {
       trigger: 'blur'
     },
     { min: 8, max: 32, message: '密码长度在 8 到 32 个字符', trigger: 'blur' },
-    { pattern: /^(?=.*[a-zA-Z0-9])[a-zA-Z0-9]+$/, message: '密码必须包含至少一个数字或字母', trigger: 'blur' }
+    { pattern: /^(?=.*[a-zA-Z])(?=.*\d)[a-zA-Z\d]+$/, message: '密码必须同时包含字母和数字', trigger: 'blur' }
   ],
   confirmNewPassword: [
     {
@@ -241,14 +330,16 @@ const userInfo = ref({
   username: '',
   nickname: '',
   role: '',
-  email: null,
-  banner: null,
+  email: null as string | null,
+  banner: null as string | null,
   avatar: ''
 });
 
-// API基础地址
-// 使用相对路径，通过Vite代理解决CORS问题
-const API_BASE_URL = '';
+const isAdmin = computed(() => userInfo.value.role === 'root');
+
+const goToUserManage = () => {
+  router.push('/UserManage');
+};
 
 // 获取用户信息
 const fetchUserInfo = async () => {
@@ -256,36 +347,7 @@ const fetchUserInfo = async () => {
     loading.value = true;
     error.value = '';
 
-    const accessToken = localStorage.getItem('accessToken');
-    if (!accessToken) {
-      throw new Error('未登录，请先登录');
-    }
-
-    const response = await fetch(`${API_BASE_URL}/api/users/me`, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${accessToken}`
-      },
-      credentials: 'include'
-    });
-
-    if (response.status === 401) {
-      // Token过期，尝试刷新
-      const refreshed = await tryRefreshToken();
-      if (refreshed) {
-        // 刷新成功，重新获取用户信息
-        return fetchUserInfo();
-      } else {
-        throw new Error('登录已过期，请重新登录');
-      }
-    }
-
-    if (!response.ok) {
-      throw new Error('获取用户信息失败');
-    }
-
-    const responseData = await response.json();
+    const responseData = await api.get('/api/users/me');
     if (responseData.code === 200 && responseData.data) {
       userInfo.value = responseData.data;
       // 更新localStorage中的用户名和头像信息，确保Header中的头像同步更新
@@ -306,21 +368,11 @@ const fetchUserInfo = async () => {
 // 尝试刷新token
 const tryRefreshToken = async (): Promise<boolean> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/refresh`, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-      },
-      credentials: 'include',
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      if (data.access_token) {
-        localStorage.setItem('accessToken', data.access_token);
-        localStorage.setItem('tokenType', data.token_type || 'bearer');
-        return true;
-      }
+    const data = await api.post('/api/refresh');
+    if (data.access_token) {
+      localStorage.setItem('accessToken', data.access_token);
+      localStorage.setItem('tokenType', data.token_type || 'bearer');
+      return true;
     }
     return false;
   } catch (error) {
@@ -330,9 +382,30 @@ const tryRefreshToken = async (): Promise<boolean> => {
 };
 
 // 打开注销账号对话框
-const openDeleteAccountDialog = () => {
-  verifyPasswordForm.value.password = '';
-  verifyPasswordDialogVisible.value = true;
+const openDeleteAccountDialog = async () => {
+  try {
+    // 如果当前用户是管理员，先检查管理员账号数量
+    if (userInfo.value.role === 'root') {
+      const usersData = await api.get('/api/users');
+      if (usersData.code === 200 && usersData.data) {
+        // 统计管理员账号数量
+        const adminCount = usersData.data.filter((user: any) => user.role === 'root').length;
+        
+        // 如果只有一个管理员账号，不允许注销
+        if (adminCount <= 1) {
+          ElMessage.error('系统中只有一个管理员账号，无法注销。请先创建其他管理员账号。');
+          return;
+        }
+      }
+    }
+
+    // 检查通过，打开密码验证对话框
+    verifyPasswordForm.value.password = '';
+    verifyPasswordDialogVisible.value = true;
+  } catch (err) {
+    ElMessage.error('检查管理员账号数量失败');
+    console.error(err);
+  }
 };
 
 // 验证密码并打开确认对话框
@@ -350,26 +423,19 @@ const verifyPasswordAndConfirmDelete = async () => {
     params.append('client_id', '');
     params.append('client_secret', '');
 
-    const response = await fetch(`${API_BASE_URL}/api/login`, {
-      method: 'POST',
+    const data = await api.post('/api/login', params.toString(), {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json',
-      },
-      body: params.toString(),
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      if (data.access_token) {
-        // 密码验证成功，关闭验证对话框，打开确认对话框
-        verifyPasswordDialogVisible.value = false;
-        confirmDeleteDialogVisible.value = true;
-      } else {
-        throw new Error('密码验证失败');
       }
+    });
+    
+    if (data.access_token) {
+      // 密码验证成功，关闭验证对话框，打开确认对话框
+      verifyPasswordDialogVisible.value = false;
+      confirmDeleteDialogVisible.value = true;
     } else {
-      throw new Error('密码不正确');
+      throw new Error('密码验证失败');
     }
   } catch (err) {
     ElMessage.error((err as Error).message || '密码验证失败');
@@ -384,20 +450,7 @@ const handleDeleteAccount = async () => {
     deletingAccount.value = true;
 
     // 先调用 /api/users/me 获取当前账号id
-    const meResponse = await fetch(`${API_BASE_URL}/api/users/me`, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
-      },
-      credentials: 'include'
-    });
-
-    if (!meResponse.ok) {
-      throw new Error('获取账号信息失败');
-    }
-
-    const meResponseData = await meResponse.json();
+    const meResponseData = await api.get('/api/users/me');
     if (meResponseData.code !== 200 || !meResponseData.data) {
       throw new Error('获取账号信息失败');
     }
@@ -405,20 +458,7 @@ const handleDeleteAccount = async () => {
     const userId = meResponseData.data.id;
 
     // 再调用 /api/users/{id} 删除账号
-    const deleteResponse = await fetch(`${API_BASE_URL}/api/users/${userId}`, {
-      method: 'DELETE',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
-      },
-      credentials: 'include'
-    });
-
-    if (!deleteResponse.ok) {
-      throw new Error('注销账号失败');
-    }
-
-    const deleteResponseData = await deleteResponse.json();
+    const deleteResponseData = await api.delete(`/api/users/${userId}`);
     if (deleteResponseData.code === 200) {
       ElMessage.success('账号已注销');
       // 清除登录状态和token信息
@@ -427,6 +467,8 @@ const handleDeleteAccount = async () => {
       localStorage.removeItem('accessToken');
       localStorage.removeItem('tokenType');
       localStorage.removeItem('avatar');
+      localStorage.removeItem('role');
+      localStorage.removeItem('userId');
       
       // 清除cookie
       const clearCookies = () => {
@@ -460,12 +502,22 @@ const handleDeleteAccount = async () => {
 };
 
 // 退出登录
-const handleLogout = () => {
+const handleLogout = async () => {
+  try {
+    const data = await api.post('/api/logout');
+    console.log('退出登录成功:', data);
+  } catch (error) {
+    console.error('退出登录请求出错:', error);
+  }
+  
   // 清除登录状态和token信息
   localStorage.removeItem('isAuthenticated');
   localStorage.removeItem('username');
   localStorage.removeItem('accessToken');
   localStorage.removeItem('tokenType');
+  localStorage.removeItem('avatar');
+  localStorage.removeItem('role');
+  localStorage.removeItem('userId');
 
   // 清除cookie
   const clearCookies = () => {
@@ -521,20 +573,14 @@ const verifyPassword = async (username: string, password: string): Promise<boole
     params.append('client_id', '');
     params.append('client_secret', '');
     
-    const response = await fetch(`${API_BASE_URL}/api/login`, {
-      method: 'POST',
+    const data = await api.post('/api/login', params.toString(), {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json',
-      },
-      body: params.toString(),
+      }
     });
-
-    if (response.ok) {
-      const data = await response.json();
-      return data.access_token !== undefined;
-    }
-    return false;
+    
+    return data.access_token !== undefined;
   } catch (error) {
     console.error('验证密码失败:', error);
     return false;
@@ -584,8 +630,9 @@ const saveChanges = async () => {
       requestData["email"] = editForm.value.email || "";
     }
     
-    if (editForm.value.avatar !== userInfo.value.avatar) {
-      requestData["avatar"] = editForm.value.avatar || "";
+    // 只有当头像URL有实际值且发生变化时才发送
+    if (editForm.value.avatar && editForm.value.avatar !== userInfo.value.avatar) {
+      requestData["avatar"] = editForm.value.avatar;
     }
     
     // 如果用户选择修改密码，才包含password字段
@@ -594,20 +641,9 @@ const saveChanges = async () => {
     }
 
     // 发送请求
-    const response = await fetch(`${API_BASE_URL}/api/users/${userInfo.value.id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
-      },
-      body: JSON.stringify(requestData),
-      credentials: 'include'
-    });
-
-    const responseData = await response.json();
+    const responseData = await api.put(`/api/users/${userInfo.value.id}`, requestData);
     
-    if (response.ok && responseData.code === 200) {
+    if (responseData.code === 200) {
       ElMessage.success('修改账号信息成功');
       editDialogVisible.value = false;
       // 重新获取用户信息
@@ -618,22 +654,9 @@ const saveChanges = async () => {
       // 触发登录状态变化事件，通知Header组件更新
       window.dispatchEvent(new CustomEvent('loginStatusChanged'));
     } else {
-      // 处理422错误，显示详细错误信息
-      if (response.status === 422 && responseData.detail && Array.isArray(responseData.detail) && responseData.detail.length > 0) {
-        // 处理 [{ loc: [...], msg: "...", type: "..." }] 格式的错误
-        const errorMessages = responseData.detail
-          .map((err: any) => {
-            const msg = err.msg || '';
-            // 移除 "Value error, " 前缀
-            return msg.replace(/^Value error,\s*/, '');
-          })
-          .filter((msg: string) => msg.length > 0)
-          .join('\n');
-        throw new Error(errorMessages || '修改账号信息失败');
-      } else if (response.status === 422 && responseData.errors) {
-        // 提取错误信息并显示
-        const errorMessages = Object.values(responseData.errors).flat().join('\n');
-        throw new Error(errorMessages || '修改账号信息失败');
+      if (responseData.detail && Array.isArray(responseData.detail) && responseData.detail.length > 0) {
+        const errorMessages = responseData.detail.map((error: any) => error.msg).join(', ');
+        throw new Error(errorMessages);
       } else {
         throw new Error(responseData.msg || '修改账号信息失败');
       }
@@ -655,29 +678,34 @@ const saveChanges = async () => {
     saving.value = false;
   }
 };
-
-// 组件挂载时获取用户信息
-onMounted(() => {
-  fetchUserInfo();
-});
 </script>
 
 <style lang="scss" scoped>
+.profile-container {
+  min-height: 100vh;
+  position: relative;
+}
+
+/* 桌面端样式 */
 .profile-card {
   z-index: 1;
   padding: 20px;
   width: 600px;
   margin: 5% auto;
-  border-radius: 5%;
+  border-radius: 15px;
 }
 
-/* 增加表单项目之间的间距，确保错误信息完整显示 */
-:deep(.el-form-item) {
+.profile-card .title {
+  text-align: center;
+  margin-bottom: 20px;
+  color: #303133;
+}
+
+.profile-card :deep(.el-form-item) {
   margin-bottom: 36px;
 }
 
-/* 确保表单验证提示信息完整显示 */
-:deep(.el-form-item__error) {
+.profile-card :deep(.el-form-item__error) {
   white-space: normal;
   word-break: break-word;
   max-width: 100%;
@@ -690,14 +718,8 @@ onMounted(() => {
   font-size: 11px;
 }
 
-.title {
-  text-align: center;
-  margin-bottom: 20px;
-  color: #303133;
-}
-
-.loading-container,
-.error-container {
+.profile-card .loading-container,
+.profile-card .error-container {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -706,13 +728,13 @@ onMounted(() => {
   gap: 16px;
 }
 
-.avatar-wrapper {
+.profile-card .avatar-wrapper {
   display: flex;
   justify-content: center;
   margin-bottom: 30px;
 }
 
-.avatar-circle {
+.profile-card .avatar-circle {
   width: 120px;
   height: 120px;
   border-radius: 50%;
@@ -726,7 +748,7 @@ onMounted(() => {
   }
 }
 
-.default-avatar {
+.profile-card .default-avatar {
   background-color: #8bad42;
   display: flex;
   justify-content: center;
@@ -736,13 +758,144 @@ onMounted(() => {
   font-weight: bold;
 }
 
-.action-container {
+.profile-card .action-container {
   margin-top: 30px;
   display: flex;
   justify-content: center;
   gap: 20px;
 }
 
+/* 移动端样式 */
+.mobile-profile {
+  min-height: calc(100vh - 120px);
+  background: #f5f7fa;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 头像区域 */
+.mobile-profile .avatar-section {
+  background: white;
+  padding: 32px 16px;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.mobile-profile .avatar-circle {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin: 0 auto 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.mobile-profile .avatar-circle .el-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mobile-profile .default-avatar {
+  background: linear-gradient(135deg, #8bad42 0%, #6a9a35 100%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  font-size: 32px;
+  font-weight: bold;
+}
+
+.mobile-profile .username {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #303133;
+}
+
+/* 加载和错误状态 */
+.mobile-profile .loading-container,
+.mobile-profile .error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 16px;
+  color: #909399;
+}
+
+.mobile-profile .loading-container .el-icon,
+.mobile-profile .error-container .el-icon {
+  font-size: 32px;
+  margin-bottom: 12px;
+}
+
+.mobile-profile .error-container {
+  color: #f56c6c;
+  margin-bottom: 16px;
+}
+
+/* 信息卡片 */
+.mobile-profile .info-card {
+  background: white;
+  padding: 16px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.mobile-profile .info-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.mobile-profile .info-item:last-child {
+  border-bottom: none;
+}
+
+.mobile-profile .info-item .label {
+  font-size: 14px;
+  color: #909399;
+}
+
+.mobile-profile .info-item .value {
+  font-size: 14px;
+  color: #303133;
+  font-weight: 500;
+  text-align: right;
+  flex: 1;
+  margin-left: 16px;
+}
+
+/* 操作按钮 */
+.mobile-profile .action-section {
+  padding: 0 16px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.mobile-profile .action-section .action-btn {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 48px;
+  border-radius: 12px;
+  box-sizing: border-box;
+}
+
+/* 对话框样式 */
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
