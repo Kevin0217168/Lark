@@ -129,10 +129,8 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt)
             ctx->json = cJSON_ParseWithLength(ctx->buffer, ctx->buffer_size);
             if (ctx->json != NULL)
             {
-                char *string = cJSON_Print(ctx->json);
-                ESP_LOGI(TAG, "JSON 解析成功: %s", string);
-                cJSON_free(string);
-                // cJSON_Delete(json); // 由请求函数释放
+                // 直接打印原始响应，避免 cJSON_Print() 分配内存加剧碎片化
+                ESP_LOGI(TAG, "JSON 解析成功: %.*s", (int)ctx->buffer_size, ctx->buffer);
             }
             else
             {
@@ -155,35 +153,41 @@ void WifiSecurityClientInit()
     config.crt_bundle_attach = esp_crt_bundle_attach; // 使用证书包
                                                       // 或者使用手动根证书: config.cert_pem = root_cert_pem
     config.skip_cert_common_name_check = false;
+    config.keep_alive_enable = true;   // 复用 TLS 连接，避免每次请求重新握手导致内存碎片化
 
     WifiSecurityClient = esp_http_client_init(&config);
 }
 
+/* 预分配响应缓冲区大小（覆盖大多数 API 响应，避免 realloc 碎片化） */
+#define RESP_BUF_PREALLOC  512
+
 esp_err_t WifiSecurityRequest(const char *host, const char *path, uint16_t port, WifiSecurityMethod_t method,
                               char *post_data, void(ResponseUserHandler)(RequestContext_t *))
 {
-    // 检查客户端句柄非空
-    if (WifiSecurityClient == NULL)
+    if (WifiSecurityClient == NULL) {
         ESP_LOGE(TAG, "HTTP 客户端未初始化");
+        return ESP_FAIL;
+    }
 
     // 准备请求url
     char url[256];
     snprintf(url, sizeof(url), "%s:%d%s", host, port, path);
     esp_http_client_set_url(WifiSecurityClient, url);
 
-    // 准备上下文
+    // 预分配响应缓冲区，避免每次从 0 开始 realloc 导致内存碎片化
+    char *resp_buf = malloc(RESP_BUF_PREALLOC);
     RequestContext_t req_ctx = {
         .is_json = false,
         .json = NULL,
         .client = &WifiSecurityClient,
-        .buffer = NULL,
-        .buffer_capacity = 0,
+        .buffer = resp_buf,
+        .buffer_capacity = resp_buf ? RESP_BUF_PREALLOC : 0,
         .buffer_size = 0,
     };
     esp_http_client_set_user_data(WifiSecurityClient, &req_ctx);
 
     // 区分请求方法
-    char *method_name = "";
+    const char *method_name = "";
     switch (method)
     {
     case WS_CLINENT_METHOD_GET:
@@ -207,17 +211,27 @@ esp_err_t WifiSecurityRequest(const char *host, const char *path, uint16_t port,
         break;
     }
 
-    // 发起请求
+    // 发起请求（keep-alive 复用已有 TLS 连接，无需重新握手）
     ESP_LOGI(TAG, "%s %s", method_name, url);
     esp_err_t err = esp_http_client_perform(WifiSecurityClient);
 
-    if (err == ESP_OK)
-    {
-        ESP_LOGI(TAG, "%s %s -> %d", method_name, url, esp_http_client_get_status_code(WifiSecurityClient));
+    // keep-alive 连接可能被服务端关闭，自动重建连接重试一次
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "%s 连接失效, 重建 TLS 重试: %s", method_name, esp_err_to_name(err));
+        esp_http_client_close(WifiSecurityClient);
+        // 重置上下文用于重试
+        req_ctx.buffer_size = 0;
+        req_ctx.is_json = false;
+        if (req_ctx.json) { cJSON_Delete(req_ctx.json); req_ctx.json = NULL; }
+        err = esp_http_client_perform(WifiSecurityClient);
     }
-    else
-    {
+
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "%s %s -> %d", method_name, url, esp_http_client_get_status_code(WifiSecurityClient));
+    } else {
         ESP_LOGE(TAG, "%s %s 失败: %s", method_name, url, esp_err_to_name(err));
+        // 失败时关闭连接，下次请求重新建立 TLS
+        esp_http_client_close(WifiSecurityClient);
     }
 
     // 调用用户回调函数处理返回结果
@@ -233,18 +247,15 @@ esp_err_t WifiSecurityRequest(const char *host, const char *path, uint16_t port,
             cJSON_Delete(req_ctx.json);
         }
     }
-    // 释放动态分配的接收缓冲区
+    // 释放响应缓冲区
     if (req_ctx.buffer != NULL)
     {
         free(req_ctx.buffer);
     }
 
-    // 关键：关闭当前连接，下次请求会重新建立
-    esp_http_client_close(WifiSecurityClient);
-
-    // 清除 user_data，避免残留指针
+    // 成功时不关闭连接：keep-alive 复用 TLS 会话，避免反复握手导致内存碎片化
+    // 仅在上方 perform 失败时才 close，下次请求会自动重建
     esp_http_client_set_user_data(WifiSecurityClient, NULL);
 
-    // esp_http_client_cleanup(WifiSecurityClient);
     return err;
 }
