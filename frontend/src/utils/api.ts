@@ -46,20 +46,15 @@ const onTokenRefreshed = (newToken: string) => {
 };
 
 // 刷新token的函数
+// 后端通过Cookie中的long_token验证，不需要请求体
 const refreshToken = async (): Promise<string | null> => {
-  const refreshTokenValue = localStorage.getItem('refreshToken');
-  if (!refreshTokenValue) {
-    return null;
-  }
-
   try {
     const response = await fetch('/api/refresh', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      body: JSON.stringify({ refresh_token: refreshTokenValue })
+      credentials: 'include'  // 必须包含cookie
     });
 
     if (!response.ok) {
@@ -69,9 +64,6 @@ const refreshToken = async (): Promise<string | null> => {
     const data = await response.json();
     if (data.access_token) {
       localStorage.setItem('accessToken', data.access_token);
-      if (data.refresh_token) {
-        localStorage.setItem('refreshToken', data.refresh_token);
-      }
       return data.access_token;
     }
     return null;
