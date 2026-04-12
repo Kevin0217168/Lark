@@ -162,7 +162,7 @@ def test_register_user(mock_get_users, mock_get_invitation_code, mock_use_invita
     # 模拟用户名不存在
     mock_get_users.return_value = []
     mock_get_invitation_code.return_value = type(
-        "I", (), {"remaining_uses": 1, "expire_at": datetime.now(timezone.utc) + timedelta(days=1)}
+        "I", (), {"remaining_uses": 1, "expire_at": datetime.now(timezone.utc) + timedelta(days=1), "user_type": "user"}
     )()
     mock_use_invitation_code.return_value = True
     new_user = {

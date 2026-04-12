@@ -358,7 +358,6 @@ const handleRegister = async () => {
       username: form.username,
       password: form.password,
       nickname: form.nickname,
-      role: form.role,
       avatar: form.avatar,
       invitation_code: form.invitationCode,
     });

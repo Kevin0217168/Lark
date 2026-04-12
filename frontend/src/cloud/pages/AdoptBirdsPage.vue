@@ -129,12 +129,6 @@
           >
             {{ bird.status === 'available' ? '立即认领' : '已认领' }}
           </el-button>
-          <el-button 
-            @click="viewBirdDetail(bird.id)"
-            class="detail-button"
-          >
-            查看详情
-          </el-button>
         </div>
       </div>
     </div>
@@ -253,21 +247,12 @@ const resetSearch = () => {
 const adoptBird = async (bird: any) => {
   try {
     console.log('要认领的雏鸟:', bird);
-    
+
     // 调用后端 API 进行认领操作
-    const response = await fetch(`/api/birds/${bird.id}/adopt`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-      }
-    });
-    
-    console.log('认领响应:', response);
-    
-    const data = await response.json();
+    const data = await api.post(`/api/birds/${bird.id}/adopt`);
+
     console.log('认领结果:', data);
-    
+
     if (data.code === 200 && data.data) {
       ElMessage.success(data.data.message || `已成功认领雏鸟 ${bird.name}`);
       // 跳转到我的雏鸟界面
@@ -281,11 +266,6 @@ const adoptBird = async (bird: any) => {
     console.error('认领失败:', error);
     ElMessage.error('网络错误，请检查网络连接');
   }
-};
-
-// 查看雏鸟详情
-const viewBirdDetail = (birdId: number) => {
-  router.push(`/cloud/birds/${birdId}`);
 };
 
 // 初始加载

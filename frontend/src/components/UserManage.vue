@@ -338,16 +338,8 @@
           <el-input v-model="addForm.nickname" placeholder="请输入昵称" />
         </el-form-item>
 
-        <el-form-item label="角色" prop="role">
-          <el-select v-model="addForm.role" placeholder="请选择角色">
-            <el-option label="管理员" value="root" />
-            <el-option label="普通用户" value="user" />
-            <el-option label="云养用户" value="clouduser" />
-          </el-select>
-        </el-form-item>
-
         <el-form-item label="邀请码" prop="invitationCode">
-          <el-input v-model="addForm.invitationCode" placeholder="请输入邀请码" />
+          <el-input v-model="addForm.invitationCode" placeholder="请输入邀请码（角色由邀请码决定）" />
         </el-form-item>
 
         <el-form-item label="邮箱" prop="email">
@@ -391,6 +383,7 @@
               </el-input>
             </div>
             <div class="invitation-details">
+              <p><span class="label">用户类型：</span>{{ getUserTypeName(invitationDetails.userType) }}</p>
               <p><span class="label">过期时间：</span>{{ formatDateTime(invitationDetails.expiresAt) }}</p>
               <p><span class="label">最大使用次数：</span>{{ invitationDetails.maxUses }} 次</p>
             </div>
@@ -421,6 +414,15 @@
             <el-option label="3 次" :value="3" />
             <el-option label="5 次" :value="5" />
           </el-select>
+        </el-form-item>
+
+        <el-form-item label="用户类型" prop="userType">
+          <el-select v-model="invitationForm.userType" placeholder="请选择用户类型">
+            <el-option label="管理员" value="root" />
+            <el-option label="云养用户" value="clouduser" />
+            <el-option label="普通用户" value="user" />
+          </el-select>
+          <div class="user-type-tip">管理员可管理所有功能，云养用户可访问云养鸟系统，普通用户可访问鸟场管理系统</div>
         </el-form-item>
 
         <el-alert
@@ -538,7 +540,6 @@ const addForm = ref({
   password: '',
   confirmPassword: '',
   nickname: '',
-  role: 'user',
   invitationCode: '',
   email: '',
   avatar: ''
@@ -550,14 +551,16 @@ const generating = ref(false);
 const invitationFormRef = ref();
 const invitationForm = ref({
   expiresIn: 24,
-  maxUses: 3
+  maxUses: 3,
+  userType: 'clouduser'
 });
 const generatedInvitationCode = ref('');
 const invitationDetails = ref({
   expiresAt: '',
   maxUses: 0,
   createdAt: '',
-  createdByUserId: 0
+  createdByUserId: 0,
+  userType: ''
 });
 
 const invitationRules = {
@@ -566,6 +569,9 @@ const invitationRules = {
   ],
   maxUses: [
     { required: true, message: '请选择最大使用次数', trigger: 'change' }
+  ],
+  userType: [
+    { required: true, message: '请选择用户类型', trigger: 'change' }
   ]
 };
 
@@ -764,7 +770,6 @@ const openAddUserDialog = () => {
     password: '',
     confirmPassword: '',
     nickname: '',
-    role: 'user',
     invitationCode: '',
     email: '',
     avatar: ''
@@ -787,7 +792,6 @@ const handleAddUser = async () => {
       username: addForm.value.username,
       password: addForm.value.password,
       nickname: addForm.value.nickname,
-      role: addForm.value.role,
       invitation_code: addForm.value.invitationCode
     };
 
@@ -1037,14 +1041,16 @@ const openInvitationCodeDialog = () => {
   }
   invitationForm.value = {
     expiresIn: 24,
-    maxUses: 3
+    maxUses: 3,
+    userType: 'clouduser'
   };
   generatedInvitationCode.value = '';
   invitationDetails.value = {
     expiresAt: '',
     maxUses: 0,
     createdAt: '',
-    createdByUserId: 0
+    createdByUserId: 0,
+    userType: ''
   };
   invitationCodeDialogVisible.value = true;
 };
@@ -1067,18 +1073,20 @@ const handleGenerateInvitationCode = async () => {
     
     const response = await api.post('/api/invitation-codes', {
       expiresIn: invitationForm.value.expiresIn,
-      maxUses: invitationForm.value.maxUses
+      maxUses: invitationForm.value.maxUses,
+      userType: invitationForm.value.userType
     });
-    
+
     console.log('生成邀请码响应:', response);
-    
+
     if (response.code === 201) {
       generatedInvitationCode.value = response.data.code;
       invitationDetails.value = {
         expiresAt: response.data.expiresAt,
         maxUses: response.data.maxUses,
         createdAt: response.data.createdAt,
-        createdByUserId: response.data.createdByUserId
+        createdByUserId: response.data.createdByUserId,
+        userType: response.data.userType
       };
     } else {
       throw new Error(response.msg || '生成邀请码失败');
@@ -1098,6 +1106,16 @@ const copyInvitationCode = async () => {
   } catch (err) {
     ElMessage.error('复制失败');
   }
+};
+
+// 获取用户类型名称
+const getUserTypeName = (userType: string) => {
+  const typeMap: Record<string, string> = {
+    'root': '管理员',
+    'clouduser': '云养用户',
+    'user': '普通用户'
+  };
+  return typeMap[userType] || userType;
 };
 
 // 格式化日期时间
@@ -1347,8 +1365,15 @@ const formatDateTime = (dateTimeStr: string) => {
   gap: 4px;
 }
 
+.user-type-tip {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
 .invitation-result {
-  padding: 20px 0;
+  padding: 10px 0;
 }
 
 .invitation-code-display {

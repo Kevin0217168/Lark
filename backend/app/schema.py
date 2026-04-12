@@ -55,9 +55,6 @@ class UserItem(BaseModel):
         min_length=1,
         max_length=50,
     )
-    role: Literal["root", "user", "clouduser"] = Field(
-        title="用户权限", description="数据库用户权限", examples=["root"]
-    )
     avatar: Optional[str] = Field(
         title="用户头像",
         description="用户头像图片访问地址",

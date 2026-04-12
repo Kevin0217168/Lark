@@ -42,7 +42,7 @@ class M_Users(UserBase):
 
 class M_InvitationCodes(UserBase):
   __tablename__ = "invitation_codes"
-  
+
   id = Column(Integer, primary_key=True, index=True)  # 自增主键
   user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)  # 外键关联用户表
   created_at = Column(DateTime, nullable=False, default=get_local_time)  # 生成时间，默认当前本地时间
@@ -50,10 +50,11 @@ class M_InvitationCodes(UserBase):
   expire_at = Column(DateTime, nullable=False, index=True)  # 到期时间
   remaining_uses = Column(Integer, nullable=False, default=1, index=True)  # 可用剩余次数，默认1
   is_used = Column(Boolean, nullable=False, default=False, index=True)  # 是否已使用，默认False
-  
+  user_type = Column(String, nullable=False, default="clouduser", index=True)  # 邀请码对应的用户类型：user 或 clouduser
+
   # 关联用户
   user = relationship("M_Users", back_populates="invitation_codes")
-  
+
   # 复合索引，提高查询性能
   __table_args__ = (
       Index('idx_expire_uses', 'expire_at', 'remaining_uses'),
@@ -82,6 +83,7 @@ class InvitationCodeOut(BaseModel):
   expire_at: datetime
   remaining_uses: int
   is_used: bool
+  user_type: str  # 邀请码对应的用户类型：user 或 clouduser
 
   class Config:
     from_attributes = True
@@ -160,17 +162,18 @@ def DeleteUser(db: Session, id:int):
   return 1
 
 
-def CreateInvitationCode(db: Session, user_id: int, code: str, expire_at: datetime, remaining_uses: int = 1):
+def CreateInvitationCode(db: Session, user_id: int, code: str, expire_at: datetime, remaining_uses: int = 1, user_type: str = "clouduser"):
   """
   创建邀请码
-  
+
   参数:
     db: 数据库会话
     user_id: 生成邀请码的用户ID
     code: 邀请码字符串
     expire_at: 到期时间
     remaining_uses: 可用次数，默认1
-  
+    user_type: 用户类型，user 或 clouduser
+
   返回:
     M_InvitationCodes: 新创建的邀请码对象
   """
@@ -178,7 +181,8 @@ def CreateInvitationCode(db: Session, user_id: int, code: str, expire_at: dateti
       user_id=user_id,
       code=code,
       expire_at=expire_at,
-      remaining_uses=remaining_uses
+      remaining_uses=remaining_uses,
+      user_type=user_type
   )
   db.add(new_code)
   db.commit()
@@ -356,7 +360,8 @@ def AdoptBird(db: Session, user_id: int, bird_id: int) -> dict:
     return {"success": False, "message": "该雏鸟不可认领"}
   
   # 5. 更新用户的extra字段，添加已认领雏鸟信息
-  extra = user.extra or {}
+  # 使用 dict() 创建副本，确保 SQLAlchemy 能可靠追踪变更
+  extra = dict(user.extra) if user.extra else {}
   extra["adopted_bird"] = {
     "bird_id": bird.id,
     "bird_name": bird.name,
@@ -365,9 +370,9 @@ def AdoptBird(db: Session, user_id: int, bird_id: int) -> dict:
     "description": bird.description,
     "adopted_at": get_local_time().isoformat()
   }
-  
-  user.extra = extra
-  
+
+  user.extra = dict(extra)
+
   # 6. 更新雏鸟状态为已认领
   updated_bird = UpdateBirdStatus(db, bird_id, "adopted")
   if not updated_bird:
@@ -438,9 +443,11 @@ def ReleaseAdoptedBird(db: Session, user_id: int) -> dict:
     return {"success": False, "message": "更新雏鸟状态失败"}
   
   # 5. 从用户的extra字段中移除已认领雏鸟信息
-  extra = user.extra
-  del extra["adopted_bird"]
-  user.extra = extra if extra else None
+  # 使用 dict() 创建副本，确保 SQLAlchemy 能可靠追踪变更
+  extra = dict(user.extra) if user.extra else {}
+  if "adopted_bird" in extra:
+    del extra["adopted_bird"]
+  user.extra = dict(extra) if extra else None
   
   # 6. 提交事务
   db.commit()

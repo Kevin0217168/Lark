@@ -2,13 +2,24 @@
 Bird.py - 雏鸟管理 API 模块
 
 提供雏鸟信息的 RESTful API 接口，包括：
-- 创建雏鸟（仅 root 用户）
-- 查询雏鸟列表
-- 获取单只雏鸟详情
-- 更新雏鸟信息（仅 root 用户）
-- 删除雏鸟（仅 root 用户）
 
-所有修改类操作仅限 root 用户执行。
+## 管理类接口（仅 root 用户）
+- 创建雏鸟（POST /birds）
+- 更新雏鸟信息（PUT /birds/{bird_id}）
+- 删除雏鸟（DELETE /birds/{bird_id}）
+- 更新雏鸟状态（PATCH /birds/{bird_id}/status）
+
+## 普通用户接口（已登录用户）
+- 查询雏鸟列表（GET /birds）
+- 获取单只雏鸟详情（GET /birds/{bird_id}）
+- 认领雏鸟（POST /birds/{bird_id}/adopt）
+- 释放本人已认领的雏鸟（DELETE /birds/adopted/me）
+- 获取当前用户已认领的雏鸟（GET /birds/adopted/me）
+
+权限说明：
+- root 用户可执行管理类修改操作，如创建、更新、删除雏鸟信息。
+- 普通登录用户可执行与本人相关的认领/释放操作。
+- 查询类接口面向已开放的调用方。
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Body, Path, Query
@@ -425,29 +436,29 @@ async def delete_bird(
 )
 async def update_bird_status(
     bird_id: Annotated[int, Path(title="雏鸟ID", description="雏鸟唯一标识")],
-    status: Annotated[str, Query(description="新状态：available/adopted/grown")],
+    new_status: Annotated[str, Query(description="新状态：available/adopted/grown")],
     current_user: Annotated[Db.M_Users, Depends(require_root_user)],
     db: Db.Session = Depends(Db.GetDb("UpdateBirdStatus")),
 ):
     """
     # 快速更新雏鸟状态
-    
+
     仅限 root 用户调用此接口快速更新雏鸟状态。
     用于认领、释放等操作。
-    
+
     ## 路径参数
     - **bird_id**: 雏鸟唯一ID
-    
+
     ## 查询参数
-    - **status**: 新状态（available/adopted/grown）
-    
+    - **new_status**: 新状态（available/adopted/grown）
+
     ## 响应
     - 成功：返回 200 和更新后的雏鸟信息
     - 失败：返回 404 雏鸟不存在 或 400 状态无效 或 403 权限不足
     """
     # 验证状态值
     valid_statuses = ["available", "adopted", "grown"]
-    if status not in valid_statuses:
+    if new_status not in valid_statuses:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content=CommonOut(
@@ -458,8 +469,8 @@ async def update_bird_status(
         )
     
     try:
-        updated_bird = Db.UpdateBirdStatus(db, bird_id, status)
-        
+        updated_bird = Db.UpdateBirdStatus(db, bird_id, new_status)
+
         if not updated_bird:
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -469,11 +480,11 @@ async def update_bird_status(
                     data=None,
                 ).model_dump(),
             )
-        
+
         await async_log(
             logger,
             "info",
-            f"更新雏鸟状态成功: ID={bird_id}, 新状态={status} - 操作者: {current_user.username}"
+            f"更新雏鸟状态成功: ID={bird_id}, 新状态={new_status} - 操作者: {current_user.username}"
         )
         
         bird_out = Db.BirdOut.from_orm(updated_bird)

@@ -446,7 +446,6 @@ const handleRegister = async () => {
       username: registerForm.value.username,
       password: registerForm.value.password,
       nickname: registerForm.value.nickname,
-      role: registerForm.value.role,
       avatar: registerForm.value.avatar,
       invitation_code: registerForm.value.invitationCode,
     });
