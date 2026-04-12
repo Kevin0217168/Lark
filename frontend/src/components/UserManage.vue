@@ -699,15 +699,13 @@ const fetchUsers = async () => {
     error.value = '';
     
     const response = await api.get('/api/users');
-    console.log('获取用户列表响应:', response);
-    
+
     if (response.code === 200 && Array.isArray(response.data)) {
       users.value = response.data;
     } else {
       error.value = '获取用户列表失败';
     }
   } catch (err: any) {
-    console.error('获取用户列表异常:', err);
     error.value = err.message || '获取用户列表失败';
   } finally {
     loading.value = false;
@@ -804,8 +802,7 @@ const handleAddUser = async () => {
     }
 
     const response = await api.post('/api/users', requestData);
-    console.log('新增用户响应:', response);
-    
+
     if (response.code === 200) {
       ElMessage.success('新增用户成功');
       addDialogVisible.value = false;
@@ -908,8 +905,7 @@ const saveUserChanges = async () => {
     }
     
     const response = await api.put(`/api/users/${editForm.value.id}`, requestData);
-    console.log('更新用户响应:', response);
-    
+
     if (response.code === 200) {
       ElMessage.success('用户信息更新成功');
       editDialogVisible.value = false;
@@ -960,8 +956,7 @@ const handleDeleteUser = async (user: any) => {
     );
     
     const response = await api.delete(`/api/users/${user.id}`);
-    console.log('删除用户响应:', response);
-    
+
     if (response.code === 200) {
       ElMessage.success('删除用户成功');
       await fetchUsers();
@@ -1000,21 +995,11 @@ const handleBatchDelete = async () => {
 
     for (const user of selectedUsers.value) {
       try {
-        console.log('批量删除用户 - 发送请求:', {
-          url: `/api/users/${user.id}`,
-          method: 'DELETE',
-          userId: user.id,
-          username: user.username
-        });
-
         const response = await api.delete(`/api/users/${user.id}`);
-        console.log(`删除用户 ${user.username} (ID: ${user.id}) 响应:`, response);
 
         successCount++;
-        console.log(`删除用户 ${user.username} (ID: ${user.id}) 成功`);
       } catch (err) {
         failCount++;
-        console.error(`删除用户 ${user.username} (ID: ${user.id}) 异常:`, err);
       }
     }
     
@@ -1076,8 +1061,6 @@ const handleGenerateInvitationCode = async () => {
       maxUses: invitationForm.value.maxUses,
       userType: invitationForm.value.userType
     });
-
-    console.log('生成邀请码响应:', response);
 
     if (response.code === 201) {
       generatedInvitationCode.value = response.data.code;

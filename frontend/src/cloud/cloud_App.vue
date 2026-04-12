@@ -27,48 +27,6 @@ import BottomNav from './components/BottomNav.vue';
 .cloud-app {
   min-height: 100vh;
   width: 100%;
-  position: relative;
-}
-
-/* 桌面端提示样式 */
-.desktop-notice {
-  display: none;
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(135deg, #8bad42 0%, #6a9c3d 100%);
-  z-index: 9999;
-  justify-content: center;
-  align-items: center;
-}
-
-.notice-content {
-  text-align: center;
-  color: white;
-}
-
-.notice-icon {
-  margin-bottom: 20px;
-  opacity: 0.9;
-}
-
-.notice-text {
-  font-size: 20px;
-  font-weight: 500;
-  letter-spacing: 1px;
-}
-
-/* 桌面端显示提示，移动端隐藏 */
-@media (min-width: 769px) {
-  .desktop-notice {
-    display: flex;
-  }
-
-  .cloud-app > :not(.desktop-notice) {
-    display: none;
-  }
 }
 
 /* 页面过渡动画 */
@@ -99,5 +57,41 @@ import BottomNav from './components/BottomNav.vue';
   top: 0;
   left: 0;
   right: 0;
+}
+
+/* 桌面端提示 */
+.desktop-notice {
+  display: none;
+}
+
+@media (min-width: 769px) {
+  .desktop-notice {
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9999;
+    background: #ffffff;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .notice-content {
+    text-align: center;
+  }
+
+  .notice-icon {
+    color: #9ca3af;
+    margin-bottom: 24px;
+  }
+
+  .notice-text {
+    font-size: 18px;
+    color: #6b7280;
+    margin: 0;
+    font-weight: 500;
+  }
 }
 </style>

@@ -590,7 +590,6 @@ const fetchRealtimeData = async () => {
       temperature: sensorData.temperature, 
       humidity: sensorData.humidity 
     });
-    console.log(`[实时数据] 设备 ${selectedDeviceId.value} 温度: ${sensorData.temperature}°C, 湿度: ${sensorData.humidity}%`);
   }
 };
 
@@ -618,16 +617,12 @@ const stopRealtimeDataTimer = () => {
 
 // 获取在线设备列表（按ID升序排序）
 const getOnlineDevices = () => {
-  // 重新获取最新的设备数据
   const currentDevices = getDevices();
-  console.log('[getOnlineDevices] 总设备数:', currentDevices.length);
-  console.log('[getOnlineDevices] 设备在线状态:', currentDevices.map(d => ({ id: d.id, name: d.name, isOnline: d.isOnline })));
 
   const onlineDevices = currentDevices
     .filter(device => device?.isOnline)
     .sort((a, b) => (a?.id || 0) - (b?.id || 0));
 
-  console.log('[getOnlineDevices] 在线设备数:', onlineDevices.length);
   return onlineDevices;
 };
 
@@ -644,13 +639,9 @@ const autoSelectFirstOnlineDevice = async () => {
     // 立即获取实时温湿度数据并启动定时器
     await fetchRealtimeData();
     startRealtimeDataTimer();
-
-    console.log(`[自动选择] 已选择第一个在线设备: ${firstDevice.name} (ID: ${firstDevice.id})`);
   } else {
-    // 没有在线设备
     selectedDeviceId.value = null;
     showAllOfflineAlert.value = true;
-    console.log('[自动选择] 所有设备均处于离线状态');
   }
 };
 
@@ -730,15 +721,11 @@ const handleCurrentChange = (val: number) => {
 const handleHistoryDeviceChange = async () => {
   if (selectedHistoryDevice.value && historyDeviceId.value) {
     ElMessage.success(`已切换到设备: ${selectedHistoryDevice.value.name}`);
-    // 获取该设备的历史数据
-    console.log('Fetching history data for device:', historyDeviceId.value);
     if (isMobile.value) {
       await getOrUpdateDeviceHistoryData(historyDeviceId.value);
     } else {
       await fetchDeviceHistoryData(historyDeviceId.value);
     }
-    console.log('History data fetched');
-    // 重置页码
     currentPage.value = 1;
   }
 };
@@ -786,12 +773,9 @@ const sendStreamQuality = async (quality: number) => {
     values: quality.toString()
   });
   
-  console.log('向ws连接发送画质设置:', message);
-  
   try {
     ws.send(message);
   } catch (error) {
-    console.error('发送画质设置失败:', error);
   }
 };
 
@@ -810,12 +794,9 @@ const sendFrameSize = async (size: string) => {
     values: size
   });
   
-  console.log('向ws连接发送视频尺寸设置:', message);
-  
   try {
     ws.send(message);
   } catch (error) {
-    console.error('发送视频尺寸设置失败:', error);
   }
 };
   
@@ -880,7 +861,6 @@ const handleFrameData = (data: any) => {
     lastFrameTimestamp = now;
     isStreamDisconnected.value = false;
   } catch (error) {
-    console.error('处理图片数据失败:', error);
   }
 };
 
@@ -905,39 +885,28 @@ const base64ToBlob = (base64: string) => {
 
 // 开始实时监控
 const startRealtimeMonitoring = async () => {
-  // 关闭旧的连接
   stopRealtimeMonitoring();
   
   if (!selectedDeviceId.value) {
-    console.log('没有选择设备，无法启动实时监控');
     return;
   }
   
   try {
-    // 先刷新token
-    console.log('开始刷新token');
     let token = await refreshToken();
     if (!token) {
       connectionError.value = '未登录，请先登录';
-      console.log('没有token，无法建立WebSocket连接');
       return;
     }
     
-    // 建立WebSocket连接（新的连接模式：一个WebSocket对应一个设备）
-    console.log('开始建立WebSocket连接');
     const wsUrl = `/api/stream/viewer/ws/${selectedDeviceId.value}?token=${token}`;
-    console.log('WebSocket URL:', wsUrl.substring(0, 70) + '...');
     connectionError.value = '正在开启ws连接';
     ws = new WebSocket(wsUrl);
     
-    // 监听连接打开事件
     ws.onopen = () => {
-      console.log('WebSocket连接已建立');
       connectionError.value = '';
       lastFrameTimestamp = Date.now();
       isStreamDisconnected.value = false;
       
-      // 启动定时器检查图片流是否更新
       if (streamCheckInterval) {
         clearInterval(streamCheckInterval);
       }
@@ -947,74 +916,45 @@ const startRealtimeMonitoring = async () => {
           isStreamDisconnected.value = true;
         }
       }, 2500);
-      
-      // 新的连接模式不需要单独发送请求开启设备推流
     };
     
-    // 监听消息事件
     ws.onmessage = (event) => {
       try {
-        // 检查是否是设备断开的文本消息
         if (typeof event.data === 'string' && event.data.includes('设备已断开')) {
-          console.log('收到设备断开消息:', event.data);
           connectionError.value = '设备已断开';
           return;
         }
         
-        // 尝试解析JSON数据
         try {
           const data = JSON.parse(event.data);
-          // 检查是否是画质设置响应
-          if (data.code === 1 && data.key === 'jpeg_quality') {
-            console.log('画质设置成功:', data);
-          } else if (data.code === 1 && data.key === 'frame_size') {
-            console.log('视频尺寸设置成功:', data);
-          } else if (data.code === 1) {
-            console.log('操作成功:', data.msg);
-          } else if (data.code === 400) {
-            console.error('订阅失败:', data.msg);
+          if (data.code === 400) {
             connectionError.value = '订阅失败';
-          } else {
-            console.error('操作失败:', data.msg);
           }
         } catch (jsonError) {
-          // 如果不是JSON数据，可能是二进制图片数据
           handleFrameData(event.data);
-          console.log('接收到图片数据');
         }
       } catch (error) {
-        console.error('解析WebSocket消息失败:', error);
       }
     };
     
-    // 监听错误事件
-    ws.onerror = (error) => {
-      console.error('WebSocket连接错误:', error);
+    ws.onerror = () => {
       connectionError.value = 'WSS连接错误';
     };
     
-    // 监听连接关闭事件
     ws.onclose = (event) => {
-      console.log('WebSocket连接已关闭:', event);
-      console.log('WebSocket关闭代码:', event.code);
-      console.log('WebSocket关闭原因:', event.reason);
       if (!event.wasClean) {
         connectionError.value = 'WSS连接已关闭';
       }
     };
     
   } catch (error) {
-    console.error('建立WebSocket连接失败:', error);
     connectionError.value = '建立WSS连接失败';
   }
 };
 
 // 手动重连WebSocket
 const reconnectWebSocket = () => {
-  console.log('手动重连WebSocket');
-  // 检查当前连接状态
   if (ws && ws.readyState === WebSocket.OPEN) {
-    // 连接正常，询问用户是否确定要重连
     ElMessageBox.confirm(
       '当前WebSocket连接正常，确定要重新连接吗？',
       '确认重连',
@@ -1025,15 +965,11 @@ const reconnectWebSocket = () => {
       }
     )
       .then(() => {
-        console.log('用户确认重连，关闭现有连接并重新建立');
         startRealtimeMonitoring();
       })
       .catch(() => {
-        console.log('用户取消重连');
       });
   } else {
-    // 连接异常或不存在，直接重连
-    console.log('连接异常或不存在，直接重连');
     startRealtimeMonitoring();
   }
 };
@@ -1043,15 +979,11 @@ const refreshToken = async () => {
   try {
     const data = await api.post('/api/refresh');
     if (data.access_token) {
-      // 保存新token
       localStorage.setItem('accessToken', data.access_token);
-      console.log('Token刷新成功');
       return data.access_token;
     }
-    console.log('Token刷新失败，响应数据格式不正确');
     return getToken();
   } catch (error) {
-    console.error('刷新token失败:', error);
     return getToken();
   }
 };
@@ -1061,33 +993,23 @@ const startDeviceStreaming = async () => {
   if (!selectedDeviceId.value) return;
   
   try {
-    // 发送POST请求开启设备推流
     const data = await api.post(`/api/stream/viewer/following/${selectedDeviceId.value}`);
     
-    // 延迟3秒再判断返回情况
     await new Promise(resolve => setTimeout(resolve, 4000));
     
-    // 判断成功的条件：code为1 或 消息包含成功关键字
     const isSuccess = (data.code === 1 || 
       (data.msg && (data.msg.includes('OK') || data.msg.includes('success') || data.msg.includes('成功'))));
     
     if (isSuccess) {
-      console.log('设备推流开启成功:', data.msg);
       connectionError.value = '';
     } else if (data.msg && data.msg.toLowerCase().includes('device has subscribed')) {
-      // 设备已经被订阅，这是正常情况，不需要显示错误
-      console.log('设备已经被订阅');
       connectionError.value = '';
     } else if (data.msg && data.msg.toLowerCase().includes('viewer has not registerd')) {
-      // Viewer未注册，但WebSocket可能已经成功连接，不显示错误
-      console.log('Viewer未注册，但WebSocket可能已经成功连接');
       connectionError.value = '';
     } else {
-      console.error('设备推流开启失败:', data.msg || '未知错误');
       connectionError.value = '设备推流开启失败';
     }
   } catch (error) {
-    console.error('开启设备推流失败:', error);
     // 延迟3秒再显示错误提示
     await new Promise(resolve => setTimeout(resolve, 3000));
     connectionError.value = '开启设备推流失败';
@@ -1564,54 +1486,26 @@ onMounted(async () => {
   checkMobileStatus();
   window.addEventListener('resize', handleResize);
 
-  console.log('[Data.vue] Component mounted');
-  console.log('[Data.vue] Initial active tab:', activeTab.value);
-  console.log('[Data.vue] Is mobile:', isMobile.value);
-  console.log('[Data.vue] Route query:', route.query);
-
-  // 从后端获取设备数据
-  console.log('[Data.vue] 开始获取设备数据...');
   await fetchDevices();
 
   const latestDevices = getDevices();
-  console.log('[Data.vue] 设备数据获取完成，设备数量:', latestDevices.length);
-  console.log('[Data.vue] 设备列表:', latestDevices.map(d => ({ id: d.id, name: d.name, isOnline: d.isOnline })));
 
-  // 延迟1秒后执行自动选择，确保界面渲染完成
   setTimeout(async () => {
-    // 重新获取最新的设备数据
     const currentDevices = getDevices();
-    console.log('[自动选择] ========== 开始自动选择 ==========');
-    console.log('[自动选择] 当前设备数量:', currentDevices.length);
-    console.log('[自动选择] 当前标签页:', activeTab.value);
-    console.log('[自动选择] 当前选中设备ID:', selectedDeviceId.value);
-    console.log('[自动选择] 设备在线状态:', currentDevices.map(d => ({ id: d.id, name: d.name, isOnline: d.isOnline })));
 
     if (currentDevices.length > 0) {
       if (activeTab.value === 'realtime') {
-        // 检查当前选择的设备是否在线
         const currentDevice = currentDevices.find((d: any) => d.id === selectedDeviceId.value);
         const isCurrentDeviceOnline = currentDevice?.isOnline ?? false;
         
         if (!selectedDeviceId.value || !isCurrentDeviceOnline) {
-          console.log('[自动选择] 条件满足：realtime标签页且未选择设备或当前设备离线');
-          console.log('[自动选择] - 是否已选择设备:', !!selectedDeviceId.value);
-          console.log('[自动选择] - 当前设备是否在线:', isCurrentDeviceOnline);
-          console.log('[自动选择] 执行自动选择第一个在线设备...');
-          // 自动选择第一个在线设备
           await autoSelectFirstOnlineDevice();
-          console.log('[自动选择] 自动选择完成，选中设备ID:', selectedDeviceId.value);
         } else {
-          console.log('[自动选择] 当前设备已在线，无需自动选择');
-          // 启动实时数据定时器
           await fetchRealtimeData();
           startRealtimeDataTimer();
         }
       } else if (activeTab.value === 'history' && !historyDeviceId.value) {
-        console.log('[自动选择] 历史数据标签页，选择第一个设备');
-        // 历史数据标签页，选择第一个设备
         historyDeviceId.value = currentDevices[0]?.id || null;
-        // 获取历史数据
         if (historyDeviceId.value) {
           if (isMobile.value) {
             await getOrUpdateDeviceHistoryData(historyDeviceId.value);
@@ -1620,25 +1514,16 @@ onMounted(async () => {
           }
         }
       } else if (activeTab.value === 'analysis') {
-        console.log('[自动选择] 分析标签页，选择第一个设备');
-        // 分析界面需要选择第一个设备并获取所有设备的历史数据
         if (!selectedDeviceId.value) {
           selectedDeviceId.value = currentDevices[0]?.id || null;
         }
         if (isMobile.value) {
-          await getOrUpdateDeviceHistoryData(); // 不传参数，获取所有设备数据
+          await getOrUpdateDeviceHistoryData();
         } else {
-          await fetchDeviceHistoryData(); // 不传参数，获取所有设备数据
+          await fetchDeviceHistoryData();
         }
-      } else {
-        console.log('[自动选择] 条件不满足，跳过自动选择');
-        console.log('[自动选择] - 标签页是否为realtime:', activeTab.value === 'realtime');
-        console.log('[自动选择] - 是否已选择设备:', !!selectedDeviceId.value);
       }
-    } else {
-      console.log('[自动选择] 没有可用设备，跳过自动选择');
     }
-    console.log('[自动选择] ========== 自动选择结束 ==========');
   }, 1000);
 
   // 如果在分析标签页，初始化图表
@@ -1661,112 +1546,75 @@ onUnmounted(() => {
 
 // 监听activeTab变化，重置设备选择
 watch(() => props.activeTab, async (newTab, oldTab) => {
-  console.log('Active tab changed:', newTab, 'Old tab:', oldTab);
-  console.log('Devices available:', devices.length);
-  console.log('Selected device ID:', selectedDeviceId.value);
-  
   if (newTab === 'analysis') {
-    // 切换到分析标签时，获取所有设备的历史数据
     if (isMobile.value) {
-      await getOrUpdateDeviceHistoryData(); // 不传参数，获取所有设备数据
+      await getOrUpdateDeviceHistoryData();
     } else {
-      await fetchDeviceHistoryData(); // 不传参数，获取所有设备数据
+      await fetchDeviceHistoryData();
     }
     nextTick(async () => {
       await initCharts();
     });
-    // 停止实时监控和实时数据定时器
     stopRealtimeMonitoring();
     stopRealtimeDataTimer();
   } else if (newTab === 'history') {
-    // 切换到历史数据标签时，停止实时数据定时器
     stopRealtimeDataTimer();
-    // 重新获取设备数据
     fetchDevices().then(() => {
-      // 确保有设备被选择
       const latestDevices = getDevices();
       if (latestDevices.length > 0) {
-        // 不管之前是否有选择，都强制选择第一个设备
         const deviceId = latestDevices[0]?.id || null;
         historyDeviceId.value = deviceId;
         
-        // 获取该设备的历史数据
         if (deviceId) {
-          console.log('Auto-selecting device for history:', deviceId);
-          // 使用nextTick确保historyDeviceId已更新
           nextTick(async () => {
             if (isMobile.value) {
               await getOrUpdateDeviceHistoryData(deviceId);
             } else {
               await fetchDeviceHistoryData(deviceId);
             }
-            console.log('History data fetched for device:', deviceId);
           });
         }
-      } else {
-        console.log('No devices available, cannot load history data');
       }
     });
-    // 停止实时监控
     stopRealtimeMonitoring();
   } else if (newTab === 'realtime') {
-    // 切换到实时数据标签时，重新获取设备数据
     fetchDevices().then(async () => {
       const latestDevices = getDevices();
       const currentDevice = latestDevices.find((d: any) => d.id === selectedDeviceId.value);
       const isCurrentDeviceOnline = currentDevice?.isOnline ?? false;
       
-      // 只有在没有选中设备，或当前设备不在线时，才执行自动选择
       if (!selectedDeviceId.value || !isCurrentDeviceOnline) {
-        console.log('[watch activeTab] 切换到realtime标签，当前设备离线或未选择，执行自动选择');
-        console.log('[watch activeTab] - 是否已选择设备:', !!selectedDeviceId.value);
-        console.log('[watch activeTab] - 当前设备是否在线:', isCurrentDeviceOnline);
         await autoSelectFirstOnlineDevice();
       } else {
-        console.log('[watch activeTab] 切换到realtime标签，当前设备已在线，保持当前选择');
-        // 启动实时数据定时器
         await fetchRealtimeData();
         startRealtimeDataTimer();
       }
       
-      // 如果成功选择了设备，启动实时监控
       if (selectedDeviceId.value) {
-        console.log('Auto-starting realtime monitoring for device:', selectedDeviceId.value);
-        // 使用nextTick确保selectedDeviceId已更新
         nextTick(() => {
           startRealtimeMonitoring();
         });
-      } else {
-        console.log('No online devices available, cannot start realtime monitoring');
       }
     });
   } else {
     selectedDeviceId.value = null;
     historyDeviceId.value = null;
-    // 停止实时监控
     stopRealtimeMonitoring();
   }
 }, { immediate: true });
 
 // 监听selectedDeviceId变化，更新设备数据
 watch(() => selectedDeviceId.value, async (newDeviceId, oldDeviceId) => {
-  console.log('Selected device ID changed:', newDeviceId, 'Old device ID:', oldDeviceId);
   if (newDeviceId && activeTab.value === 'realtime') {
-    // 切换设备时，更新设备数据
-    console.log('Updating device data for new device:', newDeviceId);
-    // 从后端获取最新的设备数据
     await fetchDevices();
     if (!isMobile.value) {
-      // 获取最新的温度湿度数据（仅桌面端）
       const sensorData = await fetchSensorData(newDeviceId);
       if (sensorData.temperatureValues.length > 0 && sensorData.humidityValues.length > 0) {
         const latestTemp = sensorData.temperatureValues[sensorData.temperatureValues.length - 1];
         const latestHumidity = sensorData.humidityValues[sensorData.humidityValues.length - 1];
         updateDevice(newDeviceId, { temperature: latestTemp, humidity: latestHumidity });
-        console.log('Latest sensor data stored to deviceStore:', { temperature: latestTemp, humidity: latestHumidity });
       }
     }
-    console.log('Device data updated for new device');
   }
 });
 
@@ -1782,33 +1630,19 @@ watch(() => route.query.deviceId, (newDeviceId) => {
 
 // 监听路由变化，确保在导航到数据页面时自动选择设备
 watch(() => route.path, async (newPath) => {
-  console.log('[路由监听] Route path changed:', newPath);
   if (newPath === '/Data' || newPath === '/Stream') {
-    console.log('[路由监听] Navigated to data page, checking device selection');
-    // 延迟执行，确保设备数据已加载
     setTimeout(async () => {
       const latestDevices = getDevices();
-      console.log('[路由监听] 设备数量:', latestDevices.length);
-      console.log('[路由监听] 当前选中设备:', selectedDeviceId.value);
-      console.log('[路由监听] 当前标签页:', activeTab.value);
 
       if (latestDevices.length > 0) {
         if (activeTab.value === 'realtime') {
-          // 检查当前选择的设备是否在线
           const currentDevice = latestDevices.find((d: any) => d.id === selectedDeviceId.value);
           const isCurrentDeviceOnline = currentDevice?.isOnline ?? false;
           
-          // 如果没有选中设备，或当前设备不在线，执行自动选择
           if (!selectedDeviceId.value || !isCurrentDeviceOnline) {
-            console.log('[路由监听] 执行自动选择第一个在线设备');
-            console.log('[路由监听] - 是否已选择设备:', !!selectedDeviceId.value);
-            console.log('[路由监听] - 当前设备是否在线:', isCurrentDeviceOnline);
             await autoSelectFirstOnlineDevice();
-          } else {
-            console.log('[路由监听] 当前设备已在线，无需自动选择');
           }
         } else if (!selectedDeviceId.value) {
-          console.log('[路由监听] 非实时监控标签页，选择第一个设备:', latestDevices[0]?.id);
           selectedDeviceId.value = latestDevices[0]?.id || null;
         }
       }
@@ -1818,15 +1652,8 @@ watch(() => route.path, async (newPath) => {
 
 // 监听selectedDeviceId变化，自动开启实时监控
 watch(() => selectedDeviceId.value, (newDeviceId, oldDeviceId) => {
-  console.log('Selected device ID changed:', newDeviceId, 'Old device ID:', oldDeviceId);
-  console.log('Current active tab:', activeTab.value);
-  
-  // 使用nextTick确保activeTab已经更新
   nextTick(() => {
-    console.log('Active tab after nextTick:', activeTab.value);
-    // 只有当有设备ID且当前是实时标签时才启动监控
     if (newDeviceId && activeTab.value === 'realtime') {
-      console.log('Auto-starting realtime monitoring for device:', newDeviceId);
       startRealtimeMonitoring();
     }
   });

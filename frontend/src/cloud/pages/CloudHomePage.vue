@@ -210,7 +210,6 @@ const getStats = async () => {
       };
     }
   } catch (error) {
-    console.error('获取统计数据失败:', error);
   }
 };
 
