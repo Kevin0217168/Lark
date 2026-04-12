@@ -134,7 +134,7 @@ const wrappedFetch: typeof window.fetch = async (...args) => {
   
   // 排除登录、注册和刷新接口的401处理
   const url = args[0] as string;
-  const isAuthPage = route.path === '/Login' || route.path === '/Register';
+  const isAuthPage = route.path === '/Login' || route.path === '/Register' || route.path.startsWith('/cloud');
   const isAuthApi = url.includes('/api/login') || url.includes('/api/register') || url.includes('/api/refresh');
   
   if (response.status === 401 && !isAuthPage && !isAuthApi) {
@@ -164,7 +164,7 @@ if ((import.meta as any).hot) {
 
 // 检查是否是登录或注册页面
 const isAuthPage = computed(() => {
-  return route.path === '/Login' || route.path === '/Register';
+  return route.path === '/Login' || route.path === '/Register' || route.path.startsWith('/cloud');
 });
 
 // 检查是否需要使用移动端页面

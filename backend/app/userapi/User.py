@@ -91,15 +91,15 @@ async def register_user(
     """
     # 注册新用户 (用户名唯一，需要邀请码)
     规则不符返回422, 用户重复返回400, 邀请码无效返回400, 注册成功返回当前用户信息
-    
+
     ## 后端验证规则
     - 用户名 长度3-20 只能包含字母、数字、下划线，且不能以下划线开头或结尾
     - 密码 长度8-32 必须包含至少一个数字或字母
     - 用户昵称 长度1-50
-    - 用户权限 必须是["root", "user", "readonly"]其中的一个
+    - 用户权限 由邀请码的 user_type 决定，可选值：["root", "user", "clouduser"]
     - 图片地址必须以 http:// 或 https:// 开头
     - 邀请码 长度9-11，必须有效且未过期
-    
+
     """
     # 1. 验证邀请码
     try:
@@ -168,17 +168,24 @@ async def register_user(
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 content=CommonOut(
-                    code=status.HTTP_400_BAD_REQUEST, 
-                    msg="邀请码不存在或已失效", 
+                    code=status.HTTP_400_BAD_REQUEST,
+                    msg="邀请码不存在或已失效",
                     data=None
                 ).model_dump(),
             )
-        
+
         # 注册用户（包含邀请码字段）
         user_data = body.model_dump(exclude_unset=True)
+
+        # 从邀请码获取用户类型，作为新用户的角色
+        # 注意：用户传入的 role 字段会被邀请码的 user_type 覆盖
+        user_type = invitation_code.user_type
+        user_data["role"] = user_type
+        user_data.pop("invitation_code", None)  # 注册后不需要邀请码字段
+
         new_user = Db.RegisterUser(db, **user_data)
-        
-        await async_log(logger, "info", f"注册成功: 用户 {body.username} 使用邀请码 {body.invitation_code}")
+
+        await async_log(logger, "info", f"注册成功: 用户 {body.username} 使用邀请码 {body.invitation_code}, 用户类型={user_type}")
         return CommonOut(data=new_user)
         
     except Exception as e:
@@ -213,7 +220,7 @@ async def update_user(
     - 用户名 长度3-20 只能包含字母、数字、下划线，且不能以下划线开头或结尾
     - 密码 长度8-32 必须包含至少一个数字或字母
     - 用户昵称 长度1-50
-    - 用户权限 必须是["root", "user", "readonly"]其中的一个
+    - 用户权限 必须是["root", "user", "clouduser"]其中的一个
     - 图片地址必须以 http:// 或 https:// 开头
     
     ## 更新规则 (优先满足验证规则)
@@ -260,6 +267,22 @@ async def delete_user(
             content=CommonOut(
                 code=status.HTTP_403_FORBIDDEN, msg="Permission denied.", data=None
             ).model_dump(),)
+
+    # 注销账号前，自动释放已认领的雏鸟
+    release_result = Db.ReleaseAdoptedBird(db, id)
+    if release_result["success"]:
+        await async_log(
+            logger,
+            "info",
+            f"账号注销时自动释放已认领雏鸟: 用户ID={id}, 释放的雏鸟ID={release_result.get('released_bird', {}).get('bird_id')}"
+        )
+    elif "没有已认领" not in release_result.get("message", ""):
+        await async_log(
+            logger,
+            "warning",
+            f"账号注销时释放雏鸟失败: 用户ID={id}, 原因={release_result.get('message')}"
+        )
+
     data = Db.DeleteUser(db, id=id)
     if data:
         # 用户唯一

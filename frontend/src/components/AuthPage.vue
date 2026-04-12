@@ -138,6 +138,18 @@
           <router-link :to="mode === 'login' ? '/Register' : '/Login'">{{ mode === 'login' ? '去注册' : '去登录' }}</router-link>
         </div>
 
+        <!-- 云养鸟系统切换按钮 -->
+        <div class="cloud-switch">
+          <el-button 
+            type="default" 
+            size="large" 
+            class="cloud-switch-btn"
+            @click="switchToCloud"
+          >
+            您不是工作人员？点击切换到云养鸟系统
+          </el-button>
+        </div>
+
         <!-- 底部备案信息 -->
         <div class="mobile-footer">
           <div class="copyright">© 2026</div>
@@ -434,7 +446,6 @@ const handleRegister = async () => {
       username: registerForm.value.username,
       password: registerForm.value.password,
       nickname: registerForm.value.nickname,
-      role: registerForm.value.role,
       avatar: registerForm.value.avatar,
       invitation_code: registerForm.value.invitationCode,
     });
@@ -459,6 +470,11 @@ const handleRegister = async () => {
   } finally {
     loading.value = false;
   }
+};
+
+// 切换到云养鸟系统
+const switchToCloud = () => {
+  router.push('/cloud/login');
 };
 </script>
 
@@ -616,6 +632,24 @@ const handleRegister = async () => {
 
 .mobile-auth .toggle-link a:active {
   opacity: 0.8;
+}
+
+.mobile-auth .cloud-switch {
+  margin-top: 20px;
+}
+
+.mobile-auth .cloud-switch-btn {
+  width: 100%;
+  height: 48px;
+  font-size: 14px;
+  border-radius: 12px;
+  background: #f5f7fa;
+  border-color: #dcdfe6;
+}
+
+.mobile-auth .cloud-switch-btn:active {
+  background: #e4e7ed;
+  border-color: #c0c4cc;
 }
 
 .mobile-auth .mobile-footer {

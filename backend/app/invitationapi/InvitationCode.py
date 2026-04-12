@@ -71,16 +71,20 @@ def check_rate_limit(ip: str) -> bool:
 class InvitationCodeCreate(BaseModel):
     """邀请码创建请求模型"""
     expiresIn: Optional[int] = Field(
-        default=24, 
-        ge=1, 
-        le=48, 
+        default=24,
+        ge=1,
+        le=48,
         description="有效期（小时），1-48小时"
     )
     maxUses: Optional[int] = Field(
-        default=3, 
-        ge=1, 
-        le=5, 
+        default=3,
+        ge=1,
+        le=5,
         description="最大使用次数，1-5次"
+    )
+    userType: Optional[str] = Field(
+        default="clouduser",
+        description="用户类型：user 或 clouduser"
     )
 
 
@@ -91,6 +95,7 @@ class InvitationCodeResponse(BaseModel):
     maxUses: int
     createdAt: datetime
     createdByUserId: int
+    userType: str  # 邀请码对应的用户类型：user 或 clouduser
 
 
 @router.post(
@@ -112,20 +117,35 @@ async def create_invitation_code(
 ):
     """
     # 创建邀请码
-    
+
     仅允许具有root角色的用户创建邀请码
-    
+
     ## 请求参数
     - `expiresIn`: 有效期（小时），1-48小时，默认24小时
     - `maxUses`: 最大使用次数，1-5次，默认3次
-    
+    - `userType`: 用户类型，user 或 clouduser 或root，默认 clouduser
+
     ## 响应
     - `code`: 生成的邀请码
     - `expiresAt`: 过期时间
     - `maxUses`: 最大使用次数
     - `createdAt`: 创建时间
     - `createdByUserId`: 创建者用户ID
+    - `userType`: 用户类型
     """
+    # 验证用户类型参数
+    valid_user_types = ["user", "clouduser", "root"]
+    if body.userType not in valid_user_types:
+        await async_log(
+            logger,
+            "warning",
+            f"邀请码创建失败: 无效的用户类型 - {body.userType}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"无效的用户类型，必须是以下之一: {', '.join(valid_user_types)}"
+        )
+
     # 检查请求频率限制
     client_ip = request.client.host
     if not check_rate_limit(client_ip):
@@ -138,7 +158,7 @@ async def create_invitation_code(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="请求频率过高，请1分钟后再试"
         )
-    
+
     # 检查用户角色
     if current_user.role != "root":
         await async_log(
@@ -150,45 +170,47 @@ async def create_invitation_code(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="权限不足，仅管理员(root)可创建邀请码"
         )
-    
+
     try:
         # 生成邀请码
         invitation_code = generate_invitation_code()
-        
+
         # 计算过期时间
         expire_at = get_local_time() + timedelta(hours=body.expiresIn)
-        
+
         # 创建邀请码
         new_code = Db.CreateInvitationCode(
             db=db,
             user_id=current_user.id,
             code=invitation_code,
             expire_at=expire_at,
-            remaining_uses=body.maxUses
+            remaining_uses=body.maxUses,
+            user_type=body.userType
         )
-        
+
         # 记录操作日志
         await async_log(
             logger,
             "info",
-            f"邀请码创建成功: 代码={invitation_code}, 创建者={current_user.username}, 创建者ID={current_user.id}, 有效期={body.expiresIn}小时, 最大使用次数={body.maxUses}"
+            f"邀请码创建成功: 代码={invitation_code}, 创建者={current_user.username}, 创建者ID={current_user.id}, 有效期={body.expiresIn}小时, 最大使用次数={body.maxUses}, 用户类型={body.userType}"
         )
-        
+
         # 构建响应
         response_data = InvitationCodeResponse(
             code=new_code.code,
             expiresAt=new_code.expire_at,
             maxUses=body.maxUses,
             createdAt=new_code.created_at,
-            createdByUserId=current_user.id
+            createdByUserId=current_user.id,
+            userType=new_code.user_type
         )
-        
+
         return CommonOut(
             code=status.HTTP_201_CREATED,
             msg="邀请码创建成功",
             data=response_data
         )
-        
+
     except Exception as e:
         await async_log(
             logger,

@@ -1,7 +1,8 @@
 from pydantic import BaseModel
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index, Boolean
+from sqlalchemy.dialects.sqlite import JSON
 from sqlalchemy.orm import relationship
-from typing import Optional, Literal, List
+from typing import Optional, Literal, List, Dict, Any
 from sqlalchemy.orm import sessionmaker, Session, declarative_base
 from pwdlib import PasswordHash
 from datetime import datetime, timezone, timedelta
@@ -34,13 +35,14 @@ class M_Users(UserBase):
   banner = Column(String)
   email = Column(String)
   invitation_code = Column(String, index=True)  # 注册时使用的邀请码
+  extra = Column(JSON, nullable=True, default=None)  # 额外信息，字典类型，默认为null
   
   # 关联邀请码
   invitation_codes = relationship("M_InvitationCodes", back_populates="user")
 
 class M_InvitationCodes(UserBase):
   __tablename__ = "invitation_codes"
-  
+
   id = Column(Integer, primary_key=True, index=True)  # 自增主键
   user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)  # 外键关联用户表
   created_at = Column(DateTime, nullable=False, default=get_local_time)  # 生成时间，默认当前本地时间
@@ -48,10 +50,11 @@ class M_InvitationCodes(UserBase):
   expire_at = Column(DateTime, nullable=False, index=True)  # 到期时间
   remaining_uses = Column(Integer, nullable=False, default=1, index=True)  # 可用剩余次数，默认1
   is_used = Column(Boolean, nullable=False, default=False, index=True)  # 是否已使用，默认False
-  
+  user_type = Column(String, nullable=False, default="clouduser", index=True)  # 邀请码对应的用户类型：user 或 clouduser
+
   # 关联用户
   user = relationship("M_Users", back_populates="invitation_codes")
-  
+
   # 复合索引，提高查询性能
   __table_args__ = (
       Index('idx_expire_uses', 'expire_at', 'remaining_uses'),
@@ -62,11 +65,12 @@ class UserOut(BaseModel):
   id: int
   username: str
   nickname: str
-  role: Literal["root", "user", "readonly"]
+  role: Literal["root", "user", "clouduser"]
   email: str | None = None
   banner: str | None = None
   avatar: str | None = None
   invitation_code: str | None = None
+  extra: Dict[str, Any] | None = None
 
   class Config:
     from_attributes = True
@@ -79,6 +83,7 @@ class InvitationCodeOut(BaseModel):
   expire_at: datetime
   remaining_uses: int
   is_used: bool
+  user_type: str  # 邀请码对应的用户类型：user 或 clouduser
 
   class Config:
     from_attributes = True
@@ -98,17 +103,17 @@ def GetUsers(db: Session, id=None, username=None, nickname=None, role=None, emai
   users = db.query(M_Users).filter(*conditions).all()
   return users
 
-def RegisterUser(db: Session, username:str, password:str, nickname:str, role:str, email:str=None, avatar:str=None, invitation_code:str=None):
+def RegisterUser(db: Session, username:str, password:str, nickname:str, role:str, email:str=None, avatar:str=None, invitation_code:str=None, extra:Dict[str, Any]=None):
   # 计算密码哈希
   password = ConvertHash(password)
   
-  new_user = M_Users(username = username, password=password, nickname=nickname, role=role, email=email, avatar=avatar, invitation_code=invitation_code)
+  new_user = M_Users(username = username, password=password, nickname=nickname, role=role, email=email, avatar=avatar, invitation_code=invitation_code, extra=extra)
   db.add(new_user)
   db.commit()
   db.refresh(new_user)
   return new_user
 
-def UpdateUser(db: Session, id:int, username:str=None, password:str=None, nickname:str=None, role:str=None, email:str=None, avatar:str=None, banner:str=None):
+def UpdateUser(db: Session, id:int, username:str=None, password:str=None, nickname:str=None, role:str=None, email:str=None, avatar:str=None, banner:str=None, extra:Dict[str, Any]=None):
   # 查找用户
   user = db.query(M_Users).filter(M_Users.id == id).first()
   if not user:
@@ -137,6 +142,10 @@ def UpdateUser(db: Session, id:int, username:str=None, password:str=None, nickna
       user.avatar = avatar if avatar != "" else None
   if banner is not None:
       user.banner = banner if banner != "" else None
+  
+  # 更新额外信息字段
+  if extra is not None:
+      user.extra = extra
 
   db.commit()
   db.refresh(user)  # 刷新以获取数据库中的最新数据（如触发器生成的值）
@@ -153,17 +162,18 @@ def DeleteUser(db: Session, id:int):
   return 1
 
 
-def CreateInvitationCode(db: Session, user_id: int, code: str, expire_at: datetime, remaining_uses: int = 1):
+def CreateInvitationCode(db: Session, user_id: int, code: str, expire_at: datetime, remaining_uses: int = 1, user_type: str = "clouduser"):
   """
   创建邀请码
-  
+
   参数:
     db: 数据库会话
     user_id: 生成邀请码的用户ID
     code: 邀请码字符串
     expire_at: 到期时间
     remaining_uses: 可用次数，默认1
-  
+    user_type: 用户类型，user 或 clouduser
+
   返回:
     M_InvitationCodes: 新创建的邀请码对象
   """
@@ -171,7 +181,8 @@ def CreateInvitationCode(db: Session, user_id: int, code: str, expire_at: dateti
       user_id=user_id,
       code=code,
       expire_at=expire_at,
-      remaining_uses=remaining_uses
+      remaining_uses=remaining_uses,
+      user_type=user_type
   )
   db.add(new_code)
   db.commit()
@@ -312,3 +323,137 @@ def DeleteInvitationCode(db: Session, code: str):
   db.delete(invitation_code)
   db.commit()
   return True
+
+
+def AdoptBird(db: Session, user_id: int, bird_id: int) -> dict:
+  """
+  用户认领雏鸟
+  
+  每个用户只能认领一只雏鸟，认领后会更新用户的extra字段，添加已认领雏鸟的信息
+  
+  参数:
+    db: 数据库会话
+    user_id: 用户ID
+    bird_id: 雏鸟ID
+  
+  返回:
+    dict: 包含操作结果和相关信息的字典
+  """
+  from .BirdDb import GetBirdById, UpdateBirdStatus
+  
+  # 1. 检查用户是否存在
+  user = db.query(M_Users).filter(M_Users.id == user_id).first()
+  if not user:
+    return {"success": False, "message": "用户不存在"}
+  
+  # 2. 检查用户是否已经认领了雏鸟
+  if user.extra and user.extra.get("adopted_bird"):
+    return {"success": False, "message": "您已经认领了一只雏鸟，不能再认领"}
+  
+  # 3. 检查雏鸟是否存在
+  bird = GetBirdById(db, bird_id)
+  if not bird:
+    return {"success": False, "message": "雏鸟不存在"}
+  
+  # 4. 检查雏鸟是否可认领
+  if bird.status != "available":
+    return {"success": False, "message": "该雏鸟不可认领"}
+  
+  # 5. 更新用户的extra字段，添加已认领雏鸟信息
+  # 使用 dict() 创建副本，确保 SQLAlchemy 能可靠追踪变更
+  extra = dict(user.extra) if user.extra else {}
+  extra["adopted_bird"] = {
+    "bird_id": bird.id,
+    "bird_name": bird.name,
+    "bird_species": bird.species,
+    "birth_date": bird.birth_date.isoformat() if bird.birth_date else None,
+    "description": bird.description,
+    "adopted_at": get_local_time().isoformat()
+  }
+
+  user.extra = dict(extra)
+
+  # 6. 更新雏鸟状态为已认领
+  updated_bird = UpdateBirdStatus(db, bird_id, "adopted")
+  if not updated_bird:
+    db.rollback()
+    return {"success": False, "message": "更新雏鸟状态失败"}
+  
+  # 7. 提交事务
+  db.commit()
+  
+  return {
+    "success": True,
+    "message": "认领雏鸟成功",
+    "adopted_bird": extra["adopted_bird"]
+  }
+
+
+def GetUserAdoptedBird(db: Session, user_id: int) -> dict:
+  """
+  获取用户已认领的雏鸟信息
+  
+  参数:
+    db: 数据库会话
+    user_id: 用户ID
+  
+  返回:
+    dict: 已认领雏鸟的信息，如果没有则返回空字典
+  """
+  user = db.query(M_Users).filter(M_Users.id == user_id).first()
+  if not user or not user.extra:
+    return {}
+  
+  return user.extra.get("adopted_bird", {})
+
+
+def ReleaseAdoptedBird(db: Session, user_id: int) -> dict:
+  """
+  用户释放已认领的雏鸟
+  
+  参数:
+    db: 数据库会话
+    user_id: 用户ID
+  
+  返回:
+    dict: 包含操作结果和相关信息的字典
+  """
+  from .BirdDb import UpdateBirdStatus
+  
+  # 1. 检查用户是否存在
+  user = db.query(M_Users).filter(M_Users.id == user_id).first()
+  if not user:
+    return {"success": False, "message": "用户不存在"}
+  
+  # 2. 检查用户是否有已认领的雏鸟
+  if not user.extra or not user.extra.get("adopted_bird"):
+    return {"success": False, "message": "您没有已认领的雏鸟"}
+  
+  # 3. 获取已认领雏鸟的ID
+  adopted_bird = user.extra["adopted_bird"]
+  bird_id = adopted_bird.get("bird_id")
+  
+  if not bird_id:
+    return {"success": False, "message": "已认领雏鸟信息不完整"}
+  
+  # 4. 更新雏鸟状态为可认领
+  updated_bird = UpdateBirdStatus(db, bird_id, "available")
+  if not updated_bird:
+    db.rollback()
+    return {"success": False, "message": "更新雏鸟状态失败"}
+  
+  # 5. 从用户的extra字段中移除已认领雏鸟信息
+  # 使用 dict() 创建副本，确保 SQLAlchemy 能可靠追踪变更
+  extra = dict(user.extra) if user.extra else {}
+  if "adopted_bird" in extra:
+    del extra["adopted_bird"]
+  user.extra = dict(extra) if extra else None
+  
+  # 6. 提交事务
+  db.commit()
+  
+  return {
+    "success": True,
+    "message": "释放雏鸟成功",
+    "released_bird": adopted_bird
+  }

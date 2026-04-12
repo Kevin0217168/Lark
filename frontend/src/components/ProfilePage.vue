@@ -105,6 +105,10 @@
             <el-icon><user /></el-icon>
             用户管理
           </el-button>
+          <el-button type="success" @click="goToCloudBird" class="action-btn">
+            <el-icon><mostly-cloudy /></el-icon>
+            云养鸟系统
+          </el-button>
           <el-button v-if="!error" type="danger" plain @click="openDeleteAccountDialog" class="action-btn">
             <el-icon><delete /></el-icon>
             注销账号
@@ -217,7 +221,7 @@
 import { ref, onMounted, onUnmounted, computed } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
-import { Edit, SwitchButton, Delete, Loading, Warning, User } from '@element-plus/icons-vue';
+import { Edit, SwitchButton, Delete, Loading, Warning, User, MostlyCloudy } from '@element-plus/icons-vue';
 import { api } from '../utils/api';
 
 const router = useRouter();
@@ -339,6 +343,10 @@ const isAdmin = computed(() => userInfo.value.role === 'root');
 
 const goToUserManage = () => {
   router.push('/UserManage');
+};
+
+const goToCloudBird = () => {
+  router.push('/cloud/my');
 };
 
 // 获取用户信息
