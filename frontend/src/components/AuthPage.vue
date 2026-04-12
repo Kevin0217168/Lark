@@ -315,7 +315,6 @@ const tryAutoLogin = async (): Promise<boolean> => {
     localStorage.removeItem('userId');
     return false;
   } catch (error) {
-    console.error('自动登录失败:', error);
     localStorage.removeItem('isAuthenticated');
     localStorage.removeItem('username');
     localStorage.removeItem('accessToken');
@@ -405,14 +404,12 @@ const handleLogin = async () => {
           localStorage.setItem('userId', userData.data.id || '');
         }
       } catch (err) {
-        console.error('获取用户信息失败:', err);
       }
     }
     
     window.dispatchEvent(new CustomEvent('loginStatusChanged'));
     router.push('/Home');
   } catch (error) {
-    console.error('登录错误:', error);
     const errorMessage = (error as Error).message;
     
     if (errorMessage === '表单验证失败') {
@@ -453,7 +450,6 @@ const handleRegister = async () => {
     ElMessage.success("注册成功，请登录");
     router.push('/Login');
   } catch (error: any) {
-    console.error('注册错误:', error);
     const errorMessage = error.message;
     const status = error.status;
     

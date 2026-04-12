@@ -365,7 +365,6 @@ const handleRegister = async () => {
     ElMessage.success("注册成功，请登录");
     router.push('/cloud/login');
   } catch (error: any) {
-    console.error('注册错误:', error);
     const errorMessage = error.message;
     const status = error.status;
 

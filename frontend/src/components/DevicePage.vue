@@ -584,7 +584,6 @@ const fetchDevices = async () => {
         await fetchDeviceVersion(device.id);
       }
   } catch (error) {
-    console.error('获取设备列表出错:', error);
     ElMessage.error('获取设备列表失败，请检查网络连接');
   }
 };
@@ -592,12 +591,9 @@ const fetchDevices = async () => {
 // 获取设备固件版本
 const fetchDeviceVersion = async (deviceId: number) => {
   try {
-    // 调用查询固件版本API
     const data = await api.get(`/api/devices/${deviceId}/version`);
-    console.log('查询固件版本成功:', data);
     deviceVersions.value[deviceId] = data.data.values;
   } catch (error: any) {
-    console.error('查询固件版本出错:', error);
     if (error.response) {
       const status = error.response.status;
       if (status === 403) {
@@ -674,14 +670,6 @@ const fetchLogs = async () => {
   logsLoading.value = true;
   logsError.value = '';
 
-  // 打印查询参数
-  console.log('========== 查询日志参数 ==========');
-  console.log('设备ID:', selectedDeviceIds.value);
-  console.log('日志等级:', selectedLogLevels.value.length > 0 ? selectedLogLevels.value : '全部');
-  console.log('结束时间:', selectedEndTime.value || '当前时间');
-  console.log('限制条数:', logPagination.value.limit);
-  console.log('==================================');
-
   try {
     const { fetchDeviceLogs } = useDeviceStore();
     const levels = selectedLogLevels.value.length > 0 ? selectedLogLevels.value : undefined;
@@ -696,16 +684,6 @@ const fetchLogs = async () => {
       endTime
     );
 
-    // 打印查询结果
-    console.log('========== 查询日志结果 ==========');
-    console.log('查询成功:', result.success);
-    console.log('返回日志数量:', result.data.length);
-    console.log('总日志数:', result.total);
-    if (result.data.length > 0) {
-      console.log('日志样本:', result.data.slice(0, 3));
-    }
-    console.log('==================================');
-
     if (result.success) {
       currentLogs.value = result.data.sort((a: DeviceLog, b: DeviceLog) => {
         return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
@@ -716,7 +694,6 @@ const fetchLogs = async () => {
       logsError.value = '获取日志失败，请稍后重试';
     }
   } catch (error: any) {
-    console.error('获取日志出错:', error);
     logsError.value = error.response?.data?.detail || '获取日志失败，请检查网络连接';
   } finally {
     logsLoading.value = false;
@@ -919,7 +896,6 @@ const handleSave = async () => {
       await fetchDevices();
       dialogVisible.value = false;
     } catch (error: any) {
-      console.error('更新设备出错:', error);
       if (error.response) {
         const status = error.response.status;
         if (status === 404) {
@@ -966,7 +942,6 @@ const handleSave = async () => {
       await fetchDevices();
       dialogVisible.value = false;
     } catch (error: any) {
-      console.error('添加设备出错:', error);
       if (error.response) {
         const status = error.response.status;
         if (status === 400) {
@@ -1017,7 +992,6 @@ const handleDelete = async (device: Device) => {
           ElMessage.success('设备删除成功');
           await fetchDevices();
         } catch (error: any) {
-          console.error('删除设备出错:', error);
           if (error.response) {
             const status = error.response.status;
             if (status === 403) {
@@ -1063,7 +1037,6 @@ const handleDelete = async (device: Device) => {
         // 刷新设备列表
         await fetchDevices();
       } catch (error: any) {
-        console.error('删除设备出错:', error);
         if (error.response) {
           const status = error.response.status;
           if (status === 403) {
@@ -1114,7 +1087,6 @@ const handleUpdateFirmware = (device: Device) => {
       // 刷新设备列表
       await fetchDevices();
     } catch (error: any) {
-      console.error('更新固件出错:', error);
       if (error.response) {
         const status = error.response.status;
         if (status === 403) {
@@ -1163,7 +1135,6 @@ const handleRestart = (device: Device) => {
       // 刷新设备列表
       await fetchDevices();
     } catch (error: any) {
-      console.error('重启设备出错:', error);
       if (error.response) {
         const status = error.response.status;
         if (status === 403) {

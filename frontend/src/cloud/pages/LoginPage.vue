@@ -229,7 +229,6 @@ const tryAutoLogin = async (): Promise<boolean> => {
     localStorage.removeItem('userId');
     return false;
   } catch (error) {
-    console.error('自动登录失败:', error);
     localStorage.removeItem('isAuthenticated');
     localStorage.removeItem('username');
     localStorage.removeItem('accessToken');

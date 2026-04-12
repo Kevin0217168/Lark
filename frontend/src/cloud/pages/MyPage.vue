@@ -235,7 +235,6 @@ const handleLogout = async () => {
   try {
     await api.post('/api/logout');
   } catch (error) {
-    console.error('退出登录请求出错:', error);
   }
   
   // 清除登录状态

@@ -209,24 +209,17 @@ const searchBirds = async () => {
     if (searchParams.value.device_id) {
       params.device_id = parseInt(searchParams.value.device_id, 10);
     }
-    
-    console.log('查询参数:', params);
-    
+
     // 调用后端 API
     const response = await api.get('/api/birds', params);
-    
-    console.log('查询响应:', response);
-    
+
     if (response.code === 200) {
       birds.value = response.data || [];
-      console.log('获取到的雏鸟列表:', birds.value);
     } else {
       ElMessage.error('获取雏鸟列表失败');
-      console.log('获取失败，响应码:', response.code);
     }
   } catch (error) {
     ElMessage.error('网络请求失败');
-    console.error('Error fetching birds:', error);
   } finally {
     loading.value = false;
   }
@@ -246,12 +239,8 @@ const resetSearch = () => {
 // 认领雏鸟
 const adoptBird = async (bird: any) => {
   try {
-    console.log('要认领的雏鸟:', bird);
-
     // 调用后端 API 进行认领操作
     const data = await api.post(`/api/birds/${bird.id}/adopt`);
-
-    console.log('认领结果:', data);
 
     if (data.code === 200 && data.data) {
       ElMessage.success(data.data.message || `已成功认领雏鸟 ${bird.name}`);
@@ -263,7 +252,6 @@ const adoptBird = async (bird: any) => {
       ElMessage.error(data.msg || '认领失败，请重试');
     }
   } catch (error) {
-    console.error('认领失败:', error);
     ElMessage.error('网络错误，请检查网络连接');
   }
 };

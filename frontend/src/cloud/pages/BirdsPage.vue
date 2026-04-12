@@ -149,7 +149,6 @@ const releaseBird = async () => {
       ElMessage.error(response.msg || '释放失败，请重试');
     }
   } catch (error) {
-    console.error('释放雏鸟失败:', error);
     ElMessage.error('网络错误，请检查网络连接');
   }
 };
@@ -158,14 +157,13 @@ const releaseBird = async () => {
 const checkAdoptedBird = async () => {
   try {
     const response = await api.get('/api/birds/adopted/me');
-    
+
     if (response.code === 200 && response.data?.adopted_bird && Object.keys(response.data.adopted_bird).length > 0) {
       adoptedBird.value = response.data.adopted_bird;
     } else {
       adoptedBird.value = null;
     }
   } catch (error) {
-    console.error('获取已认领雏鸟信息失败:', error);
     adoptedBird.value = null;
   } finally {
     loading.value = false;

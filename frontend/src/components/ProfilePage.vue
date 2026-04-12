@@ -384,7 +384,6 @@ const tryRefreshToken = async (): Promise<boolean> => {
     }
     return false;
   } catch (error) {
-    console.error('刷新token失败:', error);
     return false;
   }
 };
@@ -412,7 +411,6 @@ const openDeleteAccountDialog = async () => {
     verifyPasswordDialogVisible.value = true;
   } catch (err) {
     ElMessage.error('检查管理员账号数量失败');
-    console.error(err);
   }
 };
 
@@ -512,10 +510,8 @@ const handleDeleteAccount = async () => {
 // 退出登录
 const handleLogout = async () => {
   try {
-    const data = await api.post('/api/logout');
-    console.log('退出登录成功:', data);
+    await api.post('/api/logout');
   } catch (error) {
-    console.error('退出登录请求出错:', error);
   }
   
   // 清除登录状态和token信息
@@ -590,7 +586,6 @@ const verifyPassword = async (username: string, password: string): Promise<boole
     
     return data.access_token !== undefined;
   } catch (error) {
-    console.error('验证密码失败:', error);
     return false;
   }
 };
