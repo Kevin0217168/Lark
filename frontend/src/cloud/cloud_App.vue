@@ -1,5 +1,16 @@
 <template>
   <div class="cloud-app">
+    <!-- 桌面端提示 -->
+    <div class="desktop-notice">
+      <div class="notice-content">
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="notice-icon">
+          <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+          <line x1="12" y1="18" x2="12.01" y2="18"></line>
+        </svg>
+        <p class="notice-text">请使用移动端访问此网页</p>
+      </div>
+    </div>
+
     <transition name="page-transition" mode="out-in">
       <RouterView :key="$route.fullPath" />
     </transition>
@@ -16,6 +27,48 @@ import BottomNav from './components/BottomNav.vue';
 .cloud-app {
   min-height: 100vh;
   width: 100%;
+  position: relative;
+}
+
+/* 桌面端提示样式 */
+.desktop-notice {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, #8bad42 0%, #6a9c3d 100%);
+  z-index: 9999;
+  justify-content: center;
+  align-items: center;
+}
+
+.notice-content {
+  text-align: center;
+  color: white;
+}
+
+.notice-icon {
+  margin-bottom: 20px;
+  opacity: 0.9;
+}
+
+.notice-text {
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: 1px;
+}
+
+/* 桌面端显示提示，移动端隐藏 */
+@media (min-width: 769px) {
+  .desktop-notice {
+    display: flex;
+  }
+
+  .cloud-app > :not(.desktop-notice) {
+    display: none;
+  }
 }
 
 /* 页面过渡动画 */
