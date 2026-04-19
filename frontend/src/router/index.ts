@@ -9,6 +9,7 @@ import Device from "@/components/DevicePage.vue";
 import Data from "@/components/Data.vue";
 import Profile from "@/components/ProfilePage.vue";
 import UserManage from "@/components/UserManage.vue";
+import BirdsPage from "@/components/BirdsPage.vue";
 import CloudApp from "@/cloud/cloud_App.vue";
 
 const router = createRouter({
@@ -46,6 +47,10 @@ const router = createRouter({
     {
       path: "/UserManage",
       component: UserManage,
+    },
+    {
+      path: "/birds",
+      component: BirdsPage,
     },
     {
       path: "/cloud",

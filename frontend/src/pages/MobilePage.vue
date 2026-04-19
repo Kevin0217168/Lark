@@ -87,6 +87,7 @@
       <HomePage v-if="route.path === '/Home'" />
       <Data v-else-if="route.path === '/Data' || route.path === '/Stream'" :activeTab="activeTab" />
       <DevicePage v-else-if="route.path === '/Device'" :activeTab="activeTab" />
+      <BirdsPage v-else-if="route.path === '/birds'" />
       <ProfilePage v-else-if="route.path === '/Profile'" />
       <UserManage v-else-if="route.path === '/UserManage' && isAdmin" />
       <div v-else class="mobile-placeholder">
@@ -147,6 +148,16 @@
           <span>设备</span>
         </div>
       </router-link>
+      <router-link to="/birds" custom v-slot="{ navigate }">
+        <div 
+          class="nav-item" 
+          :class="{ active: isActive('/birds') }"
+          @click="navigate"
+        >
+          <el-icon><Avatar /></el-icon>
+          <span>雏鸟管理</span>
+        </div>
+      </router-link>
       <div 
         class="nav-item" 
         :class="{ active: isActive('/Profile') }"
@@ -163,12 +174,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { HomeFilled, DataAnalysis, Monitor, User, Grid } from '@element-plus/icons-vue';
+import { HomeFilled, DataAnalysis, Monitor, User, Grid, Avatar } from '@element-plus/icons-vue';
 import HomePage from '../components/HomePage.vue';
 import Data from '../components/Data.vue';
 import DevicePage from '../components/DevicePage.vue';
 import ProfilePage from '../components/ProfilePage.vue';
 import UserManage from '../components/UserManage.vue';
+import BirdsPage from '../components/BirdsPage.vue';
 
 const route = useRoute();
 const router = useRouter();

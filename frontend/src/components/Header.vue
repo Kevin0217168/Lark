@@ -1,8 +1,8 @@
 <template>
   <el-row justify="center" style="width: 100%; margin: 0; padding: 0;">
     <el-col :span="18" style="margin: 0; padding: 0;">
-      <el-row class="header-card">
-        <el-col :span="3">
+      <div class="header-card">
+        <div class="header-left">
           <router-link to="/Home" custom v-slot="{ navigate }">
             <el-button @click="handleHomeClick(navigate)" style="color: #8bad42" text>
               <el-icon size="30">
@@ -11,8 +11,8 @@
               <p style="margin-left: 5px">Lark</p>
             </el-button>
           </router-link>
-        </el-col>
-        <el-col :span="2" :offset="6">
+        </div>
+        <div class="header-center">
           <router-link to="/Home" custom v-slot="{ navigate }">
             <el-button 
               @click="handleHomeClick(navigate)" 
@@ -23,8 +23,6 @@
               总览 
             </el-button>
           </router-link>
-        </el-col>
-        <el-col :span="2">
           <router-link to="/Data" custom v-slot="{ navigate }">
             <el-button 
               @click="navigate" 
@@ -35,8 +33,6 @@
               数据 
             </el-button>
           </router-link>
-        </el-col>
-        <el-col :span="2">
           <router-link to="/Device" custom v-slot="{ navigate }">
             <el-button 
               @click="navigate" 
@@ -47,9 +43,17 @@
               设备 
             </el-button>
           </router-link>
-        </el-col>
-        <el-col :span="2" v-if="userRole === 'root'">
-          <router-link to="/UserManage" custom v-slot="{ navigate }">
+          <router-link to="/birds" custom v-slot="{ navigate }">
+            <el-button 
+              @click="navigate" 
+              :style="{ color: isActive('/birds') ? '#8bad42' : '#000' }" 
+              :type="isActive('/birds') ? 'primary' : 'default'"
+              text
+            > 
+              雏鸟管理 
+            </el-button>
+          </router-link>
+          <router-link v-if="userRole === 'root'" to="/UserManage" custom v-slot="{ navigate }">
             <el-button 
               @click="navigate" 
               :style="{ color: isActive('/UserManage') ? '#8bad42' : '#000' }" 
@@ -59,14 +63,17 @@
               用户管理 
             </el-button>
           </router-link>
-        </el-col>
-        <el-col :span="2" :offset="isLoggedIn ? (userRole === 'root' ? 3 : 5) : 5">
-          <router-link v-if="!isLoggedIn" to="/Login" custom v-slot="{ navigate }">
-            <el-button @click="navigate" color="#8bad42" plain>登录</el-button>
-          </router-link>
-        </el-col>
-        <el-col :span="2" v-if="isLoggedIn">
-          <div class="avatar-header" @click="navigateToProfile">
+        </div>
+        <div class="header-right">
+          <template v-if="!isLoggedIn">
+            <router-link to="/Login" custom v-slot="{ navigate }">
+              <el-button @click="navigate" color="#8bad42" plain>登录</el-button>
+            </router-link>
+            <router-link to="/Register" custom v-slot="{ navigate }">
+              <el-button @click="navigate" text>注册</el-button>
+            </router-link>
+          </template>
+          <div v-else class="avatar-header" @click="navigateToProfile">
             <div class="avatar-circle-header">
               <img v-if="avatar" :src="avatar" :alt="username" />
               <div v-else class="default-avatar-header">
@@ -74,14 +81,8 @@
               </div>
             </div>
           </div>
-        </el-col>
-
-        <el-col :span="2" v-if="!isLoggedIn">
-          <router-link to="/Register" custom v-slot="{ navigate }">
-            <el-button @click="navigate" text>注册</el-button>
-          </router-link>
-        </el-col>
-      </el-row>
+        </div>
+      </div>
     </el-col>
   </el-row>
 </template>
@@ -214,12 +215,33 @@ const handleLogout = () => {
 .header-card {
   height: 70px;
   z-index: 1000;
-  text-align: center;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   border-bottom-left-radius: 15px;
   border-bottom-right-radius: 15px;
   background-color: #fff;
   box-shadow: 5px 5px 10px rgba(0, 0, 0, 0.1);
+}
+
+.header-left {
+  flex: 0 0 auto;
+  padding-left: 20px;
+}
+
+.header-center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+}
+
+.header-right {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-right: 20px;
 }
 .el-button {
   height: 40px;

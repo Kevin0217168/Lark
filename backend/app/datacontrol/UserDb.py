@@ -407,6 +407,28 @@ def GetUserAdoptedBird(db: Session, user_id: int) -> dict:
   return user.extra.get("adopted_bird", {})
 
 
+def GetUserByAdoptedBird(db: Session, bird_id: int) -> Optional[M_Users]:
+  """
+  根据雏鸟ID查找认领该雏鸟的用户
+  
+  参数:
+    db: 数据库会话
+    bird_id: 雏鸟ID
+  
+  返回:
+    M_Users: 认领该雏鸟的用户对象，未找到返回None
+  """
+  # 查找extra字段中adopted_bird包含指定bird_id的用户
+  # 注意：这是一个简单的实现，实际应用中可能需要更复杂的查询
+  users = db.query(M_Users).all()
+  for user in users:
+    if user.extra and user.extra.get("adopted_bird"):
+      adopted_bird = user.extra["adopted_bird"]
+      if adopted_bird.get("bird_id") == bird_id:
+        return user
+  return None
+
+
 def ReleaseAdoptedBird(db: Session, user_id: int) -> dict:
   """
   用户释放已认领的雏鸟
@@ -418,8 +440,6 @@ def ReleaseAdoptedBird(db: Session, user_id: int) -> dict:
   返回:
     dict: 包含操作结果和相关信息的字典
   """
-  from .BirdDb import UpdateBirdStatus
-  
   # 1. 检查用户是否存在
   user = db.query(M_Users).filter(M_Users.id == user_id).first()
   if not user:
@@ -437,10 +457,15 @@ def ReleaseAdoptedBird(db: Session, user_id: int) -> dict:
     return {"success": False, "message": "已认领雏鸟信息不完整"}
   
   # 4. 更新雏鸟状态为可认领
-  updated_bird = UpdateBirdStatus(db, bird_id, "available")
-  if not updated_bird:
+  from .BirdDb import M_Birds
+  bird = db.query(M_Birds).filter(M_Birds.id == bird_id).first()
+  if not bird:
     db.rollback()
-    return {"success": False, "message": "更新雏鸟状态失败"}
+    return {"success": False, "message": "雏鸟不存在"}
+  
+  bird.status = "available"
+  db.commit()
+  db.refresh(bird)
   
   # 5. 从用户的extra字段中移除已认领雏鸟信息
   # 使用 dict() 创建副本，确保 SQLAlchemy 能可靠追踪变更
