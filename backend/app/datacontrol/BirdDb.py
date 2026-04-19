@@ -46,13 +46,12 @@ class M_Birds(BirdBase):
     # 出生日期，用于计算日龄和成长阶段
     birth_date = Column(Date, nullable=False, comment="出生日期，用于计算日龄")
     
-    # 关联的设备ID，外键关联到 devices 表
+    # 关联的设备ID，关联到 devices 表
     # 通过该设备可以获取实时画面和控制喂食器
-    # 注意：外键约束在独立测试时可能不可用，业务层需自行校验
     device_id = Column(
         Integer, 
         nullable=True, 
-        comment="关联的设备ID（摄像头/喂食器），外键关联devices表"
+        comment="关联的设备ID（摄像头/喂食器）"
     )
     
     # 雏鸟状态：
@@ -245,7 +244,17 @@ def CreateBird(
     
     Returns:
         M_Birds: 新创建的雏鸟对象
+    
+    Raises:
+        ValueError: 当设备ID不存在时
     """
+    # 验证设备ID是否存在
+    if device_id is not None:
+        from .DeviceDb import GetDevices
+        devices = GetDevices(db, id=device_id)
+        if not devices:
+            raise ValueError(f"设备ID {device_id} 不存在")
+    
     # 将ISO格式日期字符串转换为date对象
     birth_date_obj = datetime.strptime(birth_date, "%Y-%m-%d").date()
     
@@ -294,6 +303,9 @@ def UpdateBird(
     
     Returns:
         Optional[M_Birds]: 更新后的雏鸟对象，不存在则返回None
+    
+    Raises:
+        ValueError: 当设备ID不存在时
     """
     bird = db.query(M_Birds).filter(M_Birds.id == bird_id).first()
     if not bird:
@@ -311,12 +323,24 @@ def UpdateBird(
     if birth_date is not None:
         bird.birth_date = datetime.strptime(birth_date, "%Y-%m-%d").date()
     
-    # 设备ID：非None时更新
+    # 设备ID：非None时更新，需要验证设备是否存在
     if device_id is not None:
+        from .DeviceDb import GetDevices
+        devices = GetDevices(db, id=device_id)
+        if not devices:
+            raise ValueError(f"设备ID {device_id} 不存在")
         bird.device_id = device_id
     
     # 状态：非None时更新
     if status is not None:
+        # 检查状态是否从adopted变为其他状态
+        if bird.status == "adopted" and status != "adopted":
+            # 查找认领该雏鸟的用户
+            from .UserDb import GetUserByAdoptedBird, ReleaseAdoptedBird
+            user = GetUserByAdoptedBird(db, bird.id)
+            if user:
+                # 释放用户的雏鸟
+                ReleaseAdoptedBird(db, user.id)
         bird.status = status
     
     # 描述：非None时更新，空字符串清空描述
@@ -357,6 +381,7 @@ def UpdateBirdStatus(db: Session, bird_id: int, status: str) -> Optional[M_Birds
     更新雏鸟状态
     
     快速更新雏鸟状态，用于认领、释放等操作。
+    如果状态从"adopted"变为其他状态，会自动清空认领该雏鸟的用户信息中的认领信息。
     
     Args:
         db: 数据库会话对象
@@ -369,6 +394,15 @@ def UpdateBirdStatus(db: Session, bird_id: int, status: str) -> Optional[M_Birds
     bird = db.query(M_Birds).filter(M_Birds.id == bird_id).first()
     if not bird:
         return None
+    
+    # 检查状态是否从adopted变为其他状态
+    if bird.status == "adopted" and status != "adopted":
+        # 查找认领该雏鸟的用户
+        from .UserDb import GetUserByAdoptedBird, ReleaseAdoptedBird
+        user = GetUserByAdoptedBird(db, bird_id)
+        if user:
+            # 释放用户的雏鸟
+            ReleaseAdoptedBird(db, user.id)
     
     bird.status = status
     db.commit()

@@ -80,6 +80,11 @@
           <span class="btn-text">鸟场管理系统</span>
         </button>
 
+        <button class="action-btn edit-btn" @click="openEditDialog">
+          <span class="btn-icon">✏️</span>
+          <span class="btn-text">修改账号信息</span>
+        </button>
+
         <button class="action-btn logout-btn" @click="handleLogout">
           <span class="btn-icon">🚪</span>
           <span class="btn-text">退出登录</span>
@@ -135,6 +140,57 @@
         </div>
       </div>
     </div>
+
+    <!-- 修改账号信息对话框 -->
+    <div v-if="editDialogVisible" class="dialog-overlay" @click="editDialogVisible = false">
+      <div class="dialog-content edit-dialog" @click.stop>
+        <div class="dialog-title">修改账号信息</div>
+        <div class="edit-form">
+          <div class="form-item">
+            <label class="form-label">用户名</label>
+            <input v-model="editForm.username" type="text" class="form-input" placeholder="请输入用户名" />
+          </div>
+          <div class="form-item">
+            <label class="form-label">昵称</label>
+            <input v-model="editForm.nickname" type="text" class="form-input" placeholder="请输入昵称" />
+          </div>
+          <div class="form-item">
+            <label class="form-label">邮箱</label>
+            <input v-model="editForm.email" type="email" class="form-input" placeholder="请输入邮箱" />
+          </div>
+          <div class="form-item">
+            <label class="form-label">头像URL</label>
+            <input v-model="editForm.avatar" type="text" class="form-input" placeholder="请输入头像图片URL" />
+          </div>
+          <div class="form-item">
+            <label class="form-label">
+              <input v-model="editForm.changePassword" type="checkbox" class="form-checkbox" />
+              修改密码
+            </label>
+          </div>
+          <div v-if="editForm.changePassword" class="password-section">
+            <div class="form-item">
+              <label class="form-label">当前密码</label>
+              <input v-model="editForm.currentPassword" type="password" class="form-input" placeholder="请输入当前密码" />
+            </div>
+            <div class="form-item">
+              <label class="form-label">新密码</label>
+              <input v-model="editForm.newPassword" type="password" class="form-input" placeholder="请输入新密码" />
+            </div>
+            <div class="form-item">
+              <label class="form-label">确认新密码</label>
+              <input v-model="editForm.confirmNewPassword" type="password" class="form-input" placeholder="请确认新密码" />
+            </div>
+          </div>
+        </div>
+        <div class="dialog-actions">
+          <button class="dialog-btn cancel-btn" @click="editDialogVisible = false">取消</button>
+          <button class="dialog-btn confirm-btn edit-confirm-btn" @click="saveChanges" :disabled="saving">
+            {{ saving ? '保存中...' : '保存修改' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -147,6 +203,8 @@ import { api } from '../../utils/api';
 const router = useRouter();
 const loading = ref(false);
 const error = ref('');
+const editDialogVisible = ref(false);
+const saving = ref(false);
 const confirmDeleteDialogVisible = ref(false);
 const deletingAccount = ref(false);
 const verifyPasswordDialogVisible = ref(false);
@@ -176,6 +234,17 @@ const goToAdmin = () => {
 
 const verifyPasswordForm = ref({
   password: ''
+});
+
+const editForm = ref({
+  username: '',
+  nickname: '',
+  email: '',
+  avatar: '',
+  changePassword: false,
+  currentPassword: '',
+  newPassword: '',
+  confirmNewPassword: ''
 });
 
 // 获取角色标签名称
@@ -363,6 +432,144 @@ const handleDeleteAccount = async () => {
     ElMessage.error((err as Error).message || '注销账号失败');
   } finally {
     deletingAccount.value = false;
+  }
+};
+
+// 打开修改账号信息对话框
+const openEditDialog = () => {
+  editForm.value = {
+    username: userInfo.value.username,
+    nickname: userInfo.value.nickname,
+    email: userInfo.value.email || '',
+    avatar: userInfo.value.avatar || '',
+    changePassword: false,
+    currentPassword: '',
+    newPassword: '',
+    confirmNewPassword: ''
+  };
+  editDialogVisible.value = true;
+};
+
+// 验证当前密码
+const verifyPassword = async (username: string, password: string): Promise<boolean> => {
+  try {
+    const params = new URLSearchParams();
+    params.append('grant_type', 'password');
+    params.append('username', username);
+    params.append('password', password);
+    params.append('scope', '');
+    params.append('client_id', '');
+    params.append('client_secret', '');
+
+    const data = await api.post('/api/login', params.toString(), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
+      }
+    });
+
+    return data.access_token !== undefined;
+  } catch (error) {
+    return false;
+  }
+};
+
+// 保存修改
+const saveChanges = async () => {
+  try {
+    // 验证表单
+    if (!editForm.value.username || editForm.value.username.length < 3 || editForm.value.username.length > 20) {
+      ElMessage.warning('用户名长度在 3 到 20 个字符');
+      return;
+    }
+
+    if (!editForm.value.nickname || editForm.value.nickname.length < 1 || editForm.value.nickname.length > 50) {
+      ElMessage.warning('昵称长度在 1 到 50 个字符');
+      return;
+    }
+
+    if (editForm.value.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editForm.value.email)) {
+      ElMessage.warning('请输入正确的邮箱地址');
+      return;
+    }
+
+    if (editForm.value.changePassword) {
+      if (!editForm.value.currentPassword) {
+        ElMessage.warning('请输入当前密码');
+        return;
+      }
+      if (!editForm.value.newPassword || editForm.value.newPassword.length < 8 || editForm.value.newPassword.length > 32) {
+        ElMessage.warning('新密码长度在 8 到 32 个字符');
+        return;
+      }
+      if (!/^(?=.*[a-zA-Z])(?=.*\d)[a-zA-Z\d]+$/.test(editForm.value.newPassword)) {
+        ElMessage.warning('新密码必须同时包含字母和数字');
+        return;
+      }
+      if (editForm.value.newPassword !== editForm.value.confirmNewPassword) {
+        ElMessage.warning('两次输入的密码不一致');
+        return;
+      }
+    }
+
+    saving.value = true;
+
+    // 如果用户选择修改密码，先验证当前密码
+    if (editForm.value.changePassword) {
+      const isPasswordValid = await verifyPassword(editForm.value.username, editForm.value.currentPassword);
+      if (!isPasswordValid) {
+        throw new Error('当前密码不正确');
+      }
+    }
+
+    // 构建请求数据
+    const requestData: Record<string, string> = {};
+
+    if (editForm.value.username !== userInfo.value.username) {
+      requestData["username"] = editForm.value.username;
+    }
+
+    if (editForm.value.nickname !== userInfo.value.nickname) {
+      requestData["nickname"] = editForm.value.nickname;
+    }
+
+    if (editForm.value.email !== (userInfo.value.email || '')) {
+      requestData["email"] = editForm.value.email || "";
+    }
+
+    if (editForm.value.avatar && editForm.value.avatar !== userInfo.value.avatar) {
+      requestData["avatar"] = editForm.value.avatar;
+    }
+
+    if (editForm.value.changePassword) {
+      requestData["password"] = editForm.value.newPassword;
+    }
+
+    // 发送请求
+    const responseData = await api.put(`/api/users/${userInfo.value.id}`, requestData);
+
+    if (responseData.code === 200) {
+      ElMessage.success('修改账号信息成功');
+      editDialogVisible.value = false;
+      // 重新获取用户信息
+      await fetchUserInfo();
+      // 更新localStorage
+      localStorage.setItem('username', editForm.value.username);
+      localStorage.setItem('avatar', editForm.value.avatar || '');
+      // 触发登录状态变化事件
+      window.dispatchEvent(new CustomEvent('loginStatusChanged'));
+    } else {
+      if (responseData.detail && Array.isArray(responseData.detail) && responseData.detail.length > 0) {
+        const errorMessages = responseData.detail.map((error: any) => error.msg).join(', ');
+        throw new Error(errorMessages);
+      } else {
+        throw new Error(responseData.msg || '修改账号信息失败');
+      }
+    }
+  } catch (err: any) {
+    ElMessage.error(err.message || '修改账号信息失败');
+  } finally {
+    saving.value = false;
   }
 };
 
@@ -812,6 +1019,17 @@ onMounted(() => {
   box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
 }
 
+.edit-btn {
+  background: linear-gradient(135deg, #8BAD42 0%, #A4C65F 100%);
+  color: white;
+  box-shadow: 0 4px 16px rgba(139, 173, 66, 0.3);
+}
+
+.edit-btn:hover {
+  background: linear-gradient(135deg, #6A9A35 0%, #8BAD42 100%);
+  box-shadow: 0 6px 20px rgba(139, 173, 66, 0.4);
+}
+
 .btn-icon {
   font-size: 20px;
 }
@@ -992,6 +1210,77 @@ onMounted(() => {
 
 .toggle-password-btn:hover {
   opacity: 1;
+}
+
+/* 编辑对话框样式 */
+.edit-dialog {
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.edit-form {
+  margin-bottom: 24px;
+}
+
+.form-item {
+  margin-bottom: 16px;
+}
+
+.form-label {
+  display: block;
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.form-input {
+  width: 100%;
+  height: 44px;
+  padding: 0 16px;
+  border: 2px solid rgba(209, 213, 219, 0.5);
+  border-radius: 12px;
+  font-size: 15px;
+  color: #166534;
+  background: rgba(255, 255, 255, 0.8);
+  box-sizing: border-box;
+  transition: all 0.3s ease;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #8BAD42;
+  background: white;
+  box-shadow: 0 0 0 4px rgba(139, 173, 66, 0.1);
+}
+
+.form-input::placeholder {
+  color: #9ca3af;
+}
+
+.form-checkbox {
+  width: 18px;
+  height: 18px;
+  margin-right: 8px;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.password-section {
+  padding: 16px;
+  background: rgba(139, 173, 66, 0.05);
+  border-radius: 12px;
+  margin-top: 12px;
+}
+
+.edit-confirm-btn {
+  background: linear-gradient(135deg, #8BAD42 0%, #6A9A35 100%) !important;
+  box-shadow: 0 4px 12px rgba(139, 173, 66, 0.3) !important;
+}
+
+.edit-confirm-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #6A9A35 0%, #5A8A2D 100%) !important;
+  box-shadow: 0 6px 16px rgba(139, 173, 66, 0.4) !important;
 }
 
 /* 响应式设计 */

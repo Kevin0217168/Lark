@@ -132,8 +132,8 @@
     </div>
     
     <!-- 新增/编辑雏鸟对话框 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500px">
-      <el-form :model="birdForm" :rules="rules" ref="birdFormRef" label-width="100px">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" :width="isMobile ? '90%' : '500px'">
+      <el-form :model="birdForm" :rules="rules" ref="birdFormRef" :label-width="isMobile ? '80px' : '100px'">
         <el-form-item label="名称" prop="name">
           <el-input v-model="birdForm.name" placeholder="请输入雏鸟名称" />
         </el-form-item>
@@ -161,7 +161,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="描述">
-          <el-input v-model="birdForm.description" type="textarea" placeholder="请输入描述" />
+          <el-input v-model="birdForm.description" type="textarea" placeholder="请输入描述" :rows="isMobile ? 3 : 4" />
         </el-form-item>
         <el-form-item label="头像URL">
           <el-input v-model="birdForm.avatar_url" placeholder="请输入头像URL" />
@@ -176,7 +176,7 @@
     </el-dialog>
     
     <!-- 删除确认对话框 -->
-    <el-dialog v-model="deleteDialogVisible" title="确认删除" width="300px">
+    <el-dialog v-model="deleteDialogVisible" title="确认删除" :width="isMobile ? '80%' : '300px'">
       <span>确定要删除该雏鸟吗？此操作不可恢复。</span>
       <template #footer>
         <span class="dialog-footer">
@@ -193,6 +193,19 @@ import { ref, reactive, onMounted, computed } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Avatar } from '@element-plus/icons-vue';
 import { api } from '@/utils/api';
+
+// 检测是否为移动设备
+const isMobile = ref(window.innerWidth < 768);
+
+// 监听窗口大小变化
+const handleWindowResize = () => {
+  isMobile.value = window.innerWidth < 768;
+};
+
+onMounted(() => {
+  window.addEventListener('resize', handleWindowResize);
+  fetchBirds();
+});
 
 // 类型定义
 interface Bird {
@@ -341,10 +354,20 @@ const confirmDelete = async () => {
       deleteDialogVisible.value = false;
       fetchBirds();
     } else {
+      // 显示后端返回的错误信息
+      ElMessage.error(response.msg || '删除失败');
+    }
+  } catch (error: any) {
+    // 处理网络错误或其他异常
+    if (error.response) {
+      // 服务器返回了错误状态码
+      ElMessage.error(error.response.data?.msg || '删除失败');
+    } else if (error.message) {
+      // 网络错误等
+      ElMessage.error(error.message);
+    } else {
       ElMessage.error('删除失败');
     }
-  } catch (error) {
-    ElMessage.error('删除失败');
     console.error('删除雏鸟失败:', error);
   }
 };
@@ -370,10 +393,20 @@ const handleSaveBird = async () => {
           dialogVisible.value = false;
           fetchBirds();
         } else {
+          // 显示后端返回的错误信息
+          ElMessage.error(response.msg || '操作失败');
+        }
+      } catch (error: any) {
+        // 处理网络错误或其他异常
+        if (error.response) {
+          // 服务器返回了错误状态码
+          ElMessage.error(error.response.data?.msg || '操作失败');
+        } else if (error.message) {
+          // 网络错误等
+          ElMessage.error(error.message);
+        } else {
           ElMessage.error('操作失败');
         }
-      } catch (error) {
-        ElMessage.error('操作失败');
         console.error('保存雏鸟失败:', error);
       }
     }

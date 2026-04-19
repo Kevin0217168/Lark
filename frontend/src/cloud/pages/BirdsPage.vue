@@ -148,8 +148,15 @@ const releaseBird = async () => {
     } else {
       ElMessage.error(response.msg || '释放失败，请重试');
     }
-  } catch (error) {
-    ElMessage.error('网络错误，请检查网络连接');
+  } catch (error: any) {
+    // 处理后端返回的错误信息
+    if (error.data && error.data.msg) {
+      ElMessage.error(error.data.msg);
+    } else if (error.message) {
+      ElMessage.error(error.message);
+    } else {
+      ElMessage.error('网络错误，请检查网络连接');
+    }
   }
 };
 

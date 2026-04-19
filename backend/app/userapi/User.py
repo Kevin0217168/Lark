@@ -295,3 +295,50 @@ async def delete_user(
                 code=status.HTTP_404_NOT_FOUND, msg="User not found.", data=None
             ).model_dump(),
         )
+
+
+@router.delete(
+    "/{id}/birds/adopted",
+    response_model=CommonOut,
+    responses={**R404_USER_NOT_FOUND, **R403_FORBIDDEN},
+    summary="释放用户已认领的雏鸟",
+)
+async def release_user_bird(
+    id: Annotated[int, Path(title="用户id", description="数据库用户唯一主键id")],
+    op: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
+    db: Db.Session = Depends(Db.GetDb("ReleaseUserBird")),
+):
+    """
+    # 释放指定用户已认领的雏鸟
+    
+    ## 后端规则
+    - 只有管理员可以释放其他用户的雏鸟
+    - 用户可以释放自己的雏鸟
+    """
+
+    # 权限检查
+    if op.id != id and op.role != "root":
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content=CommonOut(
+                code=status.HTTP_403_FORBIDDEN, msg="Permission denied.", data=None
+            ).model_dump(),)
+
+    # 释放用户的雏鸟
+    release_result = Db.ReleaseAdoptedBird(db, id)
+    
+    if release_result["success"]:
+        await async_log(
+            logger,
+            "info",
+            f"释放用户已认领雏鸟: 用户ID={id}, 释放的雏鸟ID={release_result.get('released_bird', {}).get('bird_id')}"
+        )
+        return CommonOut(data=release_result)
+    else:
+        # 无论什么错误信息，都返回400 Bad Request
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content=CommonOut(
+                code=status.HTTP_400_BAD_REQUEST, msg=release_result.get("message"), data=None
+            ).model_dump(),
+        )

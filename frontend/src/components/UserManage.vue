@@ -95,6 +95,11 @@
               {{ scope.row.email || '-' }}
             </template>
           </el-table-column>
+          <el-table-column label="已认领雏鸟" min-width="120" align="center">
+            <template #default="scope">
+              {{ getAdoptedBirdId(scope.row) }}
+            </template>
+          </el-table-column>
           <el-table-column label="操作" width="160" align="center" fixed="right">
             <template #default="scope">
               <el-button 
@@ -225,6 +230,10 @@
               <span class="label">邮箱</span>
               <span class="value">{{ user.email || '-' }}</span>
             </div>
+            <div class="detail-row">
+              <span class="label">已认领雏鸟</span>
+              <span class="value">{{ getAdoptedBirdId(user) }}</span>
+            </div>
           </div>
           <div class="user-actions">
             <el-button 
@@ -287,6 +296,11 @@
 
         <el-form-item label="头像URL" prop="avatar">
           <el-input v-model="editForm.avatar" placeholder="请输入头像图片URL" />
+        </el-form-item>
+
+        <el-form-item v-if="hasAdoptedBird(originalUserData)">
+          <el-checkbox v-model="editForm.releaseBird">释放已认领雏鸟</el-checkbox>
+          <div class="release-bird-tip">勾选后将释放该用户已认领的雏鸟，使其变为可认领状态</div>
         </el-form-item>
 
         <el-form-item>
@@ -511,6 +525,19 @@ const getRoleLabel = (role: string) => {
   }
 };
 
+// 获取用户已认领的雏鸟ID
+const getAdoptedBirdId = (user: any) => {
+  if (user.extra && user.extra.adopted_bird && user.extra.adopted_bird.bird_id) {
+    return user.extra.adopted_bird.bird_id;
+  }
+  return '-';
+};
+
+// 检查用户是否已认领雏鸟
+const hasAdoptedBird = (user: any) => {
+  return user && user.extra && user.extra.adopted_bird && user.extra.adopted_bird.bird_id;
+};
+
 // 编辑用户相关
 const editDialogVisible = ref(false);
 const saving = ref(false);
@@ -525,7 +552,8 @@ const editForm = ref({
   avatar: '',
   changePassword: false,
   newPassword: '',
-  confirmPassword: ''
+  confirmPassword: '',
+  releaseBird: false
 });
 
 const originalUserData = ref<any>(null);
@@ -854,7 +882,8 @@ const handleEditUser = (user: any) => {
     avatar: user.avatar || '',
     changePassword: false,
     newPassword: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    releaseBird: false
   };
   originalUserData.value = { ...user };
   editDialogVisible.value = true;
@@ -898,10 +927,22 @@ const saveUserChanges = async () => {
     }
 
     // 如果没有任何修改，提示用户
-    if (Object.keys(requestData).length === 0) {
+    if (Object.keys(requestData).length === 0 && !editForm.value.releaseBird) {
       ElMessage.warning('没有任何修改');
       saving.value = false;
       return;
+    }
+    
+    // 如果需要释放雏鸟，先调用释放API
+    if (editForm.value.releaseBird) {
+      try {
+        const releaseResponse = await api.delete(`/api/users/${editForm.value.id}/birds/adopted`);
+        if (releaseResponse.code !== 200) {
+          throw new Error('释放雏鸟失败');
+        }
+      } catch (err: any) {
+        throw new Error(err.message || '释放雏鸟失败');
+      }
     }
     
     const response = await api.put(`/api/users/${editForm.value.id}`, requestData);
