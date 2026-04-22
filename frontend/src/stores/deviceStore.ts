@@ -476,8 +476,8 @@ const fetchDeviceHistoryData = async (deviceId?: number) => {
     }
     
     const data = await api.get('/api/sensors/grouped', {
-      period: '86400',
-      group: '48',
+      period: '172800',
+      group: '96',
       device_id: deviceId?.toString()
     });
     
@@ -574,7 +574,7 @@ const getDeviceHistoryData = (deviceId?: number) => {
 };
 
 // 从后端接口获取传感器数据
-const fetchSensorData = async (deviceId: number) => {
+const fetchSensorData = async (deviceId: number, timeRange: 'today' | 'two_days' = 'today') => {
   const times: string[] = [];
   const temperatureValues: number[] = [];
   const humidityValues: number[] = [];
@@ -587,10 +587,14 @@ const fetchSensorData = async (deviceId: number) => {
       return { times, temperatureValues, humidityValues };
     }
     
+    // 根据时间范围设置参数
+    const period = timeRange === 'today' ? '86400' : '172800'; // 24小时或48小时
+    const group = timeRange === 'today' ? '48' : '96'; // 48组或96组
+    
     // 发送请求到后端接口
     const data = await api.get('/api/sensors/grouped', {
-      period: '86400',
-      group: '48',
+      period,
+      group,
       device_id: deviceId.toString()
     });
     

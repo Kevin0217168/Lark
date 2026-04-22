@@ -179,18 +179,34 @@
             </el-select>
           </div>
         </div>
+
+        <!-- 时间范围选择器 -->
+        <div class="time-range-selector">
+          <div class="time-buttons-container">
+            <button
+              v-for="label in timeRangeLabels"
+              :key="label.value"
+              class="time-button"
+              :class="{ active: timeRange === label.value }"
+              @click="setTimeRange(label.value)"
+            >
+              {{ label.text }}
+            </button>
+          </div>
+        </div>
+
         <div class="analysis-content">
           <!-- 所有设备平均值图表 -->
           <div class="chart-container average-chart">
-            <h3>所有设备平均值 <span class="time-range">(最近24小时)</span></h3>
+            <h3>所有设备平均值 <span class="time-range">({{ timeRangeText }})</span></h3>
             <div ref="averageChartRef" class="chart"></div>
           </div>
           <div class="chart-container">
-            <h3>温度数据 <span class="time-range">(最近24小时)</span></h3>
+            <h3>温度数据 <span class="time-range">({{ timeRangeText }})</span></h3>
             <div ref="temperatureChartRef" class="chart"></div>
           </div>
           <div class="chart-container">
-            <h3>湿度数据 <span class="time-range">(最近24小时)</span></h3>
+            <h3>湿度数据 <span class="time-range">({{ timeRangeText }})</span></h3>
             <div ref="humidityChartRef" class="chart"></div>
           </div>
 
@@ -426,30 +442,57 @@
     <div v-else-if="activeTab === 'analysis'" class="analysis-container">
       <div class="device-selector">
         <el-select v-model="selectedDeviceId" placeholder="选择设备" @change="handleDeviceChange" style="width: 100%;">
-          <el-option 
-            v-for="device in devices" 
-            :key="device.id" 
-            :label="device.name" 
-            :value="device.id" 
+          <el-option
+            v-for="device in devices"
+            :key="device.id"
+            :label="device.name"
+            :value="device.id"
           />
         </el-select>
       </div>
-      
+
+      <!-- 时间轴筛选器 -->
+      <div class="time-range-selector mobile">
+        <div class="time-slider-container">
+          <div class="time-labels">
+            <span
+              v-for="label in timeRangeLabels"
+              :key="label.value"
+              class="time-label"
+              :class="{ active: timeRange === label.value }"
+              @click="setTimeRange(label.value)"
+            >
+              {{ label.text }}
+            </span>
+          </div>
+          <div class="slider-track">
+            <div
+              class="slider-progress"
+              :style="{ width: getTimeRangeProgress() + '%' }"
+            ></div>
+            <div
+              class="slider-thumb"
+              :style="{ left: getTimeRangeProgress() + '%' }"
+            ></div>
+          </div>
+        </div>
+      </div>
+
       <!-- 图表 -->
       <div class="chart-section">
         <div class="chart-card">
-          <h3>所有设备平均值 <span class="time-range">(最近6小时)</span></h3>
+          <h3>所有设备平均值 <span class="time-range">({{ timeRangeText }})</span></h3>
           <div ref="averageChartRef" class="chart"></div>
         </div>
         <div class="chart-card">
-          <h3>温度数据 <span class="time-range">(最近6小时)</span></h3>
+          <h3>温度数据 <span class="time-range">({{ timeRangeText }})</span></h3>
           <div ref="temperatureChartRef" class="chart"></div>
         </div>
         <div class="chart-card">
-          <h3>湿度数据 <span class="time-range">(最近6小时)</span></h3>
+          <h3>湿度数据 <span class="time-range">({{ timeRangeText }})</span></h3>
           <div ref="humidityChartRef" class="chart"></div>
         </div>
-       
+
       </div>
     </div>
     
@@ -735,6 +778,54 @@ const temperatureChartRef = ref<HTMLElement | null>(null);
 const humidityChartRef = ref<HTMLElement | null>(null);
 const averageChartRef = ref<HTMLElement | null>(null);
 
+// 时间范围状态
+const timeRange = ref<'today' | 'two_days'>('today');
+const timeRangeLabels = [
+  { text: '今日', value: 'today' as const },
+  { text: '两天', value: 'two_days' as const }
+];
+
+// 获取时间范围显示文本
+const timeRangeText = computed(() => {
+  return timeRange.value === 'today' ? '今日' : '两天';
+});
+
+// 获取时间范围进度百分比
+const getTimeRangeProgress = () => {
+  const index = timeRangeLabels.findIndex(l => l.value === timeRange.value);
+  return (index / (timeRangeLabels.length - 1)) * 100;
+};
+
+// 设置时间范围
+const setTimeRange = (range: 'today' | 'two_days') => {
+  timeRange.value = range;
+  refreshChartsForTimeRange();
+};
+
+// 将 HH:MM 格式的时间字符串转换为从当天0点开始的分钟数
+const timeToMinutes = (timeStr: string): number => {
+  const parts = timeStr.split(':');
+  if (parts.length !== 2) return 0;
+  const hoursStr = parts[0];
+  const minutesStr = parts[1];
+  if (!hoursStr || !minutesStr) return 0;
+  const hours = parseInt(hoursStr, 10);
+  const minutes = parseInt(minutesStr, 10);
+  if (isNaN(hours) || isNaN(minutes)) return 0;
+  return hours * 60 + minutes;
+};
+
+// 根据时间范围刷新图表
+const refreshChartsForTimeRange = async () => {
+  if (!selectedDeviceId.value) return;
+
+  if (isMobile.value) {
+    initMobileCharts();
+  } else {
+    initDesktopCharts();
+  }
+};
+
 // 图表实例
 let temperatureChart: echarts.ECharts | null = null;
 let humidityChart: echarts.ECharts | null = null;
@@ -751,6 +842,38 @@ let previousFrameTimestamp = 0;
 let streamCheckInterval: number | null = null;
 let ws: WebSocket | null = null;
 let currentImageUrl: string = '';
+
+// 帧率计算相关
+const fpsHistory: number[] = [];
+let fpsUpdateInterval: number | null = null;
+const MAX_FPS = 60; // 最大合理帧率
+const MIN_FPS = 1; // 最小合理帧率
+const SMOOTHING_FACTOR = 0.7; // 平滑因子，值越大平滑效果越好，但响应越慢
+let smoothedFps = 0;
+
+// 计算0.5秒内的平均帧率（使用平滑算法）
+const calculateAverageFps = () => {
+  if (fpsHistory.length === 0) {
+    currentFps.value = 0;
+    smoothedFps = 0;
+    return;
+  }
+  
+  // 计算当前平均值
+  const sum = fpsHistory.reduce((acc, fps) => acc + fps, 0);
+  const currentAverage = sum / fpsHistory.length;
+  
+  // 使用指数移动平均（EMA）进行平滑
+  if (smoothedFps === 0) {
+    // 首次计算
+    smoothedFps = currentAverage;
+  } else {
+    // EMA: 新值 = 旧值 * (1 - 平滑因子) + 当前值 * 平滑因子
+    smoothedFps = smoothedFps * (1 - SMOOTHING_FACTOR) + currentAverage * SMOOTHING_FACTOR;
+  }
+  
+  currentFps.value = Math.round(smoothedFps);
+};
 
 // 视频翻转控制
 const flipHorizontal = ref(false);
@@ -786,6 +909,12 @@ const sendFrameSize = async (size: string) => {
     console.warn('WebSocket连接未建立，无法发送视频尺寸设置');
     return;
   }
+  
+  // 重置帧率计算
+  fpsHistory.length = 0;
+  currentFps.value = 0;
+  smoothedFps = 0;
+  previousFrameTimestamp = 0;
   
   const message = JSON.stringify({
     code: 1,
@@ -854,7 +983,18 @@ const handleFrameData = (data: any) => {
     const now = Date.now();
     if (previousFrameTimestamp > 0) {
       const frameInterval = now - previousFrameTimestamp;
-      currentFps.value = Math.round(1000 / frameInterval);
+      if (frameInterval > 0) {
+        let frameFps = 1000 / frameInterval;
+        
+        // 过滤异常值
+        if (frameFps >= MIN_FPS && frameFps <= MAX_FPS) {
+          fpsHistory.push(frameFps);
+          // 只保留最近30帧的数据，避免数组过大且能快速响应变化
+          if (fpsHistory.length > 30) {
+            fpsHistory.shift();
+          }
+        }
+      }
     }
     previousFrameTimestamp = now;
     
@@ -1030,6 +1170,12 @@ const stopRealtimeMonitoring = async () => {
     ws = null;
   }
   
+  // 清空帧率历史数据
+  fpsHistory.length = 0;
+  currentFps.value = 0;
+  smoothedFps = 0;
+  previousFrameTimestamp = 0;
+  
   if (isMobile.value && currentImageUrl) {
     URL.revokeObjectURL(currentImageUrl);
     currentImageUrl = '';
@@ -1038,6 +1184,7 @@ const stopRealtimeMonitoring = async () => {
   if (isMobile.value) {
     currentFrameImage.value = '';
   }
+  
   connectionError.value = '';
   isStreamDisconnected.value = false;
 };
@@ -1089,7 +1236,39 @@ const initCharts = async () => {
 // 桌面端图表初始化
 const initDesktopCharts = async () => {
   // 获取传感器数据
-  const sensorData = await fetchSensorData(selectedDeviceId.value!);
+  const sensorData = await fetchSensorData(selectedDeviceId.value!, timeRange.value);
+  
+  // 获取时间范围
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+  // 过滤数据 - fetchSensorData返回HH:MM格式的时间
+  // 今日：显示从00:00到当前时刻的数据
+  // 两天：显示所有48小时的数据
+  const filteredTimes = [];
+  const filteredTemperatureValues = [];
+  const filteredHumidityValues = [];
+
+  for (let i = 0; i < sensorData.times.length; i++) {
+    const timeStr = sensorData.times[i];
+    if (timeStr) {
+      const timeMinutes = timeToMinutes(timeStr);
+
+      if (timeRange.value === 'today') {
+        // 今日：只显示00:00到当前时刻的数据
+        if (timeMinutes <= nowMinutes) {
+          filteredTimes.push(timeStr);
+          filteredTemperatureValues.push(sensorData.temperatureValues[i]);
+          filteredHumidityValues.push(sensorData.humidityValues[i]);
+        }
+      } else {
+        // 两天：显示所有数据
+        filteredTimes.push(timeStr);
+        filteredTemperatureValues.push(sensorData.temperatureValues[i]);
+        filteredHumidityValues.push(sensorData.humidityValues[i]);
+      }
+    }
+  }
   
   // 温度图表
   if (temperatureChartRef.value) {
@@ -1098,8 +1277,9 @@ const initDesktopCharts = async () => {
     }
     temperatureChart = echarts.init(temperatureChartRef.value);
     // 计算温度数据的最小值和最大值
-    const tempMin = Math.min(...sensorData.temperatureValues);
-    const tempMax = Math.max(...sensorData.temperatureValues);
+    const validTempValues = filteredTemperatureValues.filter(val => val !== undefined && val !== null) as number[];
+    const tempMin = validTempValues.length > 0 ? Math.min(...validTempValues) : 0;
+    const tempMax = validTempValues.length > 0 ? Math.max(...validTempValues) : 100;
     // 调整纵轴范围，使数据更直观
     const tempRange = tempMax - tempMin;
     let tempYMin = tempMin;
@@ -1114,7 +1294,7 @@ const initDesktopCharts = async () => {
       },
       xAxis: {
         type: 'category',
-        data: sensorData.times
+        data: filteredTimes
       },
       yAxis: {
         type: 'value',
@@ -1123,7 +1303,7 @@ const initDesktopCharts = async () => {
         max: tempYMax
       },
       series: [{
-        data: sensorData.temperatureValues,
+        data: filteredTemperatureValues,
         type: 'line',
         smooth: true,
         itemStyle: {
@@ -1151,8 +1331,9 @@ const initDesktopCharts = async () => {
     }
     humidityChart = echarts.init(humidityChartRef.value);
     // 计算湿度数据的最小值和最大值
-    const humidityMin = Math.min(...sensorData.humidityValues);
-    const humidityMax = Math.max(...sensorData.humidityValues);
+    const validHumidityValues = filteredHumidityValues.filter(val => val !== undefined && val !== null) as number[];
+    const humidityMin = validHumidityValues.length > 0 ? Math.min(...validHumidityValues) : 0;
+    const humidityMax = validHumidityValues.length > 0 ? Math.max(...validHumidityValues) : 100;
     // 调整纵轴范围，使数据更直观
     const humidityRange = humidityMax - humidityMin;
     let humidityYMin = humidityMin;
@@ -1167,7 +1348,7 @@ const initDesktopCharts = async () => {
       },
       xAxis: {
         type: 'category',
-        data: sensorData.times
+        data: filteredTimes
       },
       yAxis: {
         type: 'value',
@@ -1176,7 +1357,7 @@ const initDesktopCharts = async () => {
         max: humidityYMax
       },
       series: [{
-        data: sensorData.humidityValues,
+        data: filteredHumidityValues,
         type: 'line',
         smooth: true,
         itemStyle: {
@@ -1207,6 +1388,29 @@ const initDesktopCharts = async () => {
     // 计算所有设备的平均值
     const avgData = getDeviceAverageData();
     
+    // 过滤平均数据
+    const filteredAvgTimes = [];
+    const filteredAvgTempValues = [];
+    const filteredAvgHumidityValues = [];
+    
+    for (let i = 0; i < avgData.times.length; i++) {
+      const timeStr = avgData.times[i];
+      if (timeStr) {
+        const timeMinutes = timeToMinutes(timeStr);
+        if (timeRange.value === 'today') {
+          if (timeMinutes <= nowMinutes) {
+            filteredAvgTimes.push(timeStr);
+            filteredAvgTempValues.push(avgData.temperatureValues[i]);
+            filteredAvgHumidityValues.push(avgData.humidityValues[i]);
+          }
+        } else {
+          filteredAvgTimes.push(timeStr);
+          filteredAvgTempValues.push(avgData.temperatureValues[i]);
+          filteredAvgHumidityValues.push(avgData.humidityValues[i]);
+        }
+      }
+    }
+
     averageChart.setOption({
       tooltip: {
         trigger: 'axis'
@@ -1216,7 +1420,7 @@ const initDesktopCharts = async () => {
       },
       xAxis: {
         type: 'category',
-        data: avgData.times
+        data: filteredAvgTimes
       },
       yAxis: {
         type: 'value',
@@ -1225,7 +1429,7 @@ const initDesktopCharts = async () => {
       series: [
         {
           name: '平均温度',
-          data: avgData.temperatureValues,
+          data: filteredAvgTempValues,
           type: 'line',
           smooth: true,
           itemStyle: {
@@ -1234,7 +1438,7 @@ const initDesktopCharts = async () => {
         },
         {
           name: '平均湿度',
-          data: avgData.humidityValues,
+          data: filteredAvgHumidityValues,
           type: 'line',
           smooth: true,
           itemStyle: {
@@ -1252,16 +1456,43 @@ const initMobileCharts = () => {
   temperatureChart?.dispose();
   humidityChart?.dispose();
   averageChart?.dispose();
-  
+
+  // 获取当前时间分钟数
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
   // 初始化平均图表
   if (averageChartRef.value) {
     averageChart = echarts.init(averageChartRef.value);
-    const avgData = getDeviceAverageData(6); // 6小时范围
+    const avgData = getDeviceAverageData();
+
+    // 过滤平均数据
+    const filteredAvgTimes = [];
+    const filteredAvgTempValues = [];
+    const filteredAvgHumidityValues = [];
+
+    for (let i = 0; i < avgData.times.length; i++) {
+      const timeStr = avgData.times[i];
+      if (timeStr) {
+        const timeMinutes = timeToMinutes(timeStr);
+        if (timeRange.value === 'today') {
+          if (timeMinutes <= nowMinutes) {
+            filteredAvgTimes.push(timeStr);
+            filteredAvgTempValues.push(avgData.temperatureValues[i]);
+            filteredAvgHumidityValues.push(avgData.humidityValues[i]);
+          }
+        } else {
+          filteredAvgTimes.push(timeStr);
+          filteredAvgTempValues.push(avgData.temperatureValues[i]);
+          filteredAvgHumidityValues.push(avgData.humidityValues[i]);
+        }
+      }
+    }
     
-    // 采样12个点显示（保持6小时范围）
-    const sampledTimes = sampleData(avgData.times, 12);
-    const sampledTempValues = sampleData(avgData.temperatureValues, 12);
-    const sampledHumidityValues = sampleData(avgData.humidityValues, 12);
+    // 采样12个点显示
+    const sampledTimes = sampleData(filteredAvgTimes, 12);
+    const sampledTempValues = sampleData(filteredAvgTempValues, 12);
+    const sampledHumidityValues = sampleData(filteredAvgHumidityValues, 12);
     
     averageChart.setOption({
       tooltip: {
@@ -1341,17 +1572,18 @@ const initMobileCharts = () => {
   if (temperatureChartRef.value && selectedDeviceId.value) {
     temperatureChart = echarts.init(temperatureChartRef.value);
     const allHistoryData = getDeviceHistoryData(selectedDeviceId.value);
+
+    // 过滤数据 - historyData的timestamp是完整日期字符串，可以使用Date比较
+    const timeRangeStartDate = new Date();
+    timeRangeStartDate.setDate(timeRangeStartDate.getDate() - (timeRange.value === 'two_days' ? 1 : 0));
+    timeRangeStartDate.setHours(0, 0, 0, 0);
+    const historyData = allHistoryData.filter(d => new Date(d.timestamp) >= timeRangeStartDate);
     
-    // 过滤最近6小时的数据
-    const sixHoursAgo = new Date();
-    sixHoursAgo.setHours(sixHoursAgo.getHours() - 6);
-    const historyData = allHistoryData.filter(d => new Date(d.timestamp) >= sixHoursAgo);
-    
-    // 采样12个点显示（保持6小时范围）
+    // 采样12个点显示
     const sampledHistoryData = sampleData(historyData, 12);
     const tempValues = sampledHistoryData.map(d => d.temperature);
-    const tempMin = Math.min(...tempValues);
-    const tempMax = Math.max(...tempValues);
+    const tempMin = tempValues.length > 0 ? Math.min(...tempValues) : 0;
+    const tempMax = tempValues.length > 0 ? Math.max(...tempValues) : 100;
     // 调整纵轴范围，使数据更直观
     const tempRange = tempMax - tempMin;
     let tempYMin = tempMin;
@@ -1412,17 +1644,18 @@ const initMobileCharts = () => {
   if (humidityChartRef.value && selectedDeviceId.value) {
     humidityChart = echarts.init(humidityChartRef.value);
     const allHistoryData = getDeviceHistoryData(selectedDeviceId.value);
+
+    // 过滤数据 - historyData的timestamp是完整日期字符串，可以使用Date比较
+    const timeRangeStartDate = new Date();
+    timeRangeStartDate.setDate(timeRangeStartDate.getDate() - (timeRange.value === 'two_days' ? 1 : 0));
+    timeRangeStartDate.setHours(0, 0, 0, 0);
+    const historyData = allHistoryData.filter(d => new Date(d.timestamp) >= timeRangeStartDate);
     
-    // 过滤最近6小时的数据
-    const sixHoursAgo = new Date();
-    sixHoursAgo.setHours(sixHoursAgo.getHours() - 6);
-    const historyData = allHistoryData.filter(d => new Date(d.timestamp) >= sixHoursAgo);
-    
-    // 采样12个点显示（保持6小时范围）
+    // 采样12个点显示
     const sampledHistoryData = sampleData(historyData, 12);
     const humidityValues = sampledHistoryData.map(d => d.humidity);
-    const humidityMin = Math.min(...humidityValues);
-    const humidityMax = Math.max(...humidityValues);
+    const humidityMin = humidityValues.length > 0 ? Math.min(...humidityValues) : 0;
+    const humidityMax = humidityValues.length > 0 ? Math.max(...humidityValues) : 100;
     // 调整纵轴范围，使数据更直观
     const humidityRange = humidityMax - humidityMin;
     let humidityYMin = humidityMin;
@@ -1490,6 +1723,9 @@ onMounted(async () => {
 
   const latestDevices = getDevices();
 
+  // 启动帧率计算定时器（每0.5秒计算一次）
+  fpsUpdateInterval = window.setInterval(calculateAverageFps, 500);
+
   setTimeout(async () => {
     const currentDevices = getDevices();
 
@@ -1539,6 +1775,11 @@ onUnmounted(() => {
   window.removeEventListener('resize', handleResize);
   stopRealtimeMonitoring();
   stopRealtimeDataTimer();
+  // 清理帧率计算定时器
+  if (fpsUpdateInterval) {
+    clearInterval(fpsUpdateInterval);
+    fpsUpdateInterval = null;
+  }
   temperatureChart?.dispose();
   humidityChart?.dispose();
   averageChart?.dispose();
@@ -2038,6 +2279,135 @@ const goToFullscreen = () => {
   padding: 20px;
 }
 
+/* 时间轴筛选器 */
+.time-range-selector {
+  margin-bottom: 16px;
+  margin-top: 12px;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.time-buttons-container {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.time-button {
+  font-size: 14px;
+  font-weight: 500;
+  color: #606266;
+  background: #f5f7fa;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  min-width: 60px;
+  text-align: center;
+}
+
+.time-button:hover {
+  color: #409eff;
+  border-color: #c6e2ff;
+  background: #ecf5ff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.time-button.active {
+  color: #fff;
+  background: linear-gradient(135deg, #409eff 0%, #66b1ff 100%);
+  border-color: #409eff;
+  box-shadow: 0 3px 6px rgba(64, 158, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.time-button.active:hover {
+  background: linear-gradient(135deg, #66b1ff 0%, #409eff 100%);
+  box-shadow: 0 4px 8px rgba(64, 158, 255, 0.4);
+}
+
+/* 移动端保持原有滑块样式 */
+.time-range-selector.mobile {
+  margin-bottom: 20px;
+  padding: 16px 20px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.time-range-selector.mobile .time-slider-container {
+  position: relative;
+}
+
+.time-range-selector.mobile .time-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.time-range-selector.mobile .time-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #909399;
+  cursor: pointer;
+  padding: 6px 16px;
+  border-radius: 20px;
+  transition: all 0.3s ease;
+}
+
+.time-range-selector.mobile .time-label:hover {
+  color: #409eff;
+  background: rgba(64, 158, 255, 0.1);
+}
+
+.time-range-selector.mobile .time-label.active {
+  color: #fff;
+  background: linear-gradient(135deg, #409eff 0%, #66b1ff 100%);
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.3);
+}
+
+.time-range-selector.mobile .slider-track {
+  position: relative;
+  height: 6px;
+  background: #e4e7ed;
+  border-radius: 3px;
+  margin: 0 20px;
+}
+
+.time-range-selector.mobile .slider-progress {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #409eff 0%, #66b1ff 100%);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.time-range-selector.mobile .slider-thumb {
+  position: absolute;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border: 3px solid #409eff;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 2px 6px rgba(64, 158, 255, 0.4);
+  transition: left 0.3s ease;
+  cursor: pointer;
+}
+
+.time-range-selector.mobile .slider-thumb:hover {
+  transform: translate(-50%, -50%) scale(1.2);
+  box-shadow: 0 4px 10px rgba(64, 158, 255, 0.5);
+}
+
 .tab-content .el-card {
   background: #fff;
   border-radius: 15px;
@@ -2410,6 +2780,20 @@ const goToFullscreen = () => {
 /* 分析 */
 .mobile-data .analysis-container {
   padding: 0;
+}
+
+.mobile-data .time-range-selector {
+  margin: 16px 0;
+  padding: 12px 16px;
+}
+
+.mobile-data .time-range-selector .time-label {
+  font-size: 13px;
+  padding: 5px 12px;
+}
+
+.mobile-data .time-range-selector .slider-track {
+  margin: 0 12px;
 }
 
 .mobile-data .chart-section {
