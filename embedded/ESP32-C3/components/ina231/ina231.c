@@ -7,6 +7,79 @@
 
 static const char *TAG = "ina231";
 
+bus_calibration_t ina231_bus_calibration_compute(const bus_calibration_point_t *points, size_t count)
+{
+    bus_calibration_t cal = { .gain = 1.0f, .offset = 0.0f, .valid = false };
+    if (points == NULL || count == 0) {
+        return cal;
+    }
+    if (count == 1) {
+        float measured = points[0].measured_v;
+        cal.gain = (measured == 0.0f) ? 1.0f : (points[0].reference_v / measured);
+        cal.offset = 0.0f;
+        cal.valid = true;
+        return cal;
+    }
+
+    float sum_x = 0.0f;
+    float sum_y = 0.0f;
+    float sum_xy = 0.0f;
+    float sum_x2 = 0.0f;
+    for (size_t i = 0; i < count; ++i) {
+        float x = points[i].measured_v;
+        float y = points[i].reference_v;
+        sum_x += x;
+        sum_y += y;
+        sum_xy += x * y;
+        sum_x2 += x * x;
+    }
+
+    float mean_x = sum_x / count;
+    float mean_y = sum_y / count;
+    float denom = sum_x2 - sum_x * mean_x;
+    if (denom == 0.0f) {
+        cal.gain = 1.0f;
+        cal.offset = 0.0f;
+        cal.valid = false;
+        return cal;
+    }
+
+    cal.gain = (sum_xy - sum_x * mean_y) / denom;
+    cal.offset = mean_y - cal.gain * mean_x;
+    cal.valid = true;
+    return cal;
+}
+
+float ina231_bus_voltage_calibrate(float raw_bus_v, const bus_calibration_t *cal)
+{
+    if (cal == NULL || !cal->valid) {
+        return raw_bus_v;
+    }
+    return raw_bus_v * cal->gain + cal->offset;
+}
+
+void ina231_dump_ina231_registers(i2c_port_t port, uint8_t addr, uint32_t current_lsb_nA)
+{
+    uint16_t config = 0;
+    uint16_t shunt = 0;
+    uint16_t bus = 0;
+    uint16_t power = 0;
+    uint16_t current = 0;
+    uint16_t calibration = 0;
+    uint16_t mask = 0;
+
+    ina231_read_register(port, addr, INA231_REG_CONFIGURATION, &config);
+    ina231_read_register(port, addr, INA231_REG_SHUNT_VOLTAGE, &shunt);
+    ina231_read_register(port, addr, INA231_REG_BUS_VOLTAGE, &bus);
+    ina231_read_register(port, addr, INA231_REG_POWER, &power);
+    ina231_read_register(port, addr, INA231_REG_CURRENT, &current);
+    ina231_read_register(port, addr, INA231_REG_CALIBRATION, &calibration);
+    ina231_read_register(port, addr, INA231_REG_MASK_ENABLE, &mask);
+
+    ESP_LOGI(TAG, "INA231 registers: CONFIG=0x%04X SHUNT=0x%04X BUS=0x%04X POWER=0x%04X CURRENT=0x%04X CAL=0x%04X MASK=0x%04X",
+             config, shunt, bus, power, current, calibration, mask);
+}
+
 static esp_err_t ina231_i2c_write16(i2c_port_t port, uint8_t addr, uint8_t reg, uint16_t value) {
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     if (cmd == NULL) {

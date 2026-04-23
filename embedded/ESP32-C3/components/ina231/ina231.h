@@ -28,6 +28,17 @@ extern "C" {
 #define INA231_BUS_VOLTAGE_LSB_V     0.00125f
 #define INA231_SHUNT_VOLTAGE_LSB_V   0.0000025f
 
+typedef struct {
+    float measured_v;
+    float reference_v;
+} bus_calibration_point_t;
+
+typedef struct {
+    float gain;
+    float offset;
+    bool valid;
+} bus_calibration_t;
+
 typedef enum {
     INA231_MODE_SHUTDOWN = 0,
     INA231_MODE_TRIGGERED_SHUNT = 1,
@@ -38,6 +49,10 @@ typedef enum {
     INA231_MODE_CONTINUOUS_BUS = 6,
     INA231_MODE_CONTINUOUS_BOTH = 7,
 } ina231_mode_t;
+
+bus_calibration_t ina231_bus_calibration_compute(const bus_calibration_point_t *points, size_t count);
+float ina231_bus_voltage_calibrate(float raw_bus_v, const bus_calibration_t *cal);
+void ina231_dump_ina231_registers(i2c_port_t port, uint8_t addr, uint32_t current_lsb_nA);
 
 esp_err_t ina231_init(i2c_port_t port, gpio_num_t sda_gpio, gpio_num_t scl_gpio, uint32_t freq_hz);
 esp_err_t ina231_write_register(i2c_port_t port, uint8_t addr, uint8_t reg, uint16_t value);
