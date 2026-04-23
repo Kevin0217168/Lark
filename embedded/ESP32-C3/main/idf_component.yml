@@ -1,0 +1,31 @@
+## IDF Component Manager Manifest File
+dependencies:
+  ## Required IDF version
+  idf:
+    version: '>=4.1.0'
+  # # Put list of dependencies here
+  # # For components maintained by Espressif:
+  # component: "~1.0.0"
+  # # For 3rd party components:
+  # username/component: ">=1.0.0,<2.0.0"
+  # username2/component2:
+  #   version: "~1.0.0"
+  #   # For transient dependencies `public` flag can be set.
+  #   # `public` flag doesn't have an effect dependencies of the `main` component.
+  #   # All dependencies of `main` are public by default.
+  #   public: true
+  espressif/esp32-camera: '*'
+
+  # 通过相对路径定义本地依赖项
+  ina231:
+    path: ../components/ina231
+  pms9103m:
+    path: ../components/pms9103m
+  sgp30:
+    path: ../components/sgp30
+  sound_meter:
+    path: ../components/sound_meter
+  uv_meter:
+    path: ../components/uv_meter
+  veml7700:
+    path: ../components/veml7700
