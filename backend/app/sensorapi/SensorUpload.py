@@ -27,13 +27,14 @@ router = APIRouter(prefix="/sensor-upload", tags=["SensorUpload"])
     "",
     response_model=CommonOut[SensorUploadResult],
     summary="新增传感器上传记录",
-    description="设备或客户端上传传感器数据到服务器。\n\n- 接收完整传感器数据对象，验证数据合法性后将记录插入数据库\n- 若未提供时间戳，则自动使用服务器当前时间(UTC+8)\n- 返回操作结果及新记录ID",
+    description="设备或客户端上传传感器数据到服务器。\n\n- 使用设备密钥(secret)进行身份验证，只有存在于设备表中的密钥才接受记录\n- 接收完整传感器数据对象，验证数据合法性后将记录插入数据库\n- 若未提供时间戳，则自动使用服务器当前时间(UTC+8)\n- 返回操作结果及新记录ID",
 )
 async def create_sensor_upload(
-    body: Annotated[SensorUploadCreate, Body(description="传感器上传数据，包含设备ID、传感器类型、数据类型、数据内容及可选时间戳")],
+    body: Annotated[SensorUploadCreate, Body(description="传感器上传数据，包含设备密钥(secret)、传感器类型、数据类型、数据内容及可选时间戳")],
     db: Db.Session = Depends(Db.GetDb("create_sensor_upload")),
+    device_db: Db.Session = Depends(Db.GetDb("create_sensor_upload_device_check")),
 ):
-    result = AddSensorUpload(db, body)
+    result = AddSensorUpload(db, body, device_db)
     if result.success:
         return CommonOut(data=result)
     return JSONResponse(

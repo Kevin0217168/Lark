@@ -138,3 +138,22 @@ def DeleteSensorData(
     deleted_count = query.delete(synchronize_session=False)
     db.commit()
     return deleted_count
+
+
+def CleanupOldSensorData(db: Session, days: int = 7) -> int:
+    """
+    删除超过指定天数的传感器数据。
+
+    Args:
+        db: 数据库会话
+        days: 保留天数，默认7天
+
+    Returns:
+        删除的记录条数
+    """
+    from datetime import timedelta
+    cutoff_time = datetime.now() - timedelta(days=days)
+
+    count = db.query(M_SensorData).filter(M_SensorData.timestamp < cutoff_time).delete(synchronize_session=False)
+    db.commit()
+    return count

@@ -24,7 +24,7 @@ class M_SensorUpload(SensorUploadBase):
 
 class SensorUploadItem(BaseModel):
     id: int = Field(..., title="记录ID", description="记录唯一主键ID")
-    device_id: str = Field(..., title="设备ID", description="传感器所属设备的唯一标识ID")
+    device_id: str = Field(..., title="设备ID", description="设备唯一标识ID")
     sensor_type: str = Field(..., title="传感器类型", description="传感器类型")
     data_type: str = Field(..., title="数据类型", description="数据单位或格式")
     data: str = Field(..., title="传感器数据", description="传感器采集的数据值")
@@ -35,7 +35,7 @@ class SensorUploadItem(BaseModel):
 
 
 class SensorUploadCreate(BaseModel):
-    device_id: str = Field(..., min_length=1, max_length=50, title="设备ID", description="传感器所属设备的唯一标识ID")
+    secret: str = Field(..., min_length=1, max_length=50, title="设备密钥", description="传感器所属设备的唯一密钥(secret)")
     sensor_type: str = Field(..., min_length=1, max_length=50, title="传感器类型", description="传感器类型，如temperature、humidity、pressure等")
     data_type: str = Field(..., min_length=1, max_length=20, title="数据类型", description="数据单位或格式，如°C、%、hPa等")
     data: str = Field(..., min_length=1, title="传感器数据", description="传感器采集的实际数据值")
@@ -43,7 +43,6 @@ class SensorUploadCreate(BaseModel):
 
 
 class SensorUploadUpdate(BaseModel):
-    device_id: Optional[str] = Field(None, min_length=1, max_length=50, title="设备ID", description="传感器所属设备的唯一标识ID")
     sensor_type: Optional[str] = Field(None, min_length=1, max_length=50, title="传感器类型", description="传感器类型，如temperature、humidity、pressure等")
     data_type: Optional[str] = Field(None, min_length=1, max_length=20, title="数据类型", description="数据单位或格式，如°C、%、hPa等")
     data: Optional[str] = Field(None, min_length=1, title="传感器数据", description="传感器采集的实际数据值")
@@ -72,11 +71,25 @@ class SensorUploadResult(BaseModel):
 UTC8 = timezone(timedelta(hours=8))
 
 
-def AddSensorUpload(db: Session, item: SensorUploadCreate) -> SensorUploadResult:
+def AddSensorUpload(db: Session, item: SensorUploadCreate, device_db: Session) -> SensorUploadResult:
+    """
+    新增传感器上传记录。
+    使用 secret 进行身份验证，验证通过后存储设备的 id 到 device_id 字段。
+    """
     try:
+        # 验证 secret 是否存在于设备表中
+        from datacontrol.DeviceDb import M_Devices
+        device = device_db.query(M_Devices).filter(M_Devices.secret == item.secret).first()
+        if not device:
+            return SensorUploadResult(
+                success=False,
+                message="Invalid secret: device not found",
+                rows_affected=0,
+            )
+
         timestamp = item.timestamp if item.timestamp else datetime.now(UTC8)
         new_record = M_SensorUpload(
-            device_id=item.device_id,
+            device_id=str(device.id),
             sensor_type=item.sensor_type,
             data_type=item.data_type,
             data=item.data,
@@ -192,3 +205,22 @@ def DeleteSensorUpload(db: Session, id: int) -> SensorUploadResult:
             message=f"Failed to delete sensor upload record: {str(e)}",
             rows_affected=0,
         )
+
+
+def CleanupOldSensorUploads(db: Session, days: int = 7) -> int:
+    """
+    删除超过指定天数的传感器上传记录。
+
+    Args:
+        db: 数据库会话
+        days: 保留天数，默认7天
+
+    Returns:
+        删除的记录条数
+    """
+    from datetime import timedelta
+    cutoff_time = datetime.now() - timedelta(days=days)
+
+    count = db.query(M_SensorUpload).filter(M_SensorUpload.timestamp < cutoff_time).delete(synchronize_session=False)
+    db.commit()
+    return count

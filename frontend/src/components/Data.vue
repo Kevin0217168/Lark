@@ -77,6 +77,21 @@
               </div>
             </div>
           </div>
+          
+          <!-- 环境数据环形进度条 -->
+          <div class="env-gauges" v-if="selectedDevice">
+            <h3>环境数据</h3>
+            <div class="gauges-row">
+              <div class="gauge-item">
+                <div ref="aqiGaugeRef" class="gauge-chart"></div>
+                <div class="gauge-label">空气质量</div>
+              </div>
+              <div class="gauge-item">
+                <div ref="dbGaugeRef" class="gauge-chart"></div>
+                <div class="gauge-label">声音分贝</div>
+              </div>
+            </div>
+          </div>
         </div>
         
         <!-- 右侧视频流区域 -->
@@ -341,6 +356,20 @@
             <div class="data-label">创建时间</div>
             <div class="data-value small">{{ selectedDevice.createTime }}</div>
           </div>
+        </div>
+      </div>
+      
+      <!-- 环境数据环形进度条（移动端） -->
+      <div v-if="selectedDevice" class="mobile-gauges">
+        <div class="mobile-gauges-row">
+          <div class="mobile-gauge-item">
+             <div ref="aqiGaugeRefMobile" class="mobile-gauge-chart"></div>
+             <div class="mobile-gauge-label">空气质量</div>
+           </div>
+           <div class="mobile-gauge-item">
+             <div ref="dbGaugeRefMobile" class="mobile-gauge-chart"></div>
+             <div class="mobile-gauge-label">声音分贝</div>
+           </div>
         </div>
       </div>
       
@@ -682,6 +711,10 @@ const autoSelectFirstOnlineDevice = async () => {
     // 立即获取实时温湿度数据并启动定时器
     await fetchRealtimeData();
     startRealtimeDataTimer();
+    startEnvDataTimer();
+    nextTick(() => {
+      initGaugeCharts();
+    });
   } else {
     selectedDeviceId.value = null;
     showAllOfflineAlert.value = true;
@@ -696,6 +729,7 @@ const handleDeviceChange = async () => {
     if (activeTab.value === 'realtime') {
       await fetchRealtimeData();
       startRealtimeDataTimer();
+      startEnvDataTimer();
     }
     
     // 如果在分析界面，需要先获取历史数据再初始化图表
@@ -708,6 +742,7 @@ const handleDeviceChange = async () => {
     }
     nextTick(() => {
       initCharts();
+      initGaugeCharts();
     });
     // 重新开始实时监控
     startRealtimeMonitoring();
@@ -880,6 +915,156 @@ const flipHorizontal = ref(false);
 const flipVertical = ref(false);
 const imageQuality = ref(32); // 默认画质为32
 const frameSize = ref('FRAMESIZE_VGA'); // 默认视频尺寸
+
+// 环境数据环形进度条
+const aqiValue = ref(75);
+const dbValue = ref(45);
+const aqiGaugeRef = ref<HTMLElement | null>(null);
+const dbGaugeRef = ref<HTMLElement | null>(null);
+const aqiGaugeRefMobile = ref<HTMLElement | null>(null);
+const dbGaugeRefMobile = ref<HTMLElement | null>(null);
+let aqiGaugeChart: echarts.ECharts | null = null;
+let dbGaugeChart: echarts.ECharts | null = null;
+let aqiGaugeChartMobile: echarts.ECharts | null = null;
+let dbGaugeChartMobile: echarts.ECharts | null = null;
+
+// 模拟实时更新环境数据
+let envDataTimer: number | null = null;
+
+const simulateEnvData = () => {
+  aqiValue.value = Math.floor(Math.random() * 200) + 20;
+  dbValue.value = Math.floor(Math.random() * 60) + 25;
+  updateGaugeCharts();
+};
+
+const startEnvDataTimer = () => {
+  stopEnvDataTimer();
+  envDataTimer = window.setInterval(simulateEnvData, 5000);
+};
+
+const stopEnvDataTimer = () => {
+  if (envDataTimer) {
+    clearInterval(envDataTimer);
+    envDataTimer = null;
+  }
+};
+
+// 初始化环形进度条
+const initGaugeCharts = () => {
+  if (isMobile.value) {
+    if (aqiGaugeRefMobile.value) {
+      if (aqiGaugeChartMobile) aqiGaugeChartMobile.dispose();
+      aqiGaugeChartMobile = echarts.init(aqiGaugeRefMobile.value);
+    }
+    if (dbGaugeRefMobile.value) {
+      if (dbGaugeChartMobile) dbGaugeChartMobile.dispose();
+      dbGaugeChartMobile = echarts.init(dbGaugeRefMobile.value);
+    }
+  } else {
+    if (aqiGaugeRef.value) {
+      if (aqiGaugeChart) aqiGaugeChart.dispose();
+      aqiGaugeChart = echarts.init(aqiGaugeRef.value);
+    }
+    if (dbGaugeRef.value) {
+      if (dbGaugeChart) dbGaugeChart.dispose();
+      dbGaugeChart = echarts.init(dbGaugeRef.value);
+    }
+  }
+  initGaugeChartOption();
+  updateGaugeCharts();
+};
+
+const getActiveGaugeCharts = () => {
+  if (isMobile.value) {
+    return { aqi: aqiGaugeChartMobile, db: dbGaugeChartMobile };
+  }
+  return { aqi: aqiGaugeChart, db: dbGaugeChart };
+};
+
+const getGaugeOption = (max: number, color: string, bgColor: string, value: number, name: string) => ({
+  series: [{
+    type: 'gauge',
+    radius: '95%',
+    center: ['50%', '60%'],
+    startAngle: 180,
+    endAngle: 0,
+    min: 0,
+    max,
+    splitNumber: 1,
+    pointer: {
+      show: false
+    },
+    progress: {
+      show: true,
+      overlap: false,
+      roundCap: true,
+      clip: false,
+      itemStyle: {
+        color: {
+          type: 'linear',
+          x: 0, y: 0, x2: 1, y2: 0,
+          colorStops: [
+            { offset: 0, color: color },
+            { offset: 1, color: color + 'aa' }
+          ]
+        },
+        shadowColor: color + '40',
+        shadowBlur: 10,
+        shadowOffsetY: 2
+      }
+    },
+    axisLine: {
+      lineStyle: {
+        width: 14,
+        color: [[1, bgColor]]
+      }
+    },
+    splitLine: { show: false },
+    axisTick: { show: false },
+    axisLabel: { show: false },
+    title: { show: false },
+    detail: {
+      show: true,
+      valueAnimation: true,
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: color,
+      formatter: '{value}',
+      offsetCenter: [0, '0%']
+    },
+    data: [{ value: Math.min(value, max), name }]
+  }]
+});
+
+const initGaugeChartOption = () => {
+  const aqiColor = aqiValue.value > 150 ? '#f56c6c' : aqiValue.value > 100 ? '#e6a23c' : '#67c23a';
+  const dbColor = dbValue.value > 85 ? '#f56c6c' : dbValue.value > 65 ? '#e6a23c' : '#67c23a';
+  const aqiBg = aqiValue.value > 150 ? '#f56c6c1a' : aqiValue.value > 100 ? '#e6a23c1a' : '#67c23a1a';
+  const dbBg = dbValue.value > 85 ? '#f56c6c1a' : dbValue.value > 65 ? '#e6a23c1a' : '#67c23a1a';
+  const { aqi, db } = getActiveGaugeCharts();
+
+  if (aqi) {
+    aqi.setOption(getGaugeOption(300, aqiColor, aqiBg, aqiValue.value, 'AQI'));
+  }
+  if (db) {
+    db.setOption(getGaugeOption(120, dbColor, dbBg, dbValue.value, 'dB'));
+  }
+};
+
+const updateGaugeCharts = () => {
+  const aqiColor = aqiValue.value > 150 ? '#f56c6c' : aqiValue.value > 100 ? '#e6a23c' : '#67c23a';
+  const dbColor = dbValue.value > 85 ? '#f56c6c' : dbValue.value > 65 ? '#e6a23c' : '#67c23a';
+  const aqiBg = aqiValue.value > 150 ? '#f56c6c1a' : aqiValue.value > 100 ? '#e6a23c1a' : '#67c23a1a';
+  const dbBg = dbValue.value > 85 ? '#f56c6c1a' : dbValue.value > 65 ? '#e6a23c1a' : '#67c23a1a';
+  const { aqi, db } = getActiveGaugeCharts();
+
+  if (aqi) {
+    aqi.setOption(getGaugeOption(300, aqiColor, aqiBg, aqiValue.value, 'AQI'));
+  }
+  if (db) {
+    db.setOption(getGaugeOption(120, dbColor, dbBg, dbValue.value, 'dB'));
+  }
+};
 
 // 发送画质设置到WebSocket连接
 const sendStreamQuality = async (quality: number) => {
@@ -1739,6 +1924,10 @@ onMounted(async () => {
         } else {
           await fetchRealtimeData();
           startRealtimeDataTimer();
+          startEnvDataTimer();
+          nextTick(() => {
+            initGaugeCharts();
+          });
         }
       } else if (activeTab.value === 'history' && !historyDeviceId.value) {
         historyDeviceId.value = currentDevices[0]?.id || null;
@@ -1775,6 +1964,7 @@ onUnmounted(() => {
   window.removeEventListener('resize', handleResize);
   stopRealtimeMonitoring();
   stopRealtimeDataTimer();
+  stopEnvDataTimer();
   // 清理帧率计算定时器
   if (fpsUpdateInterval) {
     clearInterval(fpsUpdateInterval);
@@ -1783,6 +1973,10 @@ onUnmounted(() => {
   temperatureChart?.dispose();
   humidityChart?.dispose();
   averageChart?.dispose();
+  aqiGaugeChart?.dispose();
+  dbGaugeChart?.dispose();
+  aqiGaugeChartMobile?.dispose();
+  dbGaugeChartMobile?.dispose();
 });
 
 // 监听activeTab变化，重置设备选择
@@ -1825,11 +2019,15 @@ watch(() => props.activeTab, async (newTab, oldTab) => {
       const isCurrentDeviceOnline = currentDevice?.isOnline ?? false;
       
       if (!selectedDeviceId.value || !isCurrentDeviceOnline) {
-        await autoSelectFirstOnlineDevice();
-      } else {
-        await fetchRealtimeData();
-        startRealtimeDataTimer();
-      }
+          await autoSelectFirstOnlineDevice();
+        } else {
+          await fetchRealtimeData();
+          startRealtimeDataTimer();
+          startEnvDataTimer();
+          nextTick(() => {
+            initGaugeCharts();
+          });
+        }
       
       if (selectedDeviceId.value) {
         nextTick(() => {
@@ -2070,6 +2268,71 @@ const goToFullscreen = () => {
 .cell-value.time {
   font-size: 11px;
   color: #606266;
+}
+
+/* 环境数据环形进度条 */
+.env-gauges {
+  margin-top: 20px;
+}
+
+.env-gauges h3 {
+  margin: 0 0 14px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #2d5016;
+}
+
+.gauges-row {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+
+.gauge-item {
+  flex: 1;
+  max-width: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(139, 173, 66, 0.2);
+  border-radius: 20px;
+  padding: 20px 16px 16px;
+  box-shadow: 0 8px 32px rgba(139, 173, 66, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transition: all 0.3s ease;
+}
+
+.gauge-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(139, 173, 66, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.gauge-chart {
+  width: 130px;
+  height: 130px;
+}
+
+.gauge-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #4a6741;
+  margin-top: 2px;
+  letter-spacing: 0.5px;
+}
+
+.gauge-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #2d5016;
+  margin-top: 4px;
+  transition: color 0.3s ease;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.gauge-value.alert {
+  color: #dc2626;
 }
 
 /* 视频控制区域样式 */
@@ -2597,6 +2860,56 @@ const goToFullscreen = () => {
 
 .mobile-data .data-value.small {
   font-size: 14px;
+}
+
+/* 移动端环境数据环形进度条 */
+.mobile-data .mobile-gauges {
+  margin-bottom: 16px;
+}
+
+.mobile-data .mobile-gauges-row {
+  display: flex;
+  gap: 12px;
+}
+
+.mobile-data .mobile-gauge-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(139, 173, 66, 0.18);
+  border-radius: 16px;
+  padding: 14px 8px 10px;
+  box-shadow: 0 4px 20px rgba(139, 173, 66, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.mobile-data .mobile-gauge-chart {
+  width: 100px;
+  height: 100px;
+}
+
+.mobile-data .mobile-gauge-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #4a6741;
+  margin-top: 2px;
+  letter-spacing: 0.3px;
+}
+
+.mobile-data .mobile-gauge-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: #2d5016;
+  margin-top: 2px;
+  transition: color 0.3s ease;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.mobile-data .mobile-gauge-value.alert {
+  color: #dc2626;
 }
 
 /* 视频监控 */
