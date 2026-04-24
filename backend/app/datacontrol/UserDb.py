@@ -368,6 +368,7 @@ def AdoptBird(db: Session, user_id: int, bird_id: int) -> dict:
     "bird_species": bird.species,
     "birth_date": bird.birth_date.isoformat() if bird.birth_date else None,
     "description": bird.description,
+    "device_id": bird.device_id,
     "adopted_at": get_local_time().isoformat()
   }
 

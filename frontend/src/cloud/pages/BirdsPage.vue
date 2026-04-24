@@ -40,10 +40,97 @@
         
         <!-- 雏鸟形象展示区 -->
         <div class="bird-hero-section">
+          <!-- 监控控制栏 -->
+          <div class="monitoring-controls">
+            <div class="control-group">
+              <button 
+                class="control-btn" 
+                @click="reconnectWebSocket"
+              >
+                <span class="btn-icon">🔄</span>
+                <span class="btn-text">重连</span>
+              </button>
+              <button 
+                class="control-btn" 
+                :class="{ 'active': flipHorizontal }"
+                @click="toggleHorizontalFlip"
+              >
+                <span class="btn-icon">🔄</span>
+                <span class="btn-text">左右</span>
+              </button>
+              <button 
+                class="control-btn" 
+                :class="{ 'active': flipVertical }"
+                @click="toggleVerticalFlip"
+              >
+                <span class="btn-icon">🔄</span>
+                <span class="btn-text">上下</span>
+              </button>
+            </div>
+            
+            <!-- 视频质量和尺寸控制 -->
+            <div class="video-settings">
+              <div class="setting-item">
+                <span class="setting-label">画质</span>
+                <input 
+                  type="range" 
+                  v-model="imageQuality" 
+                  min="1" 
+                  max="63" 
+                  step="1"
+                  class="quality-slider"
+                />
+                <span class="setting-value">{{ imageQuality }}</span>
+              </div>
+              <div class="setting-item">
+                <span class="setting-label">分辨率</span>
+                <select v-model="frameSize" class="resolution-select">
+                  <option value="FRAMESIZE_128X128">128x128</option>
+                  <option value="FRAMESIZE_240X240">240x240</option>
+                  <option value="FRAMESIZE_320X320">320x320</option>
+                  <option value="FRAMESIZE_VGA">VGA</option>
+                  <option value="FRAMESIZE_SVGA">SVGA</option>
+                  <option value="FRAMESIZE_HD">HD</option>
+                  <option value="FRAMESIZE_FHD">FHD</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          
           <div class="bird-image-container">
-            <div class="image-placeholder">
+            <div v-if="currentFrameImage" class="video-container">
+              <img 
+                :src="currentFrameImage" 
+                class="video-stream"
+                :class="{ 'disconnected': isStreamDisconnected, 'flip-horizontal': flipHorizontal, 'flip-vertical': flipVertical }"
+                alt="雏鸟实时画面"
+              />
+              <div class="frame-info">
+                <span>更新时间: {{ lastFrameTime }}</span>
+                <span class="fps-info">帧率: {{ currentFps }} FPS</span>
+              </div>
+              <div class="stream-disconnected-overlay" v-if="isStreamDisconnected">
+                <div class="disconnected-content">
+                  <div class="disconnected-icon">⚠️</div>
+                  <div class="disconnected-message">视频流已断联</div>
+                </div>
+              </div>
+            </div>
+            <div v-else-if="connectionError" class="video-error">
+              <div class="error-content">
+                <div class="error-icon">❌</div>
+                <div class="error-message">{{ connectionError }}</div>
+                <button v-if="birdDeviceId" class="retry-btn" @click="reconnectWebSocket">
+                  重试连接
+                </button>
+              </div>
+            </div>
+            <div v-else class="image-placeholder">
               <div class="placeholder-icon">🐣</div>
               <p class="placeholder-text">雏鸟画面显示区域</p>
+              <button v-if="birdDeviceId" class="start-stream-btn" @click="startRealtimeMonitoring">
+                开始监控
+              </button>
             </div>
           </div>
           
@@ -103,7 +190,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { api } from '@/utils/api';
@@ -114,15 +201,116 @@ const router = useRouter();
 const adoptedBird = ref<any>(null);
 const loading = ref(true);
 const isLoaded = ref(false);
+const birdDeviceId = ref<number | null>(null);
+
+// WebSocket 相关状态
+const currentFrameImage = ref<string>('');
+const lastFrameTime = ref<string>('');
+const connectionError = ref<string>('');
+const isStreamDisconnected = ref<boolean>(false);
+const currentFps = ref<number>(0);
+let lastFrameTimestamp = 0;
+let previousFrameTimestamp = 0;
+let streamCheckInterval: number | null = null;
+let ws: WebSocket | null = null;
+let currentImageUrl: string = '';
+
+// 帧率计算相关
+const fpsHistory: number[] = [];
+const MAX_FPS = 60; // 最大合理帧率
+const MIN_FPS = 1; // 最小合理帧率
+const SMOOTHING_FACTOR = 0.7; // 平滑因子
+let smoothedFps = 0;
+
+// 获取登录token
+const getToken = () => {
+  return localStorage.getItem('accessToken');
+};
+
+// 视频翻转控制
+const flipHorizontal = ref(false);
+const flipVertical = ref(false);
+const imageQuality = ref(32); // 默认画质为32
+const frameSize = ref('FRAMESIZE_VGA'); // 默认视频尺寸
 
 // 计算属性：是否已认领雏鸟
 const hasAdoptedBird = computed(() => {
   return adoptedBird.value !== null;
 });
 
-// 跳转到认领页面
-const goToAdoptBirds = () => {
-  router.push('/cloud/adopt-birds');
+// 计算WebSocket是否已连接
+const isWebSocketConnected = computed(() => {
+  return ws !== null && ws.readyState === WebSocket.OPEN;
+});
+
+// 发送画质设置到WebSocket连接
+const sendStreamQuality = async (quality: number) => {
+  // 使用当前已建立的WebSocket连接发送画质设置
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    console.warn('WebSocket连接未建立，无法发送画质设置');
+    return;
+  }
+  
+  const message = JSON.stringify({
+    code: 1,
+    item: 'camera',
+    key: 'jpeg_quality',
+    values: quality.toString()
+  });
+  
+  try {
+    ws.send(message);
+  } catch (error) {
+  }
+};
+
+// 发送视频尺寸设置到WebSocket连接
+const sendFrameSize = async (size: string) => {
+  // 使用当前已建立的WebSocket连接发送视频尺寸设置
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    console.warn('WebSocket连接未建立，无法发送视频尺寸设置');
+    return;
+  }
+  
+  // 重置帧率计算
+  fpsHistory.length = 0;
+  currentFps.value = 0;
+  smoothedFps = 0;
+  previousFrameTimestamp = 0;
+  
+  const message = JSON.stringify({
+    code: 1,
+    item: 'camera',
+    key: 'frame_size',
+    values: size
+  });
+  
+  try {
+    ws.send(message);
+  } catch (error) {
+  }
+};
+
+// 监听滑块变化
+watch(imageQuality, (newQuality) => {
+  // 双端统一：1-63 -> 63-1
+  const invertedQuality = 63 - newQuality;
+  sendStreamQuality(invertedQuality);
+});
+
+// 监听视频尺寸变化
+watch(frameSize, (newSize) => {
+  sendFrameSize(newSize);
+});
+
+// 切换左右翻转
+const toggleHorizontalFlip = () => {
+  flipHorizontal.value = !flipHorizontal.value;
+};
+
+// 切换上下翻转
+const toggleVerticalFlip = () => {
+  flipVertical.value = !flipVertical.value;
 };
 
 // 计算日龄
@@ -145,6 +333,8 @@ const releaseBird = async () => {
     if (response.code === 200) {
       ElMessage.success('释放成功！');
       adoptedBird.value = null;
+      birdDeviceId.value = null;
+      stopRealtimeMonitoring();
     } else {
       ElMessage.error(response.msg || '释放失败，请重试');
     }
@@ -160,18 +350,266 @@ const releaseBird = async () => {
   }
 };
 
+// 处理接收到的图片帧数据
+const handleFrameData = (data: any) => {
+  try {
+    let blob: Blob;
+    if (typeof data === 'string') {
+      // 假设是base64编码的图片数据
+      blob = base64ToBlob(data);
+    } else if (data instanceof Blob) {
+      blob = data;
+    } else if (data instanceof ArrayBuffer) {
+      blob = new Blob([data], { type: 'image/jpeg' });
+    } else if (data instanceof Uint8Array) {
+      // 使用类型断言告诉TypeScript这是一个有效的BlobPart
+      blob = new Blob([data as any], { type: 'image/jpeg' });
+    } else {
+      throw new Error('不支持的数据类型');
+    }
+    
+    // 释放旧的URL对象
+    if (currentImageUrl) {
+      URL.revokeObjectURL(currentImageUrl);
+    }
+    
+    // 创建新的URL
+    currentImageUrl = URL.createObjectURL(blob);
+    currentFrameImage.value = currentImageUrl;
+    lastFrameTime.value = new Date().toLocaleTimeString('zh-CN');
+    
+    // 计算帧率
+    const now = Date.now();
+    if (previousFrameTimestamp > 0) {
+      const frameInterval = now - previousFrameTimestamp;
+      if (frameInterval > 0) {
+        let frameFps = 1000 / frameInterval;
+        
+        // 过滤异常值
+        if (frameFps >= MIN_FPS && frameFps <= MAX_FPS) {
+          fpsHistory.push(frameFps);
+          // 只保留最近30帧的数据
+          if (fpsHistory.length > 30) {
+            fpsHistory.shift();
+          }
+        }
+      }
+    }
+    previousFrameTimestamp = now;
+    
+    lastFrameTimestamp = now;
+    isStreamDisconnected.value = false;
+  } catch (error) {
+    console.error('处理帧数据失败:', error);
+  }
+};
+
+// 将base64字符串转换为Blob
+const base64ToBlob = (base64: string) => {
+  const parts = base64.split(';base64,');
+  if (parts.length < 2 || !parts[1] || !parts[0]) {
+    throw new Error('Invalid base64 string');
+  }
+  const contentParts = parts[0].split(':');
+  const contentType = contentParts.length > 1 ? contentParts[1] : 'image/jpeg';
+  const raw = window.atob(parts[1]);
+  const rawLength = raw.length;
+  const uInt8Array = new Uint8Array(rawLength);
+  
+  for (let i = 0; i < rawLength; ++i) {
+    uInt8Array[i] = raw.charCodeAt(i);
+  }
+  
+  return new Blob([uInt8Array], { type: contentType });
+};
+
+// 开始实时监控
+const startRealtimeMonitoring = async () => {
+  if (!birdDeviceId.value) {
+    ElMessage.warning('没有关联的设备');
+    return;
+  }
+  
+  stopRealtimeMonitoring();
+  
+  try {
+    let token = await refreshToken();
+    if (!token) {
+      connectionError.value = '未登录，请先登录';
+      return;
+    }
+    
+    const wsUrl = `/api/stream/viewer/ws/${birdDeviceId.value}?token=${token}`;
+    connectionError.value = '正在开启ws连接';
+    ws = new WebSocket(wsUrl);
+    
+    ws.onopen = () => {
+      connectionError.value = '';
+      lastFrameTimestamp = Date.now();
+      isStreamDisconnected.value = false;
+      
+      if (streamCheckInterval) {
+        clearInterval(streamCheckInterval);
+      }
+      streamCheckInterval = window.setInterval(() => {
+        const now = Date.now();
+        if (now - lastFrameTimestamp > 2000 && currentFrameImage.value) {
+          isStreamDisconnected.value = true;
+        }
+      }, 2500);
+    };
+    
+    ws.onmessage = (event) => {
+      try {
+        if (typeof event.data === 'string' && event.data.includes('设备已断开')) {
+          connectionError.value = '设备已断开';
+          return;
+        }
+        
+        try {
+          const data = JSON.parse(event.data);
+          if (data.code === 400) {
+            connectionError.value = '订阅失败';
+          }
+        } catch (jsonError) {
+          handleFrameData(event.data);
+        }
+      } catch (error) {
+        console.error('处理WebSocket消息失败:', error);
+      }
+    };
+    
+    ws.onerror = () => {
+      connectionError.value = 'WSS连接错误';
+    };
+    
+    ws.onclose = (event) => {
+      if (!event.wasClean) {
+        connectionError.value = 'WSS连接已关闭';
+      }
+    };
+    
+  } catch (error) {
+    connectionError.value = '建立WSS连接失败';
+  }
+};
+
+// 手动重连WebSocket
+const reconnectWebSocket = () => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    // 简单版：直接重连，不显示确认对话框
+    startRealtimeMonitoring();
+  } else {
+    startRealtimeMonitoring();
+  }
+};
+
+// 刷新token
+const refreshToken = async () => {
+  try {
+    const data = await api.post('/api/refresh');
+    if (data.access_token) {
+      localStorage.setItem('accessToken', data.access_token);
+      return data.access_token;
+    }
+    return getToken();
+  } catch (error) {
+    return getToken();
+  }
+};
+
+// 停止实时监控
+const stopRealtimeMonitoring = async () => {
+  // 清除图片流检查定时器
+  if (streamCheckInterval) {
+    clearInterval(streamCheckInterval);
+    streamCheckInterval = null;
+  }
+  
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+    // 新的连接模式：WebSocket断开时会自动清理订阅关系
+    ws.close();
+    ws = null;
+  }
+  
+  // 清空帧率历史数据
+  fpsHistory.length = 0;
+  currentFps.value = 0;
+  smoothedFps = 0;
+  previousFrameTimestamp = 0;
+  
+  if (currentImageUrl) {
+    URL.revokeObjectURL(currentImageUrl);
+    currentImageUrl = '';
+  }
+  
+  currentFrameImage.value = '';
+  connectionError.value = '';
+  isStreamDisconnected.value = false;
+};
+
+// 计算平均帧率
+const calculateAverageFps = () => {
+  if (fpsHistory.length === 0) {
+    currentFps.value = 0;
+    smoothedFps = 0;
+    return;
+  }
+  
+  // 计算当前平均值
+  const sum = fpsHistory.reduce((acc, fps) => acc + fps, 0);
+  const currentAverage = sum / fpsHistory.length;
+  
+  // 使用指数移动平均（EMA）进行平滑
+  if (smoothedFps === 0) {
+    // 首次计算
+    smoothedFps = currentAverage;
+  } else {
+    // EMA: 新值 = 旧值 * (1 - 平滑因子) + 当前值 * 平滑因子
+    smoothedFps = smoothedFps * (1 - SMOOTHING_FACTOR) + currentAverage * SMOOTHING_FACTOR;
+  }
+  
+  currentFps.value = Math.round(smoothedFps);
+};
+
+// 每0.5秒计算一次帧率
+let fpsUpdateInterval: number | null = null;
+
+// 启动帧率计算
+const startFpsUpdate = () => {
+  if (fpsUpdateInterval) {
+    clearInterval(fpsUpdateInterval);
+  }
+  fpsUpdateInterval = window.setInterval(calculateAverageFps, 500);
+};
+
+// 停止帧率计算
+const stopFpsUpdate = () => {
+  if (fpsUpdateInterval) {
+    clearInterval(fpsUpdateInterval);
+    fpsUpdateInterval = null;
+  }
+};
+
 // 检查用户是否已认领雏鸟
 const checkAdoptedBird = async () => {
   try {
     const response = await api.get('/api/birds/adopted/me');
+    console.log('Adopted bird response:', response);
 
     if (response.code === 200 && response.data?.adopted_bird && Object.keys(response.data.adopted_bird).length > 0) {
       adoptedBird.value = response.data.adopted_bird;
+      // 后端返回的雏鸟信息中包含 device_id 字段
+      console.log('Adopted bird data:', response.data.adopted_bird);
+      console.log('Bird device ID:', birdDeviceId.value);
     } else {
       adoptedBird.value = null;
+      birdDeviceId.value = null;
     }
   } catch (error) {
+    console.error('Error fetching adopted bird:', error);
     adoptedBird.value = null;
+    birdDeviceId.value = null;
   } finally {
     loading.value = false;
     // 延迟显示动画
@@ -184,6 +622,13 @@ const checkAdoptedBird = async () => {
 // 页面加载时检查
 onMounted(() => {
   checkAdoptedBird();
+  startFpsUpdate();
+});
+
+// 页面卸载时清理
+onUnmounted(() => {
+  stopRealtimeMonitoring();
+  stopFpsUpdate();
 });
 </script>
 
@@ -437,7 +882,7 @@ onMounted(() => {
   overflow: hidden;
   background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
   border: 2px dashed rgba(139, 173, 66, 0.3);
-  min-height: 200px;
+  min-height: 500px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -475,6 +920,168 @@ onMounted(() => {
   color: #6b7280;
   font-weight: 500;
   opacity: 0.8;
+  margin-bottom: 16px;
+}
+
+.start-stream-btn {
+  background: linear-gradient(135deg, #8BAD42 0%, #6A9A35 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(139, 173, 66, 0.3);
+  margin-top: 8px;
+}
+
+.start-stream-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(139, 173, 66, 0.4);
+}
+
+/* 视频流容器 */
+.video-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #f3f4f6;
+}
+
+.video-stream {
+  max-width: 100%;
+  max-height: 400px;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  border-radius: 16px;
+  transition: all 0.3s ease;
+}
+
+.video-stream.disconnected {
+  opacity: 0.7;
+  filter: grayscale(30%);
+}
+
+/* 视频翻转效果 */
+.video-stream.flip-horizontal {
+  transform: scaleX(-1);
+}
+
+.video-stream.flip-vertical {
+  transform: scaleY(-1);
+}
+
+.video-stream.flip-horizontal.flip-vertical {
+  transform: scaleX(-1) scaleY(-1);
+}
+
+/* 帧信息 */
+.frame-info {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 10;
+}
+
+.fps-info {
+  font-weight: 600;
+  color: #10b981;
+}
+
+/* 断联覆盖层 */
+.stream-disconnected-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  border-radius: 16px;
+}
+
+.disconnected-content {
+  text-align: center;
+  color: white;
+}
+
+.disconnected-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.disconnected-message {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* 错误状态 */
+.video-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 40px 20px;
+  text-align: center;
+  background: #fef2f2;
+  border-radius: 16px;
+  border: 1px solid #fecaca;
+}
+
+.error-content {
+  max-width: 280px;
+}
+
+.error-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  color: #ef4444;
+}
+
+.error-message {
+  font-size: 14px;
+  color: #b91c1c;
+  margin-bottom: 20px;
+  line-height: 1.4;
+}
+
+.retry-btn {
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+.retry-btn:hover {
+  background: #dc2626;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4);
 }
 
 /* 关键状态信息 */
@@ -786,6 +1393,228 @@ onMounted(() => {
     padding: 12px 24px;
     font-size: 14px;
     min-width: 160px;
+  }
+}
+
+/* 监控控制栏 */
+.monitoring-controls {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 16px rgba(139, 173, 66, 0.1);
+  border: 1px solid rgba(139, 173, 66, 0.2);
+}
+
+.control-group {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  justify-content: center;
+}
+
+.control-btn {
+  background: linear-gradient(135deg, #8BAD42 0%, #6A9A35 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(139, 173, 66, 0.3);
+  flex: 1;
+  max-width: 120px;
+  justify-content: center;
+}
+
+.control-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(139, 173, 66, 0.4);
+}
+
+.control-btn.active {
+  background: linear-gradient(135deg, #6A9A35 0%, #5a8a25 100%);
+  box-shadow: 0 4px 12px rgba(139, 173, 66, 0.4);
+}
+
+.btn-icon {
+  font-size: 16px;
+}
+
+.btn-text {
+  font-size: 14px;
+}
+
+/* 视频设置区域 */
+.video-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.setting-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.setting-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #166534;
+  min-width: 60px;
+  flex-shrink: 0;
+}
+
+.quality-slider {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: #e5e7eb;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.quality-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8BAD42 0%, #6A9A35 100%);
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(139, 173, 66, 0.3);
+}
+
+.quality-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8BAD42 0%, #6A9A35 100%);
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 6px rgba(139, 173, 66, 0.3);
+}
+
+.setting-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #6A9A35;
+  min-width: 30px;
+  text-align: right;
+}
+
+.resolution-select {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid rgba(139, 173, 66, 0.3);
+  border-radius: 8px;
+  background: white;
+  font-size: 14px;
+  color: #166534;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.resolution-select:hover {
+  border-color: #8BAD42;
+  box-shadow: 0 2px 8px rgba(139, 173, 66, 0.2);
+}
+
+.resolution-select:focus {
+  outline: none;
+  border-color: #6A9A35;
+  box-shadow: 0 0 0 3px rgba(139, 173, 66, 0.1);
+}
+/* 移动端响应式 */
+@media (max-width: 480px) {
+  .bird-hero-section {
+    padding: 0 16px;
+  }
+  
+  .bird-image-container {
+    min-height: 300px;
+  }
+  
+  .video-stream {
+    max-height: 300px;
+  }
+  
+  .frame-info {
+    font-size: 10px;
+    padding: 4px 8px;
+  }
+  
+  .disconnected-icon {
+    font-size: 32px;
+  }
+  
+  .disconnected-message {
+    font-size: 14px;
+  }
+  
+  .error-icon {
+    font-size: 32px;
+  }
+  
+  .error-message {
+    font-size: 12px;
+  }
+  
+  .retry-btn,
+  .start-stream-btn {
+    padding: 8px 16px;
+    font-size: 12px;
+  }
+  
+  /* 监控控制栏响应式 */
+  .monitoring-controls {
+    padding: 12px;
+    margin-bottom: 16px;
+  }
+  
+  .control-group {
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  
+  .control-btn {
+    padding: 8px 12px;
+    font-size: 12px;
+    max-width: 100px;
+  }
+  
+  .btn-icon {
+    font-size: 14px;
+  }
+  
+  .btn-text {
+    font-size: 12px;
+  }
+  
+  .setting-item {
+    gap: 8px;
+  }
+  
+  .setting-label {
+    font-size: 12px;
+    min-width: 50px;
+  }
+  
+  .setting-value {
+    font-size: 12px;
+  }
+  
+  .resolution-select {
+    padding: 6px 10px;
+    font-size: 12px;
   }
 }
 </style>
