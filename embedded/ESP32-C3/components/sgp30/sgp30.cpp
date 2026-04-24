@@ -22,17 +22,17 @@ esp_err_t SGP30::i2c_master_init()
         },
     };
 
-    esp_err_t err = i2c_param_config(i2c_num, &conf);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "i2c_param_config failed: %s", esp_err_to_name(err));
-        return err;
+    /* 若 I2C 驱动已由 main 安装，跳过重复安装直接复用 */
+    if (i2c_driver_install(i2c_num, I2C_MODE_MASTER, 0, 0, 0) == ESP_OK) {
+        /* 首次安装：配置参数 */
+        esp_err_t err = i2c_param_config(i2c_num, &conf);
+        if (err != ESP_OK) {
+            i2c_driver_delete(i2c_num);
+            ESP_LOGE(TAG, "i2c_param_config failed: %s", esp_err_to_name(err));
+            return err;
+        }
     }
-
-    err = i2c_driver_install(i2c_num, I2C_MODE_MASTER, 0, 0, 0);
-    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
-        ESP_LOGE(TAG, "i2c_driver_install failed: %s", esp_err_to_name(err));
-        return err;
-    }
+    /* 驱动已安装（ESP_FAIL/-ESP_ERR_INVALID_STATE）：直接复用，不重新配置 */
     return ESP_OK;
 }
 

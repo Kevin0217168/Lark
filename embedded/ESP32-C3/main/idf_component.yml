@@ -29,3 +29,12 @@ dependencies:
     path: ../components/uv_meter
   veml7700:
     path: ../components/veml7700
+
+  device_secret:
+    path: ../../ESP32-camera/components/device_secret
+  remote_log:
+    path: ../../ESP32-camera/components/remote_log
+
+  Wifista:
+    path: ../../ESP32-camera/components/Wifista
+  espressif/esp_websocket_client: '*'

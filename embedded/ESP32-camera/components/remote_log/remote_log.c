@@ -35,6 +35,7 @@
 #include "esp_log.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
+#include "esp_heap_caps.h"
 #include "remote_log.h"
 
 /* ======================== 配置 ======================== */
@@ -171,7 +172,7 @@ static void remote_log_flush_task(void *pvParameters)
     int stats_counter = 0;
 
     while (s_upload_started) {
-        // 动态退避：连续失败时逐渐增大间隔，避免网络故障时狂刷 HTTP
+        // 动态退避：连续失败时逐渐增大间隔，避免网络故障时heap_caps_malloc狂刷 HTTP
         uint32_t delay_ms = RLOG_FLUSH_INTERVAL_MS;
         if (s_consecutive_fail > 0) {
             delay_ms = RLOG_FLUSH_INTERVAL_MS * (1u << (s_consecutive_fail > 4 ? 4 : s_consecutive_fail));

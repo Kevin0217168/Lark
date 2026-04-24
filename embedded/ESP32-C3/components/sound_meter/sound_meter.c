@@ -8,6 +8,9 @@
 static const char *TAG = "sound_meter";
 static const uint16_t SOUND_METER_MAX_SAMPLES = 128;
 
+/* 暴露给 uv_meter 复用的共享 ADC1 unit handle */
+adc_oneshot_unit_handle_t g_shared_adc1_handle = NULL;
+
 static inline uint32_t sound_meter_max_raw(adc_bitwidth_t width)
 {
     switch (width) {
@@ -175,6 +178,8 @@ esp_err_t sound_meter_init(sound_meter_handle_t *handle, const sound_meter_confi
         ESP_LOGE(TAG, "adc_oneshot_new_unit failed (%s)", esp_err_to_name(err));
         return err;
     }
+    /* 暴露共享 handle，供 uv_meter 复用 */
+    g_shared_adc1_handle = handle->adc_handle;
 
     adc_oneshot_chan_cfg_t chan_cfg = {
         .atten = handle->config.atten,

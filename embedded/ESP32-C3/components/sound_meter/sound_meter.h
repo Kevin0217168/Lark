@@ -7,9 +7,14 @@
 
 #define SOUND_METER_MAX_CAL_POINTS 16
 
+#include "esp_adc/adc_oneshot.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/** ADC1 unit handle，供其他组件（如 uv_meter）共享复用 */
+extern adc_oneshot_unit_handle_t g_shared_adc1_handle;
 
 typedef struct {
     float voltage;

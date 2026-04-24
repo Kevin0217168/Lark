@@ -1,6 +1,7 @@
 #ifndef __DEVICE_SECRET_H__
 #define __DEVICE_SECRET_H__
 
+#include <stddef.h>
 #include "esp_err.h"
 
 #define SECRET_MAX_LEN 64

@@ -19,17 +19,16 @@ bool Adafruit_VEML7700::begin(int freq_hz) {
   conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
   conf.master.clk_speed = _freq_hz;
 
-  esp_err_t err = i2c_param_config(_i2c_num, &conf);
-  if (err != ESP_OK) {
-    ESP_LOGE(TAG, "i2c_param_config failed: %d", err);
-    return false;
+  /* 若驱动已由 main 安装，跳过重复安装直接复用 */
+  if (i2c_driver_install(_i2c_num, I2C_MODE_MASTER, 0, 0, 0) == ESP_OK) {
+    esp_err_t err = i2c_param_config(_i2c_num, &conf);
+    if (err != ESP_OK) {
+      i2c_driver_delete(_i2c_num);
+      ESP_LOGE(TAG, "i2c_param_config failed: %d", err);
+      return false;
+    }
   }
-
-  err = i2c_driver_install(_i2c_num, I2C_MODE_MASTER, 0, 0, 0);
-  if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
-    ESP_LOGE(TAG, "i2c_driver_install failed: %d", err);
-    return false;
-  }
+  /* 驱动已安装：直接复用 */
 
   uint16_t id = 0;
   if (readRegister(VEML7700_ALS_CONFIG, id) != ESP_OK) {

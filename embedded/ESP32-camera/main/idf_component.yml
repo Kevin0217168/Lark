@@ -22,4 +22,8 @@ dependencies:
     path: ../components/Wifista
   sht4x:
     path: ../components/sht4x
+  device_secret:
+    path: ../components/device_secret  
+  remote_log:
+    path: ../components/remote_log
 

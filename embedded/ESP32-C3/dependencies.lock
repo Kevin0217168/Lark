@@ -1,4 +1,16 @@
 dependencies:
+  Wifista:
+    dependencies: []
+    source:
+      path: /home/mint/Documents/contests/Lark/embedded/ESP32-camera/components/Wifista
+      type: local
+    version: '*'
+  device_secret:
+    dependencies: []
+    source:
+      path: /home/mint/Documents/contests/Lark/embedded/ESP32-camera/components/device_secret
+      type: local
+    version: '*'
   espressif/esp32-camera:
     component_hash: 2b75f6f0c987fb0e3687ccbd464cd00c163ea8cb05d2470cfb05adf6535bc488
     dependencies:
@@ -23,6 +35,16 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 1.3.1
+  espressif/esp_websocket_client:
+    component_hash: c5a067a9fddea370c478017e66fac302f4b79c3d4027e9bdd42a019786cceb92
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.6.1
   idf:
     source:
       type: idf
@@ -37,6 +59,12 @@ dependencies:
     dependencies: []
     source:
       path: /home/mint/Documents/contests/Lark/embedded/ESP32-C3/components/pms9103m
+      type: local
+    version: '*'
+  remote_log:
+    dependencies: []
+    source:
+      path: /home/mint/Documents/contests/Lark/embedded/ESP32-camera/components/remote_log
       type: local
     version: '*'
   sgp30:
@@ -64,14 +92,18 @@ dependencies:
       type: local
     version: '*'
 direct_dependencies:
+- Wifista
+- device_secret
 - espressif/esp32-camera
+- espressif/esp_websocket_client
 - idf
 - ina231
 - pms9103m
+- remote_log
 - sgp30
 - sound_meter
 - uv_meter
 - veml7700
-manifest_hash: 6f9bdf529cb2673c039fc5ef0f0f7523540e5d7d198b93960065eab03a430774
+manifest_hash: d5459ebfc51e7adf5dcbe5136a90d98cc6f2e3ace31cf8dec84e85e2ff9bcdb0
 target: esp32s3
 version: 2.0.0

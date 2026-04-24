@@ -5,6 +5,12 @@ dependencies:
       path: /home/mint/Documents/contests/Lark/embedded/ESP32-camera/components/Wifista
       type: local
     version: '*'
+  device_secret:
+    dependencies: []
+    source:
+      path: /home/mint/Documents/contests/Lark/embedded/ESP32-camera/components/device_secret
+      type: local
+    version: '*'
   espressif/esp32-camera:
     component_hash: 2b75f6f0c987fb0e3687ccbd464cd00c163ea8cb05d2470cfb05adf6535bc488
     dependencies:
@@ -43,6 +49,12 @@ dependencies:
     source:
       type: idf
     version: 5.5.3
+  remote_log:
+    dependencies: []
+    source:
+      path: /home/mint/Documents/contests/Lark/embedded/ESP32-camera/components/remote_log
+      type: local
+    version: '*'
   sht4x:
     dependencies: []
     source:
@@ -51,10 +63,12 @@ dependencies:
     version: '*'
 direct_dependencies:
 - Wifista
+- device_secret
 - espressif/esp32-camera
 - espressif/esp_websocket_client
 - idf
+- remote_log
 - sht4x
-manifest_hash: 91933fbc7b8d2605f0a6920265fe0cf6d9b98da575fdd2f69cfe9eb70e5b8d08
+manifest_hash: 0437320fa4840bf148ca24f3dd2031376110cc14ca0de7f5d7983d548c9c0e60
 target: esp32
 version: 2.0.0

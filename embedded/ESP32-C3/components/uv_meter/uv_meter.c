@@ -1,4 +1,5 @@
 #include "uv_meter.h"
+#include "sound_meter.h"
 #include "esp_adc/adc_cali_scheme.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -203,15 +204,20 @@ esp_err_t uv_meter_init(uv_meter_handle_t *handle, const uv_meter_config_t *conf
         return ESP_ERR_NOT_SUPPORTED;
     }
 
-    adc_oneshot_unit_init_cfg_t init_cfg = {
-        .unit_id = handle->config.unit,
-        .clk_src = 0,
-        .ulp_mode = ADC_ULP_MODE_DISABLE,
-    };
-    err = adc_oneshot_new_unit(&init_cfg, &handle->adc_handle);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "adc_oneshot_new_unit failed (%s)", esp_err_to_name(err));
-        return err;
+    if (g_shared_adc1_handle != NULL) {
+        /* sound_meter 已建立了 ADC1 unit，直接复用 */
+        handle->adc_handle = g_shared_adc1_handle;
+    } else {
+        adc_oneshot_unit_init_cfg_t init_cfg = {
+            .unit_id = handle->config.unit,
+            .clk_src = 0,
+            .ulp_mode = ADC_ULP_MODE_DISABLE,
+        };
+        err = adc_oneshot_new_unit(&init_cfg, &handle->adc_handle);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "adc_oneshot_new_unit failed (%s)", esp_err_to_name(err));
+            return err;
+        }
     }
 
     adc_oneshot_chan_cfg_t chan_cfg = {
@@ -221,7 +227,9 @@ esp_err_t uv_meter_init(uv_meter_handle_t *handle, const uv_meter_config_t *conf
     err = adc_oneshot_config_channel(handle->adc_handle, handle->config.channel, &chan_cfg);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "adc_oneshot_config_channel failed (%s)", esp_err_to_name(err));
-        adc_oneshot_del_unit(handle->adc_handle);
+        if (handle->adc_handle != g_shared_adc1_handle) {
+            adc_oneshot_del_unit(handle->adc_handle);
+        }
         return err;
     }
 
@@ -229,7 +237,10 @@ esp_err_t uv_meter_init(uv_meter_handle_t *handle, const uv_meter_config_t *conf
         err = uv_meter_create_cali_handle(handle);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "adc calibration handle creation failed (%s)", esp_err_to_name(err));
-            adc_oneshot_del_unit(handle->adc_handle);
+            uv_meter_delete_cali_handle(handle);
+            if (handle->adc_handle != g_shared_adc1_handle) {
+                adc_oneshot_del_unit(handle->adc_handle);
+            }
             return err;
         }
     }
@@ -238,7 +249,9 @@ esp_err_t uv_meter_init(uv_meter_handle_t *handle, const uv_meter_config_t *conf
         if (handle->config.calibration_point_count > UV_METER_MAX_CAL_POINTS) {
             ESP_LOGE(TAG, "too many calibration points (%u)", (unsigned)handle->config.calibration_point_count);
             uv_meter_delete_cali_handle(handle);
-            adc_oneshot_del_unit(handle->adc_handle);
+            if (handle->adc_handle != g_shared_adc1_handle) {
+                adc_oneshot_del_unit(handle->adc_handle);
+            }
             return ESP_ERR_INVALID_ARG;
         }
         handle->calibration_point_count = handle->config.calibration_point_count;
@@ -265,8 +278,11 @@ void uv_meter_deinit(uv_meter_handle_t *handle)
     if (handle == NULL) {
         return;
     }
-    if (handle->adc_handle != NULL) {
+    /* 如果是共享 handle，不负责释放 */
+    if (handle->adc_handle != NULL && handle->adc_handle != g_shared_adc1_handle) {
         adc_oneshot_del_unit(handle->adc_handle);
+        handle->adc_handle = NULL;
+    } else {
         handle->adc_handle = NULL;
     }
     uv_meter_delete_cali_handle(handle);

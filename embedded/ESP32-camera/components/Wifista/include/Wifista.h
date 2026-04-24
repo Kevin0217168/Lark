@@ -14,6 +14,10 @@
 #include "freertos/task.h"
 #include "cJSON.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum{
     WS_CLINENT_METHOD_GET,
     WS_CLINENT_METHOD_POST,
@@ -37,7 +41,7 @@ typedef struct
     void (* ws_text_handler)(void *handler_args, int len, const char *data_ptr);
 }WS_Context_t;
 
-void WifistaInit();
+void WifistaInit(const uint8_t *ssid, const uint8_t *pwd);
 void obtain_time(void);
 bool is_time_synced(void);
 bool is_time_valid(void);
@@ -54,5 +58,9 @@ bool WebsocketSendbytes(uint8_t *data, int len);
 bool WebsocketSendText(uint8_t *data, int len);
 
 void ota_task(void *pvParameter);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
