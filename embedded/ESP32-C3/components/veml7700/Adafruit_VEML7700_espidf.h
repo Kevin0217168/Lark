@@ -13,6 +13,8 @@
 #include <driver/i2c.h>
 #include <esp_err.h>
 #include <esp_timer.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 #define VEML7700_I2CADDR_DEFAULT 0x10 ///< I2C address
 
@@ -63,7 +65,8 @@ public:
   Adafruit_VEML7700(i2c_port_t i2c_num = I2C_NUM_0,
                     gpio_num_t sda_pin = GPIO_NUM_21,
                     gpio_num_t scl_pin = GPIO_NUM_20,
-                    uint8_t addr = VEML7700_I2CADDR_DEFAULT);
+                    uint8_t addr = VEML7700_I2CADDR_DEFAULT,
+                    SemaphoreHandle_t i2c_mutex = NULL);
 
   bool begin(int freq_hz = 100000);
   void enable(bool enable);
@@ -115,6 +118,7 @@ private:
   int _freq_hz;
   unsigned long _lastRead;
   bool _initialized;
+  SemaphoreHandle_t _i2c_mutex;
 };
 
 #endif // _ADAFRUIT_VEML7700_ESP32_H

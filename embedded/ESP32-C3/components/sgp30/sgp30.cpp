@@ -11,28 +11,7 @@ SGP30::SGP30(i2c_port_t i2c_num, gpio_num_t sda_gpio, gpio_num_t scl_gpio, uint3
 
 esp_err_t SGP30::i2c_master_init()
 {
-    i2c_config_t conf = {
-        .mode = I2C_MODE_MASTER,
-        .sda_io_num = sda_gpio,
-        .scl_io_num = scl_gpio,
-        .sda_pullup_en = GPIO_PULLUP_ENABLE,
-        .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master = {
-            .clk_speed = clk_speed,
-        },
-    };
-
-    /* 若 I2C 驱动已由 main 安装，跳过重复安装直接复用 */
-    if (i2c_driver_install(i2c_num, I2C_MODE_MASTER, 0, 0, 0) == ESP_OK) {
-        /* 首次安装：配置参数 */
-        esp_err_t err = i2c_param_config(i2c_num, &conf);
-        if (err != ESP_OK) {
-            i2c_driver_delete(i2c_num);
-            ESP_LOGE(TAG, "i2c_param_config failed: %s", esp_err_to_name(err));
-            return err;
-        }
-    }
-    /* 驱动已安装（ESP_FAIL/-ESP_ERR_INVALID_STATE）：直接复用，不重新配置 */
+    /* I2C 驱动由 main 中的 ina231_init 统一安装，此处直接复用 */
     return ESP_OK;
 }
 

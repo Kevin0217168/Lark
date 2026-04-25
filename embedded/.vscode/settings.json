@@ -1,3 +1,16 @@
 {
-    "idf.currentSetup": "/home/mint/.espressif/v5.5.3/esp-idf"
+    "idf.currentSetup": "/home/mint/.espressif/v5.5.3/esp-idf",
+
+    // 其他已有设置...
+    "oaicopilot.baseUrl": "https://api.deepseek.com",
+    "oaicopilot.models": [
+        {
+            "id": "deepseek-v4-flash",
+            "owned_by": "deepseek"
+        },
+        {
+            "id": "deepseek-v4-pro",
+            "owned_by": "deepseek"
+        },
+    ]
 }

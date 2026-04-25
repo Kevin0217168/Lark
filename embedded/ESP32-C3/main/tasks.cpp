@@ -2,12 +2,12 @@
 #include <string.h>
 #include <time.h>
 #include <inttypes.h>
+#include <sys/time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "esp_log.h"
 #include "esp_http_client.h"
-#include "esp_sntp.h"
 
 #include "ina231.h"
 #include "pms9103m.h"
@@ -15,100 +15,140 @@
 #include "sound_meter.h"
 #include "uv_meter.h"
 #include "Adafruit_VEML7700_espidf.h"
-#include "device_secret.h"
 
 #include "tasks.h"
 
 static const char *TAG = "sensor_task";
 
-/* ────────── 全局共享的 INA231 校准参数 ────────── */
+/* ────────── I2C 及 INA231 配置 ────────── */
 #define I2C_MASTER_PORT    I2C_NUM_0
 #define INA231_ADDR        INA231_ADDRESS_DEFAULT
 #define INA231_MAX_CURR_A  1.0f
 #define INA231_SHUNT_UOHM  100000UL
 
+/* ────────── 上报配置 ────────── */
+#define UPLOAD_URL   "http://172.20.10.3:8080/api/sensor-upload"
+
+/* ────────── 熔断器 ────────── */
+#define CB_FAIL_THRESHOLD  3
+#define CB_COOLDOWN_SEC    30
+
+/* ────────── 重试配置 ────────── */
+#define INA231_INIT_MAX_RETRIES     3
+#define VEML7700_INIT_MAX_RETRIES   5
+#define SGP30_INIT_MAX_RETRIES      3
+#define SENSOR_READ_MAX_RETRIES     2
+
+/* ────────── 静态变量 ────────── */
 static uint32_t g_ina231_current_lsb_nA = 0;
 static bus_calibration_t g_bus_cal = {};
 static bool g_ina231_ready = false;
 
-/* ────────── 上报互斥锁（防止多任务并发 HTTP 请求） ────────── */
 static SemaphoreHandle_t s_upload_mutex = NULL;
+static SemaphoreHandle_t s_i2c_mutex = NULL;
 
-/* ────────── 上报服务器配置 ────────── */
-#define UPLOAD_URL   "http://172.20.10.3:8080/api/sensor-upload"
+static int  s_cb_fail_count   = 0;
+static int64_t s_cb_cooldown_until = 0;
 
-/* ────────── Keep-alive HTTP 客户端（复用 TCP 连接） ────────── */
-static esp_http_client_handle_t s_http_client = NULL;
+/* ────────── device_secret 弱符号（可被外部 device_secret.h 覆盖） ────────── */
+__attribute__((weak)) const char *secret = "default-secret";
 
-/* ────────── 采集周期 ────────── */
-#define INTERVAL_INA231_MS       2000
-#define INTERVAL_SGP30_MS        5000
-#define INTERVAL_VEML7700_MS     5000
-#define INTERVAL_PMS9103M_MS    10000
-#define INTERVAL_SOUND_MS        2000
-#define INTERVAL_UV_MS           2000
+/* ═══════════════════════════════════════════════════════════
+ * 熔断器逻辑
+ * ═══════════════════════════════════════════════════════════ */
+
+static bool cb_is_open(void)
+{
+    if (s_cb_fail_count < CB_FAIL_THRESHOLD) return false;
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    int64_t now_ms = (int64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+    return (now_ms < s_cb_cooldown_until);
+}
+
+static void cb_record_failure(void)
+{
+    s_cb_fail_count++;
+    if (s_cb_fail_count >= CB_FAIL_THRESHOLD) {
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        s_cb_cooldown_until = (int64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000
+                              + (int64_t)CB_COOLDOWN_SEC * 1000;
+        ESP_LOGW(TAG, "熔断器打开: 连续 %d 次失败，冷却 %d 秒",
+                 s_cb_fail_count, CB_COOLDOWN_SEC);
+    }
+}
+
+static void cb_record_success(void)
+{
+    if (s_cb_fail_count > 0) {
+        ESP_LOGI(TAG, "熔断器关闭: 恢复正常上传");
+    }
+    s_cb_fail_count = 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * I2C 总线扫描
+ * ═══════════════════════════════════════════════════════════ */
+
+static void i2c_scan_devices(i2c_port_t port, uint8_t start_addr, uint8_t end_addr)
+{
+    ESP_LOGI(TAG, "I2C 扫描 (端口 %d, 0x%02x-0x%02x)...", port, start_addr, end_addr);
+    int found = 0;
+    for (uint8_t addr = start_addr; addr <= end_addr; addr++) {
+        if (xSemaphoreTake(s_i2c_mutex, pdMS_TO_TICKS(500)) != pdTRUE) continue;
+        i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+        i2c_master_start(cmd);
+        i2c_master_write_byte(cmd, (addr << 1) | I2C_MASTER_WRITE, true);
+        i2c_master_stop(cmd);
+        esp_err_t ret = i2c_master_cmd_begin(port, cmd, pdMS_TO_TICKS(50));
+        i2c_cmd_link_delete(cmd);
+        xSemaphoreGive(s_i2c_mutex);
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "  找到设备: 0x%02x", addr);
+            found++;
+        }
+        vTaskDelay(pdMS_TO_TICKS(3));
+    }
+    if (found == 0) {
+        ESP_LOGW(TAG, "未找到任何 I2C 设备");
+    } else {
+        ESP_LOGI(TAG, "共找到 %d 个 I2C 设备", found);
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * 生成 ISO8601 时间戳
+ * ═══════════════════════════════════════════════════════════ */
+
+static int make_timestamp(char *buf, size_t buf_size)
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    time_t now = tv.tv_sec;
+    struct tm tm_info;
+    gmtime_r(&now, &tm_info);
+    return snprintf(buf, buf_size,
+                    "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
+                    tm_info.tm_year + 1900, tm_info.tm_mon + 1, tm_info.tm_mday,
+                    tm_info.tm_hour, tm_info.tm_min, tm_info.tm_sec,
+                    (int)(tv.tv_usec / 1000));
+}
 
 /* ═══════════════════════════════════════════════════════════
  * 公共初始化
  * ═══════════════════════════════════════════════════════════ */
 
-static void http_client_init_once(void)
-{
-    if (s_http_client != NULL) return;
-    esp_http_client_config_t cfg = {};
-    cfg.url            = UPLOAD_URL;
-    cfg.method         = HTTP_METHOD_POST;
-    cfg.timeout_ms     = 5000;
-    cfg.keep_alive_enable = true;
-    cfg.keep_alive_idle    = 5;
-    cfg.keep_alive_interval = 5;
-    cfg.keep_alive_count   = 3;
-    s_http_client = esp_http_client_init(&cfg);
-    configASSERT(s_http_client);
-}
-
-static esp_err_t init_ina231_with_retry(void)
-{
-    for (int attempt = 1; attempt <= 3; ++attempt) {
-        esp_err_t err = ina231_write_calibration(I2C_MASTER_PORT, INA231_ADDR,
-                                                 INA231_MAX_CURR_A, INA231_SHUNT_UOHM);
-        if (err == ESP_OK) {
-            err = ina231_set_bus_conversion(I2C_MASTER_PORT, INA231_ADDR, 3320);
-        }
-        if (err == ESP_OK) {
-            err = ina231_set_shunt_conversion(I2C_MASTER_PORT, INA231_ADDR, 3320);
-        }
-        if (err == ESP_OK) {
-            err = ina231_set_mode(I2C_MASTER_PORT, INA231_ADDR, INA231_MODE_CONTINUOUS_BOTH);
-        }
-        if (err == ESP_OK) {
-            err = ina231_enable_alert_on_conversion(I2C_MASTER_PORT, INA231_ADDR, true);
-        }
-
-        if (err == ESP_OK) {
-            if (attempt > 1) {
-                ESP_LOGI(TAG, "INA231 初始化重试成功 (attempt=%d)", attempt);
-            }
-            return ESP_OK;
-        }
-
-        ESP_LOGW(TAG, "INA231 初始化失败 attempt=%d: %s", attempt, esp_err_to_name(err));
-        vTaskDelay(pdMS_TO_TICKS(200));
-    }
-    return ESP_ERR_TIMEOUT;
-}
-
 void sensor_tasks_init(void)
 {
     s_upload_mutex = xSemaphoreCreateMutex();
+    s_i2c_mutex = xSemaphoreCreateMutex();
     configASSERT(s_upload_mutex);
+    configASSERT(s_i2c_mutex);
 
-    /* INA231 初始化（I2C 总线由 main 在进入任务前完成） */
+    i2c_scan_devices(I2C_MASTER_PORT, 0x00, 0x7F);
+
     g_ina231_current_lsb_nA = ina231_current_lsb_nA(INA231_MAX_CURR_A);
-    g_ina231_ready = (init_ina231_with_retry() == ESP_OK);
-    if (!g_ina231_ready) {
-        ESP_LOGE(TAG, "INA231 初始化失败，任务将后台重试，不阻塞系统启动");
-    }
 
     static const bus_calibration_point_t bus_cal_points[] = {
         { .measured_v = 3.115f,  .reference_v = 3.3008f },
@@ -123,254 +163,274 @@ void sensor_tasks_init(void)
              g_bus_cal.gain, g_bus_cal.offset, g_bus_cal.valid);
 }
 
+SemaphoreHandle_t sensor_get_i2c_mutex(void)
+{
+    return s_i2c_mutex;
+}
+
 /* ═══════════════════════════════════════════════════════════
- * 统一 JSON 上报
+ * 逐传感器上传（保留兼容）
  * ═══════════════════════════════════════════════════════════ */
 
 void sensor_upload(const char *sensor_type, const char *data_type, const char *data_json)
 {
-    /* 序列化 HTTP 请求（单次只允许一个任务占用） */
-    if (xSemaphoreTake(s_upload_mutex, pdMS_TO_TICKS(5000)) != pdTRUE) {
-        ESP_LOGW(TAG, "[%s] 上报互斥锁超时，跳过本次", sensor_type);
-        return;
-    }
+    if (cb_is_open()) return;
 
-    http_client_init_once();
+    if (xSemaphoreTake(s_upload_mutex, pdMS_TO_TICKS(10000)) != pdTRUE) return;
 
-    /* 生成 ISO 8601 时间戳，带毫秒 */
     char timestamp[40];
-    struct timeval tv_now;
-    gettimeofday(&tv_now, NULL);
-    time_t now_sec = tv_now.tv_sec;
-    struct tm tm_info;
-    gmtime_r(&now_sec, &tm_info);
-    int millis = (int)(tv_now.tv_usec / 1000);
-    int ts_len = snprintf(timestamp, sizeof(timestamp),
-                          "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
-                          tm_info.tm_year + 1900,
-                          tm_info.tm_mon + 1,
-                          tm_info.tm_mday,
-                          tm_info.tm_hour,
-                          tm_info.tm_min,
-                          tm_info.tm_sec,
-                          millis);
-    if (ts_len <= 0 || ts_len >= (int)sizeof(timestamp)) {
-        ESP_LOGE(TAG, "[%s] 时间戳生成失败，跳过上报", sensor_type);
+    if (make_timestamp(timestamp, sizeof(timestamp)) <= 0) {
         xSemaphoreGive(s_upload_mutex);
         return;
     }
 
     char data_escaped[512];
-    size_t src_idx = 0;
-    size_t dst_idx = 0;
-    while (data_json[src_idx] != '\0' && dst_idx + 2 < sizeof(data_escaped)) {
-        char ch = data_json[src_idx++];
-        if (ch == '"' || ch == '\\') {
-            data_escaped[dst_idx++] = '\\';
-        }
-        data_escaped[dst_idx++] = ch;
+    size_t si = 0, di = 0;
+    while (data_json[si] && di + 2 < sizeof(data_escaped)) {
+        char ch = data_json[si++];
+        if (ch == '"' || ch == '\\') data_escaped[di++] = '\\';
+        data_escaped[di++] = ch;
     }
-    data_escaped[dst_idx] = '\0';
-    if (data_json[src_idx] != '\0') {
-        ESP_LOGE(TAG, "[%s] data 字段转义后过长，跳过上报", sensor_type);
-        xSemaphoreGive(s_upload_mutex);
-        return;
-    }
+    data_escaped[di] = '\0';
 
     char body[1024];
-    int body_len = snprintf(body, sizeof(body),
-                            "{\"secret\":\"%s\",\"sensor_type\":\"%s\",\"data_type\":\"%s\",\"data\":\"%s\",\"timestamp\":\"%s\"}",
-                            secret, sensor_type, data_type, data_escaped, timestamp);
-    if (body_len <= 0 || body_len >= (int)sizeof(body)) {
-        ESP_LOGE(TAG, "[%s] 上报报文过长，跳过上报", sensor_type);
+    int len = snprintf(body, sizeof(body),
+        "{\"secret\":\"%s\",\"sensor_type\":\"%s\",\"data_type\":\"%s\","
+        "\"data\":\"%s\",\"timestamp\":\"%s\"}",
+        secret, sensor_type, data_type, data_escaped, timestamp);
+    if (len <= 0 || len >= (int)sizeof(body)) {
         xSemaphoreGive(s_upload_mutex);
         return;
     }
 
-    esp_http_client_set_url(s_http_client, UPLOAD_URL);
-    esp_http_client_set_method(s_http_client, HTTP_METHOD_POST);
-    esp_http_client_set_header(s_http_client, "Content-Type", "application/json");
-    esp_http_client_set_header(s_http_client, "Connection", "keep-alive");
-    esp_http_client_set_post_field(s_http_client, body, body_len);
-
-    esp_err_t err = esp_http_client_perform(s_http_client);
+    esp_http_client_config_t cfg = {};
+    cfg.url = UPLOAD_URL;
+    cfg.method = HTTP_METHOD_POST;
+    cfg.timeout_ms = 3000;
+    esp_http_client_handle_t client = esp_http_client_init(&cfg);
+    if (!client) {
+        xSemaphoreGive(s_upload_mutex);
+        return;
+    }
+    esp_http_client_set_header(client, "Content-Type", "application/json");
+    esp_http_client_set_post_field(client, body, len);
+    esp_err_t err = esp_http_client_perform(client);
     if (err == ESP_OK) {
-        int status = esp_http_client_get_status_code(s_http_client);
-        ESP_LOGI(TAG, "[%s/%s] 上报成功 HTTP %d", sensor_type, data_type, status);
+        cb_record_success();
     } else {
         ESP_LOGE(TAG, "[%s/%s] 上报失败: %s", sensor_type, data_type, esp_err_to_name(err));
-        /* 连接失败时关闭重建，下次自动重连 */
-        esp_http_client_cleanup(s_http_client);
-        s_http_client = NULL;
+        cb_record_failure();
     }
-
+    esp_http_client_cleanup(client);
     xSemaphoreGive(s_upload_mutex);
 }
 
 /* ═══════════════════════════════════════════════════════════
- * INA231 — 电压 / 电流 / 功率
+ * 聚合上报（一次性发送所有传感器数据）
  * ═══════════════════════════════════════════════════════════ */
 
-void task_ina231(void *pvParameter)
+void sensor_upload_aggregated(const char *aggregated_json)
 {
-    (void)pvParameter;
-    while (1) {
-        if (!g_ina231_ready) {
-            g_ina231_ready = (init_ina231_with_retry() == ESP_OK);
-            if (!g_ina231_ready) {
-                vTaskDelay(pdMS_TO_TICKS(INTERVAL_INA231_MS));
-                continue;
-            }
-        }
+    if (cb_is_open()) return;
 
-        float bus_v = 0, shunt_v = 0, current_ma = 0, power_mw = 0;
-        esp_err_t ok =
-            ina231_read_bus_voltage_v  (I2C_MASTER_PORT, INA231_ADDR, &bus_v)         |
-            ina231_read_shunt_voltage_v(I2C_MASTER_PORT, INA231_ADDR, &shunt_v)       |
-            ina231_read_current_ma     (I2C_MASTER_PORT, INA231_ADDR,
-                                        g_ina231_current_lsb_nA, &current_ma)         |
-            ina231_read_power_mw       (I2C_MASTER_PORT, INA231_ADDR,
-                                        g_ina231_current_lsb_nA, &power_mw);
-        if (ok == ESP_OK) {
-            float bus_v_cal = ina231_bus_voltage_calibrate(bus_v, &g_bus_cal);
-            ESP_LOGI(TAG, "INA231: BUS=%.3fV(cal=%.3fV) SHUNT=%.6fV CURR=%.3fmA PWR=%.3fmW",
-                     bus_v, bus_v_cal, shunt_v, current_ma, power_mw);
+    if (xSemaphoreTake(s_upload_mutex, pdMS_TO_TICKS(15000)) != pdTRUE) return;
 
-            char data[128];
-            snprintf(data, sizeof(data),
-                     "{\"bus_v\":%.4f,\"bus_v_cal\":%.4f,"
-                     "\"shunt_v\":%.6f,\"current_ma\":%.3f,\"power_mw\":%.3f}",
-                     bus_v, bus_v_cal, shunt_v, current_ma, power_mw);
-            sensor_upload("ina231", "power", data);
-        } else {
-            ESP_LOGW(TAG, "INA231 读取失败");
-            g_ina231_ready = false;
-        }
-        vTaskDelay(pdMS_TO_TICKS(INTERVAL_INA231_MS));
-    }
-}
-
-/* ═══════════════════════════════════════════════════════════
- * SGP30 — CO₂ / TVOC
- * ═══════════════════════════════════════════════════════════ */
-
-void task_sgp30(void *pvParameter)
-{
-    (void)pvParameter;
-
-    /* SGP30 实例存放在任务栈（较小，仅句柄）*/
-    SGP30 sgp30(I2C_MASTER_PORT,
-                (gpio_num_t)21, (gpio_num_t)20,   /* SDA / SCL，与 main 相同 */
-                100000);
-    if (sgp30.init() != ESP_OK) {
-        ESP_LOGE(TAG, "SGP30 初始化失败，任务退出");
-        vTaskDelete(NULL);
+    char timestamp[40];
+    if (make_timestamp(timestamp, sizeof(timestamp)) <= 0) {
+        xSemaphoreGive(s_upload_mutex);
         return;
     }
 
-    while (1) {
-        uint16_t co2 = 0, tvoc = 0;
-        if (sgp30.measure(&co2, &tvoc) == ESP_OK) {
-            ESP_LOGI(TAG, "SGP30: CO2=%u ppm  TVOC=%u ppb", co2, tvoc);
-
-            char data[64];
-            snprintf(data, sizeof(data),
-                     "{\"co2_ppm\":%u,\"tvoc_ppb\":%u}", co2, tvoc);
-            sensor_upload("sgp30", "air_quality", data);
-        } else {
-            ESP_LOGW(TAG, "SGP30 测量失败");
-        }
-        vTaskDelay(pdMS_TO_TICKS(INTERVAL_SGP30_MS));
-    }
-}
-
-/* ═══════════════════════════════════════════════════════════
- * VEML7700 — 环境光照度
- * ═══════════════════════════════════════════════════════════ */
-
-void task_veml7700(void *pvParameter)
-{
-    (void)pvParameter;
-
-    Adafruit_VEML7700 veml(I2C_MASTER_PORT,
-                            (gpio_num_t)21, (gpio_num_t)20);
-    if (!veml.begin(100000)) {
-        ESP_LOGE(TAG, "VEML7700 初始化失败，任务退出");
-        vTaskDelete(NULL);
+    char body[2048];
+    int len = snprintf(body, sizeof(body),
+        "{\"secret\":\"%s\",\"timestamp\":\"%s\",\"sensors\":%s}",
+        secret, timestamp, aggregated_json);
+    if (len <= 0 || len >= (int)sizeof(body)) {
+        ESP_LOGE(TAG, "聚合报文过长 (%d), 跳过上报", len);
+        xSemaphoreGive(s_upload_mutex);
         return;
     }
 
-    while (1) {
-        float lux  = veml.readLux(VEML_LUX_AUTO);
-        uint8_t gain = veml.getGain();
-        uint8_t it   = veml.getIntegrationTime();
-        ESP_LOGI(TAG, "VEML7700: Lux=%.2f gain=%u it=%u", lux, gain, it);
-
-        char data[64];
-        snprintf(data, sizeof(data),
-                 "{\"lux\":%.2f,\"gain\":%u,\"integration_time\":%u}",
-                 lux, gain, it);
-        sensor_upload("veml7700", "light", data);
-
-        vTaskDelay(pdMS_TO_TICKS(INTERVAL_VEML7700_MS));
+    esp_http_client_config_t cfg = {};
+    cfg.url = UPLOAD_URL;
+    cfg.method = HTTP_METHOD_POST;
+    cfg.timeout_ms = 5000;
+    esp_http_client_handle_t client = esp_http_client_init(&cfg);
+    if (!client) {
+        xSemaphoreGive(s_upload_mutex);
+        return;
     }
+    esp_http_client_set_header(client, "Content-Type", "application/json");
+    esp_http_client_set_post_field(client, body, len);
+    esp_err_t err = esp_http_client_perform(client);
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "聚合上报成功 HTTP %d", esp_http_client_get_status_code(client));
+        cb_record_success();
+    } else {
+        ESP_LOGE(TAG, "聚合上报失败: %s", esp_err_to_name(err));
+        cb_record_failure();
+    }
+    esp_http_client_cleanup(client);
+    xSemaphoreGive(s_upload_mutex);
 }
 
 /* ═══════════════════════════════════════════════════════════
- * PMS9103M — 颗粒物浓度
+ * INA231 初始化（含重试）
  * ═══════════════════════════════════════════════════════════ */
 
-void task_pms9103m(void *pvParameter)
+static bool init_ina231(void)
 {
-    (void)pvParameter;
+    for (int attempt = 1; attempt <= INA231_INIT_MAX_RETRIES; ++attempt) {
+        esp_err_t err = ina231_write_calibration(I2C_MASTER_PORT, INA231_ADDR,
+                                                  INA231_MAX_CURR_A, INA231_SHUNT_UOHM);
+        if (err == ESP_OK)
+            err = ina231_set_bus_conversion(I2C_MASTER_PORT, INA231_ADDR, 3320);
+        if (err == ESP_OK)
+            err = ina231_set_shunt_conversion(I2C_MASTER_PORT, INA231_ADDR, 3320);
+        if (err == ESP_OK)
+            err = ina231_set_mode(I2C_MASTER_PORT, INA231_ADDR, INA231_MODE_CONTINUOUS_BOTH);
+        if (err == ESP_OK)
+            err = ina231_enable_alert_on_conversion(I2C_MASTER_PORT, INA231_ADDR, true);
 
+        if (err == ESP_OK) {
+            if (attempt > 1) ESP_LOGI(TAG, "INA231 重试成功 (attempt=%d)", attempt);
+            return true;
+        }
+        ESP_LOGW(TAG, "INA231 初始化失败 attempt=%d: %s", attempt, esp_err_to_name(err));
+        vTaskDelay(pdMS_TO_TICKS(200));
+    }
+    return false;
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * INA231 读取
+ * ═══════════════════════════════════════════════════════════ */
+
+static esp_err_t read_ina231(char *json_out, size_t json_size)
+{
+    float bus_v = 0, shunt_v = 0, current_ma = 0, power_mw = 0;
+    esp_err_t ok =
+        ina231_read_bus_voltage_v  (I2C_MASTER_PORT, INA231_ADDR, &bus_v)     |
+        ina231_read_shunt_voltage_v(I2C_MASTER_PORT, INA231_ADDR, &shunt_v)   |
+        ina231_read_current_ma     (I2C_MASTER_PORT, INA231_ADDR,
+                                    g_ina231_current_lsb_nA, &current_ma)     |
+        ina231_read_power_mw       (I2C_MASTER_PORT, INA231_ADDR,
+                                    g_ina231_current_lsb_nA, &power_mw);
+    if (ok != ESP_OK) return ok;
+
+    float bus_v_cal = ina231_bus_voltage_calibrate(bus_v, &g_bus_cal);
+    float actual_power_mw = bus_v_cal * current_ma;
+    snprintf(json_out, json_size,
+        "{\"bus_v\":%.4f,\"bus_v_cal\":%.4f,\"shunt_v\":%.6f,"
+        "\"current_ma\":%.3f,\"power_mw\":%.3f}",
+        bus_v, bus_v_cal, shunt_v, current_ma, actual_power_mw);
+    return ESP_OK;
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * SGP30 初始化（含重试）
+ * ═══════════════════════════════════════════════════════════ */
+
+static bool init_sgp30(SGP30 &sgp30)
+{
+    for (int attempt = 1; attempt <= SGP30_INIT_MAX_RETRIES; ++attempt) {
+        if (sgp30.init() == ESP_OK) {
+            if (attempt > 1) ESP_LOGI(TAG, "SGP30 重试成功 (attempt=%d)", attempt);
+            return true;
+        }
+        ESP_LOGW(TAG, "SGP30 初始化失败 attempt=%d", attempt);
+        vTaskDelay(pdMS_TO_TICKS(200));
+    }
+    return false;
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * SGP30 读取
+ * ═══════════════════════════════════════════════════════════ */
+
+static esp_err_t read_sgp30(SGP30 &sgp30, char *json_out, size_t json_size)
+{
+    uint16_t co2 = 0, tvoc = 0;
+    esp_err_t err = sgp30.measure(&co2, &tvoc);
+    if (err != ESP_OK) return err;
+    snprintf(json_out, json_size,
+        "{\"co2_ppm\":%u,\"tvoc_ppb\":%u}", co2, tvoc);
+    return ESP_OK;
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * VEML7700 初始化（含重试）
+ * ═══════════════════════════════════════════════════════════ */
+
+static bool init_veml7700(Adafruit_VEML7700 &veml)
+{
+    for (int attempt = 1; attempt <= VEML7700_INIT_MAX_RETRIES; ++attempt) {
+        if (veml.begin(100000)) {
+            if (attempt > 1) ESP_LOGI(TAG, "VEML7700 重试成功 (attempt=%d)", attempt);
+            return true;
+        }
+        ESP_LOGW(TAG, "VEML7700 初始化失败 attempt=%d", attempt);
+        vTaskDelay(pdMS_TO_TICKS(200));
+    }
+    return false;
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * VEML7700 读取
+ * ═══════════════════════════════════════════════════════════ */
+
+static esp_err_t read_veml7700(Adafruit_VEML7700 &veml, char *json_out, size_t json_size)
+{
+    float lux = veml.readLux(VEML_LUX_AUTO);
+    uint8_t gain = veml.getGain();
+    uint8_t it = veml.getIntegrationTime();
+    snprintf(json_out, json_size,
+        "{\"lux\":%.2f,\"gain\":%u,\"integration_time\":%u}", lux, gain, it);
+    return ESP_OK;
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * PMS9103M 初始化
+ * ═══════════════════════════════════════════════════════════ */
+
+static bool init_pms9103m(void)
+{
     pms9103m_config_t cfg = {
         .uart_num  = UART_NUM_1,
         .tx_io_num = 17,
         .rx_io_num = 16,
         .baud_rate = 9600,
     };
-    if (pms9103m_init(&cfg) != ESP_OK) {
-        ESP_LOGE(TAG, "PMS9103M 初始化失败，任务退出");
-        vTaskDelete(NULL);
-        return;
-    }
-
-    while (1) {
-        pms9103m_data_t d;
-        if (pms9103m_read_frame(&d, pdMS_TO_TICKS(2000)) == ESP_OK) {
-            ESP_LOGI(TAG,
-                     "PMS9103M: PM1.0=%u PM2.5=%u PM10=%u "
-                     "PM1.0_ATM=%u PM2.5_ATM=%u PM10_ATM=%u",
-                     d.pm1_0_cf1, d.pm2_5_cf1, d.pm10_cf1,
-                     d.pm1_0_atm, d.pm2_5_atm, d.pm10_atm);
-
-            char data[256];
-            snprintf(data, sizeof(data),
-                     "{\"pm1_0_cf1\":%u,\"pm2_5_cf1\":%u,\"pm10_cf1\":%u,"
-                     "\"pm1_0_atm\":%u,\"pm2_5_atm\":%u,\"pm10_atm\":%u,"
-                     "\"cnt_0_3um\":%u,\"cnt_0_5um\":%u,\"cnt_1_0um\":%u,"
-                     "\"cnt_2_5um\":%u,\"cnt_5_0um\":%u,\"cnt_10um\":%u}",
-                     d.pm1_0_cf1, d.pm2_5_cf1, d.pm10_cf1,
-                     d.pm1_0_atm, d.pm2_5_atm, d.pm10_atm,
-                     d.count_0_3um, d.count_0_5um, d.count_1_0um,
-                     d.count_2_5um, d.count_5_0um, d.count_10_0um);
-            sensor_upload("pms9103m", "particulate", data);
-        } else {
-            ESP_LOGW(TAG, "PMS9103M 读取失败");
-        }
-        vTaskDelay(pdMS_TO_TICKS(INTERVAL_PMS9103M_MS));
-    }
+    return (pms9103m_init(&cfg) == ESP_OK);
 }
 
 /* ═══════════════════════════════════════════════════════════
- * Sound Meter — 声压级
+ * PMS9103M 读取
  * ═══════════════════════════════════════════════════════════ */
 
-void task_sound_meter(void *pvParameter)
+static esp_err_t read_pms9103m(char *json_out, size_t json_size)
 {
-    (void)pvParameter;
+    pms9103m_data_t d;
+    esp_err_t err = pms9103m_read_frame(&d, pdMS_TO_TICKS(2000));
+    if (err != ESP_OK) return err;
+    snprintf(json_out, json_size,
+        "{\"pm1_0_cf1\":%u,\"pm2_5_cf1\":%u,\"pm10_cf1\":%u,"
+        "\"pm1_0_atm\":%u,\"pm2_5_atm\":%u,\"pm10_atm\":%u,"
+        "\"cnt_0_3um\":%u,\"cnt_0_5um\":%u,\"cnt_1_0um\":%u,"
+        "\"cnt_2_5um\":%u,\"cnt_5_0um\":%u,\"cnt_10um\":%u}",
+        d.pm1_0_cf1, d.pm2_5_cf1, d.pm10_cf1,
+        d.pm1_0_atm, d.pm2_5_atm, d.pm10_atm,
+        d.count_0_3um, d.count_0_5um, d.count_1_0um,
+        d.count_2_5um, d.count_5_0um, d.count_10_0um);
+    return ESP_OK;
+}
 
+/* ═══════════════════════════════════════════════════════════
+ * Sound Meter 初始化
+ * ═══════════════════════════════════════════════════════════ */
+
+static bool init_sound_meter(sound_meter_handle_t &handle)
+{
     static const sound_meter_db_calibration_point_t cal_pts[] = {
         { .voltage = 0.0f,  .db = 0.0f  },
         { .voltage = 0.5f,  .db = 40.0f },
@@ -380,78 +440,220 @@ void task_sound_meter(void *pvParameter)
         { .voltage = 2.58f, .db = 74.0f },
         { .voltage = 2.60f, .db = 77.0f },
     };
-
-    sound_meter_handle_t handle = {};
     sound_meter_config_t cfg;
     sound_meter_get_default_config(&cfg);
     cfg.use_adc_calibration     = true;
     cfg.calibration_points      = cal_pts;
     cfg.calibration_point_count = sizeof(cal_pts) / sizeof(cal_pts[0]);
-
-    if (sound_meter_init(&handle, &cfg) != ESP_OK) {
-        ESP_LOGE(TAG, "Sound Meter 初始化失败，任务退出");
-        vTaskDelete(NULL);
-        return;
-    }
-
-    while (1) {
-        uint32_t raw = 0;
-        float voltage = 0, db = 0;
-        if (sound_meter_read_raw    (&handle, &raw)     == ESP_OK &&
-            sound_meter_read_voltage(&handle, &voltage) == ESP_OK &&
-            sound_meter_read_db     (&handle, &db)      == ESP_OK) {
-            ESP_LOGI(TAG, "Sound: raw=%u voltage=%.3fV db=%.1f", raw, voltage, db);
-
-            char data[64];
-            snprintf(data, sizeof(data),
-                     "{\"raw\":%u,\"voltage_v\":%.3f,\"db\":%.1f}",
-                     (unsigned)raw, voltage, db);
-            sensor_upload("sound_meter", "sound_level", data);
-        } else {
-            ESP_LOGW(TAG, "Sound Meter 读取失败");
-        }
-        vTaskDelay(pdMS_TO_TICKS(INTERVAL_SOUND_MS));
-    }
+    return (sound_meter_init(&handle, &cfg) == ESP_OK);
 }
 
 /* ═══════════════════════════════════════════════════════════
- * UV Meter — 紫外线指数
+ * Sound Meter 读取
  * ═══════════════════════════════════════════════════════════ */
 
-void task_uv_meter(void *pvParameter)
+static esp_err_t read_sound_meter(sound_meter_handle_t &handle, char *json_out, size_t json_size)
 {
-    (void)pvParameter;
+    uint32_t raw = 0;
+    float voltage = 0, db = 0;
+    if (sound_meter_read_raw(&handle, &raw) != ESP_OK) return ESP_FAIL;
+    if (sound_meter_read_voltage(&handle, &voltage) != ESP_OK) return ESP_FAIL;
+    if (sound_meter_read_db(&handle, &db) != ESP_OK) return ESP_FAIL;
+    snprintf(json_out, json_size,
+        "{\"raw\":%u,\"voltage_v\":%.3f,\"db\":%.1f}", (unsigned)raw, voltage, db);
+    return ESP_OK;
+}
 
-    uv_meter_handle_t handle = {};
+/* ═══════════════════════════════════════════════════════════
+ * UV Meter 初始化
+ * ═══════════════════════════════════════════════════════════ */
+
+static bool init_uv_meter(uv_meter_handle_t &handle)
+{
     uv_meter_config_t cfg;
     uv_meter_get_default_config(&cfg);
     cfg.channel = ADC_CHANNEL_4;
+    return (uv_meter_init(&handle, &cfg) == ESP_OK);
+}
 
-    if (uv_meter_init(&handle, &cfg) != ESP_OK) {
-        ESP_LOGE(TAG, "UV Meter 初始化失败，任务退出");
-        vTaskDelete(NULL);
-        return;
+/* ═══════════════════════════════════════════════════════════
+ * UV Meter 读取
+ * ═══════════════════════════════════════════════════════════ */
+
+static esp_err_t read_uv_meter(uv_meter_handle_t &handle, char *json_out, size_t json_size)
+{
+    uint32_t raw = 0;
+    float voltage = 0, uv_index = 0;
+    if (uv_meter_read_raw(&handle, &raw) != ESP_OK) return ESP_FAIL;
+    if (uv_meter_read_voltage(&handle, &voltage) != ESP_OK) return ESP_FAIL;
+    if (uv_meter_read_uv_index(&handle, &uv_index) != ESP_OK) return ESP_FAIL;
+    uv_meter_level_t level = uv_meter_get_level(uv_index);
+    const char *level_s = uv_meter_level_to_string(level);
+    snprintf(json_out, json_size,
+        "{\"raw\":%u,\"voltage_v\":%.3f,\"uv_index\":%.2f,\"level\":\"%s\"}",
+        (unsigned)raw, voltage, uv_index, level_s);
+    return ESP_OK;
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * 统一传感器数据采集任务
+ *
+ * 每分钟顺序采集全部 6 个传感器，聚合后一次性上报。
+ * 每个传感器独立错误处理，单一传感器失败不影响其他。
+ * ═══════════════════════════════════════════════════════════ */
+
+void task_sensor_collect(void *pvParameter)
+{
+    (void)pvParameter;
+
+    /* ── 阶段 1: 初始化 INA231 ── */
+    g_ina231_ready = init_ina231();
+    if (!g_ina231_ready) {
+        ESP_LOGE(TAG, "INA231 初始化最终失败，将在后续周期重试");
     }
 
-    while (1) {
-        uint32_t raw = 0;
-        float voltage = 0, uv_index = 0;
-        if (uv_meter_read_raw      (&handle, &raw)       == ESP_OK &&
-            uv_meter_read_voltage  (&handle, &voltage)   == ESP_OK &&
-            uv_meter_read_uv_index (&handle, &uv_index)  == ESP_OK) {
-            uv_meter_level_t level    = uv_meter_get_level(uv_index);
-            const char      *level_s  = uv_meter_level_to_string(level);
-            ESP_LOGI(TAG, "UV: raw=%u voltage=%.3fV index=%.2f level=%s",
-                     (unsigned)raw, voltage, uv_index, level_s);
+    /* ── 阶段 2: 初始化 SGP30 ── */
+    SemaphoreHandle_t i2c_mutex = sensor_get_i2c_mutex();
+    SGP30 sgp30(I2C_MASTER_PORT, GPIO_NUM_21, GPIO_NUM_20, 100000);
+    bool sgp30_ready = init_sgp30(sgp30);
+    if (!sgp30_ready) ESP_LOGE(TAG, "SGP30 初始化失败");
 
-            char data[80];
-            snprintf(data, sizeof(data),
-                     "{\"raw\":%u,\"voltage_v\":%.3f,\"uv_index\":%.2f,\"level\":\"%s\"}",
-                     (unsigned)raw, voltage, uv_index, level_s);
-            sensor_upload("uv_meter", "uv_radiation", data);
-        } else {
-            ESP_LOGW(TAG, "UV Meter 读取失败");
+    /* ── 阶段 3: 初始化 VEML7700 ── */
+    Adafruit_VEML7700 veml(I2C_MASTER_PORT, GPIO_NUM_21, GPIO_NUM_20,
+                           VEML7700_I2CADDR_DEFAULT, i2c_mutex);
+    bool veml7700_ready = init_veml7700(veml);
+    if (!veml7700_ready) ESP_LOGE(TAG, "VEML7700 初始化失败");
+
+    /* ── 阶段 4: 初始化 PMS9103M ── */
+    bool pms_ready = init_pms9103m();
+    if (!pms_ready) ESP_LOGE(TAG, "PMS9103M 初始化失败");
+
+    /* ── 阶段 5: 初始化 Sound Meter ── */
+    sound_meter_handle_t sound_handle = {};
+    bool sound_ready = init_sound_meter(sound_handle);
+    if (!sound_ready) ESP_LOGE(TAG, "Sound Meter 初始化失败");
+
+    /* ── 阶段 6: 初始化 UV Meter (复用 sound_meter 的 ADC1 handle) ── */
+    uv_meter_handle_t uv_handle = {};
+    bool uv_ready = init_uv_meter(uv_handle);
+    if (!uv_ready) ESP_LOGE(TAG, "UV Meter 初始化失败");
+
+    ESP_LOGI(TAG, "传感器就绪状态: INA231=%d SGP30=%d VEML7700=%d "
+             "PMS9103M=%d Sound=%d UV=%d",
+             g_ina231_ready, sgp30_ready, veml7700_ready,
+             pms_ready, sound_ready, uv_ready);
+
+    /* ── 主循环：每分钟采集一次 ── */
+    TickType_t last_wake = xTaskGetTickCount();
+
+    while (1) {
+        ESP_LOGI(TAG, "──── 开始新一轮传感器采集 ────");
+
+        /* 聚合缓冲区，每个传感器最多 256 字节 + 逗号分隔 */
+        static char aggregated[2048];
+        aggregated[0] = '{';
+        aggregated[1] = '\0';
+        size_t agg_len = 1;
+        bool any_success = false;
+
+        auto append_sensor = [&](const char *name, const char *json, bool success) {
+            if (!success) return;
+            if (any_success) {
+                aggregated[agg_len++] = ',';
+                aggregated[agg_len] = '\0';
+            }
+            int written = snprintf(aggregated + agg_len,
+                                   sizeof(aggregated) - agg_len,
+                                   "\"%s\":%s", name, json);
+            if (written > 0 && (size_t)written < sizeof(aggregated) - agg_len) {
+                agg_len += written;
+            }
+            any_success = true;
+        };
+
+        char sensor_json[256];
+        bool ok;
+
+        /* ── 1. INA231 ── */
+        if (!g_ina231_ready) {
+            g_ina231_ready = init_ina231();
         }
-        vTaskDelay(pdMS_TO_TICKS(INTERVAL_UV_MS));
+        if (g_ina231_ready) {
+            ok = (read_ina231(sensor_json, sizeof(sensor_json)) == ESP_OK);
+            if (ok) {
+                append_sensor("ina231", sensor_json, true);
+            } else {
+                ESP_LOGW(TAG, "INA231 读取失败");
+                g_ina231_ready = false;
+            }
+        }
+
+        /* ── 2. SGP30 ── */
+        if (sgp30_ready) {
+            ok = (read_sgp30(sgp30, sensor_json, sizeof(sensor_json)) == ESP_OK);
+            if (ok) {
+                append_sensor("sgp30", sensor_json, true);
+            } else {
+                ESP_LOGW(TAG, "SGP30 读取失败");
+            }
+        }
+
+        /* ── 3. VEML7700 ── */
+        if (veml7700_ready) {
+            ok = (read_veml7700(veml, sensor_json, sizeof(sensor_json)) == ESP_OK);
+            if (ok) {
+                append_sensor("veml7700", sensor_json, true);
+            } else {
+                ESP_LOGW(TAG, "VEML7700 读取失败");
+            }
+        }
+
+        /* ── 4. PMS9103M ── */
+        if (pms_ready) {
+            ok = (read_pms9103m(sensor_json, sizeof(sensor_json)) == ESP_OK);
+            if (ok) {
+                append_sensor("pms9103m", sensor_json, true);
+            } else {
+                ESP_LOGW(TAG, "PMS9103M 读取失败");
+            }
+        }
+
+        /* ── 5. Sound Meter ── */
+        if (sound_ready) {
+            ok = (read_sound_meter(sound_handle, sensor_json, sizeof(sensor_json)) == ESP_OK);
+            if (ok) {
+                append_sensor("sound_meter", sensor_json, true);
+            } else {
+                ESP_LOGW(TAG, "Sound Meter 读取失败");
+            }
+        }
+
+        /* ── 6. UV Meter ── */
+        if (uv_ready) {
+            ok = (read_uv_meter(uv_handle, sensor_json, sizeof(sensor_json)) == ESP_OK);
+            if (ok) {
+                append_sensor("uv_meter", sensor_json, true);
+            } else {
+                ESP_LOGW(TAG, "UV Meter 读取失败");
+            }
+        }
+
+        /* 闭合 JSON 对象 */
+        if (agg_len + 2 < sizeof(aggregated)) {
+            aggregated[agg_len++] = '}';
+            aggregated[agg_len] = '\0';
+        }
+
+        /* ── 上报 ── */
+        if (any_success) {
+            sensor_upload_aggregated(aggregated);
+        } else {
+            ESP_LOGW(TAG, "本轮采集无有效数据");
+        }
+
+        ESP_LOGI(TAG, "──── 本轮采集完成，等待 %d 秒 ────",
+                 (int)(SENSOR_COLLECT_INTERVAL_MS / 1000));
+
+        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(SENSOR_COLLECT_INTERVAL_MS));
     }
 }

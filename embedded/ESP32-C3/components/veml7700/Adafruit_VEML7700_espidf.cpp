@@ -6,33 +6,21 @@
 
 static const char *TAG = "Adafruit_VEML7700";
 
-Adafruit_VEML7700::Adafruit_VEML7700(i2c_port_t i2c_num, gpio_num_t sda_pin, gpio_num_t scl_pin, uint8_t addr)
-    : _i2c_num(i2c_num), _sda_pin(sda_pin), _scl_pin(scl_pin), _addr(addr), _freq_hz(100000), _lastRead(0), _initialized(false) {}
+Adafruit_VEML7700::Adafruit_VEML7700(i2c_port_t i2c_num, gpio_num_t sda_pin, gpio_num_t scl_pin, uint8_t addr, SemaphoreHandle_t i2c_mutex)
+    : _i2c_num(i2c_num), _sda_pin(sda_pin), _scl_pin(scl_pin), _addr(addr), _freq_hz(100000), _lastRead(0), _initialized(false), _i2c_mutex(i2c_mutex) {}
 
 bool Adafruit_VEML7700::begin(int freq_hz) {
   _freq_hz = freq_hz;
-  i2c_config_t conf = {};
-  conf.mode = I2C_MODE_MASTER;
-  conf.sda_io_num = _sda_pin;
-  conf.scl_io_num = _scl_pin;
-  conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
-  conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
-  conf.master.clk_speed = _freq_hz;
 
-  /* 若驱动已由 main 安装，跳过重复安装直接复用 */
-  if (i2c_driver_install(_i2c_num, I2C_MODE_MASTER, 0, 0, 0) == ESP_OK) {
-    esp_err_t err = i2c_param_config(_i2c_num, &conf);
-    if (err != ESP_OK) {
-      i2c_driver_delete(_i2c_num);
-      ESP_LOGE(TAG, "i2c_param_config failed: %d", err);
-      return false;
-    }
-  }
-  /* 驱动已安装：直接复用 */
+  ESP_LOGI(TAG, "尝试初始化 VEML7700，地址=0x%02x, I2C端口=%d", _addr, _i2c_num);
 
   uint16_t id = 0;
-  if (readRegister(VEML7700_ALS_CONFIG, id) != ESP_OK) {
-    ESP_LOGE(TAG, "VEML7700 not found at address 0x%02x", _addr);
+  esp_err_t err = readRegister(VEML7700_ALS_CONFIG, id);
+  ESP_LOGI(TAG, "读取 ALS_CONFIG (0x00) 返回: err=%s, value=0x%04x", 
+           esp_err_to_name(err), id);
+  
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "VEML7700 not found at address 0x%02x (err: %s)", _addr, esp_err_to_name(err));
     return false;
   }
 
@@ -55,7 +43,17 @@ esp_err_t Adafruit_VEML7700::writeRegister(uint8_t reg, uint16_t value) {
   i2c_master_write_byte(cmd, (_addr << 1) | I2C_MASTER_WRITE, true);
   i2c_master_write(cmd, data, sizeof(data), true);
   i2c_master_stop(cmd);
-  esp_err_t err = i2c_master_cmd_begin(_i2c_num, cmd, pdMS_TO_TICKS(I2C_TIMEOUT_MS));
+  
+  esp_err_t err = ESP_ERR_INVALID_STATE;
+  if (_i2c_mutex) {
+    if (xSemaphoreTake(_i2c_mutex, pdMS_TO_TICKS(I2C_TIMEOUT_MS)) == pdTRUE) {
+      err = i2c_master_cmd_begin(_i2c_num, cmd, pdMS_TO_TICKS(I2C_TIMEOUT_MS));
+      xSemaphoreGive(_i2c_mutex);
+    }
+  } else {
+    err = i2c_master_cmd_begin(_i2c_num, cmd, pdMS_TO_TICKS(I2C_TIMEOUT_MS));
+  }
+  
   i2c_cmd_link_delete(cmd);
   return err;
 }
@@ -70,7 +68,17 @@ esp_err_t Adafruit_VEML7700::readRegister(uint8_t reg, uint16_t &value) {
   i2c_master_write_byte(cmd, (_addr << 1) | I2C_MASTER_READ, true);
   i2c_master_read(cmd, data, sizeof(data), I2C_MASTER_LAST_NACK);
   i2c_master_stop(cmd);
-  esp_err_t err = i2c_master_cmd_begin(_i2c_num, cmd, pdMS_TO_TICKS(I2C_TIMEOUT_MS));
+  
+  esp_err_t err = ESP_ERR_INVALID_STATE;
+  if (_i2c_mutex) {
+    if (xSemaphoreTake(_i2c_mutex, pdMS_TO_TICKS(I2C_TIMEOUT_MS)) == pdTRUE) {
+      err = i2c_master_cmd_begin(_i2c_num, cmd, pdMS_TO_TICKS(I2C_TIMEOUT_MS));
+      xSemaphoreGive(_i2c_mutex);
+    }
+  } else {
+    err = i2c_master_cmd_begin(_i2c_num, cmd, pdMS_TO_TICKS(I2C_TIMEOUT_MS));
+  }
+  
   i2c_cmd_link_delete(cmd);
   if (err == ESP_OK) {
     value = (uint16_t)data[0] | ((uint16_t)data[1] << 8);

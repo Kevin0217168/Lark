@@ -6,6 +6,7 @@
 #include <string.h>
 
 static const char *TAG = "ina231";
+static bool s_i2c_port_initialized[I2C_NUM_MAX] = { false };
 
 bus_calibration_t ina231_bus_calibration_compute(const bus_calibration_point_t *points, size_t count)
 {
@@ -125,6 +126,11 @@ static esp_err_t ina231_i2c_read16(i2c_port_t port, uint8_t addr, uint8_t reg, u
 }
 
 esp_err_t ina231_init(i2c_port_t port, gpio_num_t sda_gpio, gpio_num_t scl_gpio, uint32_t freq_hz) {
+    /* 若该端口驱动已由 main 安装，直接复用，避免触发 ESP-IDF 内部错误日志 */
+    if (s_i2c_port_initialized[port]) {
+        return ESP_OK;
+    }
+
     i2c_config_t conf = {
         .mode = I2C_MODE_MASTER,
         .sda_io_num = sda_gpio,
@@ -133,6 +139,7 @@ esp_err_t ina231_init(i2c_port_t port, gpio_num_t sda_gpio, gpio_num_t scl_gpio,
         .scl_pullup_en = GPIO_PULLUP_ENABLE,
         .master.clk_speed = freq_hz,
     };
+
     esp_err_t err = i2c_param_config(port, &conf);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "i2c_param_config failed: %s", esp_err_to_name(err));
@@ -141,8 +148,10 @@ esp_err_t ina231_init(i2c_port_t port, gpio_num_t sda_gpio, gpio_num_t scl_gpio,
     err = i2c_driver_install(port, I2C_MODE_MASTER, 0, 0, 0);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "i2c_driver_install failed: %s", esp_err_to_name(err));
+        return err;
     }
-    return err;
+    s_i2c_port_initialized[port] = true;
+    return ESP_OK;
 }
 
 esp_err_t ina231_write_register(i2c_port_t port, uint8_t addr, uint8_t reg, uint16_t value) {

@@ -37,20 +37,13 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "WiFi 已连接，开始 SNTP 对时");
     obtain_time();
 
-    /* ── I2C 总线初始化（所有 I2C 传感器共用） ── */
     ESP_ERROR_CHECK(ina231_init(I2C_MASTER_PORT, I2C_MASTER_SDA,
                                 I2C_MASTER_SCL, I2C_MASTER_FREQ_HZ));
 
-    /* ── 传感器任务公共资源初始化（互斥锁、INA231 校准等） ── */
     sensor_tasks_init();
 
-    /* ── 创建各传感器独立任务 ── */
-    xTaskCreate(task_ina231,      "ina231",      4096, NULL, 5, NULL);
-    xTaskCreate(task_sgp30,       "sgp30",       6144, NULL, 5, NULL);
-    xTaskCreate(task_veml7700,    "veml7700",    6144, NULL, 5, NULL);
-    xTaskCreate(task_pms9103m,    "pms9103m",    4096, NULL, 5, NULL);
-    xTaskCreate(task_sound_meter, "sound_meter", 8192, NULL, 5, NULL);
-    xTaskCreate(task_uv_meter,    "uv_meter",    6144, NULL, 5, NULL);
+    xTaskCreate(task_sensor_collect, "sensor_collect", 10240, NULL, 5, NULL);
 
-    ESP_LOGI(TAG, "所有传感器任务已启动");
+    ESP_LOGI(TAG, "统一传感器采集任务已启动 (周期 %d 秒)",
+             (int)(SENSOR_COLLECT_INTERVAL_MS / 1000));
 }
