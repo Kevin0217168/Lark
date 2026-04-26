@@ -7,6 +7,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "tasks.h"
+#include "remote_log.h"
 
 static const char *TAG = "ws_cmd";
 
@@ -190,16 +191,16 @@ static bool set_device(const char *key, cJSON *values_item, cJSON *json)
         ESP_LOGW(TAG, "收到重启指令，设备即将重启...");
         ws_reply(1, "设备即将重启.", key, "ok");
         cJSON_Delete(json);
-        vTaskDelay(500 / portTICK_PERIOD_MS);
+        remote_log_flush_sync();
+        vTaskDelay(200 / portTICK_PERIOD_MS);
         esp_restart();
         return true;  /* 不会到达，但保持语义完整 */
     }
 
     if (strcasecmp(key, "ota") == 0) {
         ESP_LOGI(TAG, "收到OTA指令，启动OTA任务...");
-        static uint8_t ota_param;
         TaskHandle_t h = NULL;
-        if (xTaskCreate(ota_task, "ota_task_ws", 8192, &ota_param, 1, &h) == pdPASS) {
+        if (xTaskCreate(ota_task, "ota_task_ws", 8192, NULL, 1, &h) == pdPASS) {
             ws_reply(1, "OTA任务已启动.", key, "ok");
         } else {
             ws_reply(0, "OTA任务启动失败.", key, "");
