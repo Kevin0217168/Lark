@@ -146,6 +146,31 @@
               <div class="status-label">品种</div>
             </div>
           </div>
+          
+          <!-- 环境数据环形进度条 -->
+          <div class="env-gauges-section">
+            <h3 class="gauges-title">环境数据</h3>
+            <div class="gauges-row">
+              <div class="gauge-item">
+                <div ref="aqiGaugeRef" class="gauge-chart"></div>
+                <div class="gauge-label">空气质量</div>
+              </div>
+              <div class="gauge-item">
+                <div ref="dbGaugeRef" class="gauge-chart"></div>
+                <div class="gauge-label">声音分贝</div>
+              </div>
+            </div>
+            <div class="gauges-row gauges-row-second">
+              <div class="gauge-item">
+                <div ref="luxGaugeRef" class="gauge-chart"></div>
+                <div class="gauge-label">光照强度</div>
+              </div>
+              <div class="gauge-item">
+                <div ref="uvGaugeRef" class="gauge-chart"></div>
+                <div class="gauge-label">紫外线指数</div>
+              </div>
+            </div>
+          </div>
         </div>
         
         <!-- 详细信息区域 -->
@@ -190,10 +215,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, onUnmounted, watch } from 'vue';
+import { ref, onMounted, computed, onUnmounted, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { api } from '@/utils/api';
+import * as echarts from 'echarts';
 
 const router = useRouter();
 
@@ -335,11 +361,15 @@ const releaseBird = async () => {
       adoptedBird.value = null;
       birdDeviceId.value = null;
       stopRealtimeMonitoring();
+      stopEnvDataTimer();
+      aqiGaugeChart?.dispose();
+      dbGaugeChart?.dispose();
+      luxGaugeChart?.dispose();
+      uvGaugeChart?.dispose();
     } else {
       ElMessage.error(response.msg || '释放失败，请重试');
     }
   } catch (error: any) {
-    // 处理后端返回的错误信息
     if (error.data && error.data.msg) {
       ElMessage.error(error.data.msg);
     } else if (error.message) {
@@ -348,6 +378,11 @@ const releaseBird = async () => {
       ElMessage.error('网络错误，请检查网络连接');
     }
   }
+};
+
+// 跳转到认领页面
+const goToAdoptBirds = () => {
+  router.push('/Adopt');
 };
 
 // 处理接收到的图片帧数据
@@ -591,6 +626,415 @@ const stopFpsUpdate = () => {
   }
 };
 
+// ─── 环境数据环形进度条相关 ───
+// AQI 计算：根据 PM2.5、PM10、CO2、TVOC 综合计算空气质量指数
+const calculateAQI = (pm25: number, pm10: number, co2: number, tvoc: number): number => {
+  const pm25Breakpoints: [number, number, number, number][] = [
+    [0, 35, 0, 50],
+    [36, 75, 51, 100],
+    [76, 115, 101, 150],
+    [116, 150, 151, 200],
+    [151, 250, 201, 300],
+    [251, 500, 301, 500],
+  ];
+  const pm10Breakpoints: [number, number, number, number][] = [
+    [0, 50, 0, 50],
+    [51, 150, 51, 100],
+    [151, 250, 101, 150],
+    [251, 350, 151, 200],
+    [351, 420, 201, 300],
+    [421, 600, 301, 500],
+  ];
+  const co2Breakpoints: [number, number, number, number][] = [
+    [0, 400, 0, 50],
+    [401, 600, 51, 100],
+    [601, 1000, 101, 150],
+    [1001, 1400, 151, 200],
+    [1401, 2000, 201, 300],
+    [2001, 5000, 301, 500],
+  ];
+  const tvocBreakpoints: [number, number, number, number][] = [
+    [0, 250, 0, 50],
+    [251, 500, 51, 100],
+    [501, 1000, 101, 150],
+    [1001, 1600, 151, 200],
+    [1601, 3000, 201, 300],
+    [3001, 10000, 301, 500],
+  ];
+
+  const calc = (c: number, bp: [number, number, number, number][]): number => {
+    if (c <= 0) return 0;
+    for (const [cLo, cHi, iLo, iHi] of bp) {
+      if (c >= cLo && c <= cHi) {
+        return ((iHi - iLo) / (cHi - cLo)) * (c - cLo) + iLo;
+      }
+    }
+    return 500;
+  };
+
+  const pm25Aqi = pm25 > 0 ? calc(pm25, pm25Breakpoints) : -1;
+  const pm10Aqi = pm10 > 0 ? calc(pm10, pm10Breakpoints) : -1;
+  const co2Aqi = co2 > 0 ? calc(co2, co2Breakpoints) : -1;
+  const tvocAqi = tvoc > 0 ? calc(tvoc, tvocBreakpoints) : -1;
+
+  const validAqi = [pm25Aqi, pm10Aqi, co2Aqi, tvocAqi].filter(v => v >= 0);
+  return validAqi.length > 0 ? Math.round(Math.max(...validAqi)) : 0;
+};
+
+// ─── 5分钟滑动平均 ───
+const MAX_HISTORY = 60;
+const pm25History: number[] = [];
+const pm10History: number[] = [];
+const co2History: number[] = [];
+const tvocHistory: number[] = [];
+const luxHistory: number[] = [];
+const uvHistory: number[] = [];
+
+const pushHistory = (arr: number[], value: number) => {
+  arr.push(value);
+  if (arr.length > MAX_HISTORY) arr.shift();
+};
+
+const slidingAvg = (arr: number[]): number => {
+  if (arr.length === 0) return 0;
+  const sum = arr.reduce((a, b) => a + b, 0);
+  return sum / arr.length;
+};
+
+// 环境数据值
+const aqiValue = ref(0);
+const dbValue = ref(0);
+const aqiGaugeRef = ref<HTMLElement | null>(null);
+const dbGaugeRef = ref<HTMLElement | null>(null);
+const luxGaugeRef = ref<HTMLElement | null>(null);
+const uvGaugeRef = ref<HTMLElement | null>(null);
+let aqiGaugeChart: echarts.ECharts | null = null;
+let dbGaugeChart: echarts.ECharts | null = null;
+let luxGaugeChart: echarts.ECharts | null = null;
+let uvGaugeChart: echarts.ECharts | null = null;
+
+// 环境数据采集定时器
+let envDataTimer: number | null = null;
+
+const updateAQIFromHistory = () => {
+  aqiValue.value = calculateAQI(
+    slidingAvg(pm25History),
+    slidingAvg(pm10History),
+    slidingAvg(co2History),
+    slidingAvg(tvocHistory),
+  );
+  updateGaugeCharts();
+};
+
+const fetchAirQualityData = async () => {
+  if (!birdDeviceId.value) return;
+  try {
+    const response = await api.get('/api/sensor-upload', {
+      device_id: birdDeviceId.value,
+      sensor_type: 'pms9103m',
+      limit: 1,
+    });
+    if (response.code === 200 && response.data && response.data.length > 0) {
+      const record = response.data[0];
+      const parsed = JSON.parse(record.data);
+      if (parsed.pm2_5_cf1 !== undefined || parsed.pm10_cf1 !== undefined) {
+        pushHistory(pm25History, Number(parsed.pm2_5_cf1) || 0);
+        pushHistory(pm10History, Number(parsed.pm10_cf1) || 0);
+        updateAQIFromHistory();
+      }
+    }
+  } catch (error) {
+    console.error('获取颗粒物数据失败:', error);
+  }
+};
+
+const fetchSGP30Data = async () => {
+  if (!birdDeviceId.value) return;
+  try {
+    const response = await api.get('/api/sensor-upload', {
+      device_id: birdDeviceId.value,
+      sensor_type: 'sgp30',
+      limit: 1,
+    });
+    if (response.code === 200 && response.data && response.data.length > 0) {
+      const record = response.data[0];
+      const parsed = JSON.parse(record.data);
+      if (parsed.co2_ppm !== undefined || parsed.tvoc_ppb !== undefined) {
+        pushHistory(co2History, Number(parsed.co2_ppm) || 0);
+        pushHistory(tvocHistory, Number(parsed.tvoc_ppb) || 0);
+        updateAQIFromHistory();
+      }
+    }
+  } catch (error) {
+    console.error('获取SGP30数据失败:', error);
+  }
+};
+
+const fetchSoundData = async () => {
+  if (!birdDeviceId.value) return;
+  try {
+    const response = await api.get('/api/sensor-upload', {
+      device_id: birdDeviceId.value,
+      sensor_type: 'sound_meter',
+      limit: 1,
+    });
+    if (response.code === 200 && response.data && response.data.length > 0) {
+      const record = response.data[0];
+      const parsed = JSON.parse(record.data);
+      if (parsed.db !== undefined) {
+        dbValue.value = Math.round(parsed.db);
+        updateGaugeCharts();
+      }
+    }
+  } catch (error) {
+    console.error('获取声音分贝数据失败:', error);
+  }
+};
+
+const fetchLuxData = async () => {
+  if (!birdDeviceId.value) return;
+  try {
+    const response = await api.get('/api/sensor-upload', {
+      device_id: birdDeviceId.value,
+      sensor_type: 'veml7700',
+      limit: 1,
+    });
+    if (response.code === 200 && response.data && response.data.length > 0) {
+      const record = response.data[0];
+      const parsed = JSON.parse(record.data);
+      if (parsed.lux !== undefined) {
+        pushHistory(luxHistory, Number(parsed.lux) || 0);
+        updateLuxGauge();
+      }
+    }
+  } catch (error) {
+    console.error('获取光照数据失败:', error);
+  }
+};
+
+const fetchUVData = async () => {
+  if (!birdDeviceId.value) return;
+  try {
+    const response = await api.get('/api/sensor-upload', {
+      device_id: birdDeviceId.value,
+      sensor_type: 'uv_meter',
+      limit: 1,
+    });
+    if (response.code === 200 && response.data && response.data.length > 0) {
+      const record = response.data[0];
+      const parsed = JSON.parse(record.data);
+      if (parsed.uv_index !== undefined) {
+        pushHistory(uvHistory, Number(parsed.uv_index) || 0);
+        updateUVGauge();
+      }
+    }
+  } catch (error) {
+    console.error('获取紫外线数据失败:', error);
+  }
+};
+
+const fetchAllEnvData = () => {
+  fetchAirQualityData();
+  fetchSGP30Data();
+  fetchSoundData();
+  fetchLuxData();
+  fetchUVData();
+};
+
+const startEnvDataTimer = () => {
+  stopEnvDataTimer();
+  fetchAllEnvData();
+  envDataTimer = window.setInterval(fetchAllEnvData, 5000);
+};
+
+const stopEnvDataTimer = () => {
+  if (envDataTimer) {
+    clearInterval(envDataTimer);
+    envDataTimer = null;
+  }
+};
+
+// 获取光照强度颜色
+const getLuxColor = (lux: number) => {
+  if (lux > 50000) return '#f56c6c';
+  if (lux > 25000) return '#e6a23c';
+  return '#67c23a';
+};
+const getLuxBg = (lux: number) => {
+  if (lux > 50000) return '#f56c6c1a';
+  if (lux > 25000) return '#e6a23c1a';
+  return '#67c23a1a';
+};
+
+// 获取紫外线颜色
+const getUVColor = (uv: number) => {
+  if (uv > 11) return '#f56c6c';
+  if (uv > 8) return '#f56c6c';
+  if (uv > 5) return '#e6a23c';
+  if (uv > 2) return '#e6a23c';
+  return '#67c23a';
+};
+const getUVBg = (uv: number) => {
+  if (uv > 11) return '#f56c6c1a';
+  if (uv > 8) return '#f56c6c1a';
+  if (uv > 5) return '#e6a23c1a';
+  if (uv > 2) return '#e6a23c1a';
+  return '#67c23a1a';
+};
+
+// Lux 值格式化
+const formatLux = (v: number) => {
+  if (v >= 100000) return (v / 100000).toFixed(1) + 'M';
+  if (v >= 1000) return (v / 1000).toFixed(1) + 'K';
+  return String(Math.round(v));
+};
+
+const getGaugeOption = (max: number, color: string, bgColor: string, value: number, name: string, formatter?: (v: number) => string) => ({
+  series: [{
+    type: 'gauge',
+    radius: '95%',
+    center: ['50%', '60%'],
+    startAngle: 180,
+    endAngle: 0,
+    min: 0,
+    max,
+    splitNumber: 1,
+    pointer: {
+      show: false
+    },
+    progress: {
+      show: true,
+      overlap: false,
+      roundCap: true,
+      clip: false,
+      itemStyle: {
+        color: {
+          type: 'linear',
+          x: 0, y: 0, x2: 1, y2: 0,
+          colorStops: [
+            { offset: 0, color: color },
+            { offset: 1, color: color + 'aa' }
+          ]
+        },
+        shadowColor: color + '40',
+        shadowBlur: 10,
+        shadowOffsetY: 2
+      }
+    },
+    axisLine: {
+      lineStyle: {
+        width: 14,
+        color: [[1, bgColor]]
+      }
+    },
+    splitLine: { show: false },
+    axisTick: { show: false },
+    axisLabel: { show: false },
+    title: { show: false },
+    detail: {
+      show: true,
+      valueAnimation: true,
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: color,
+      formatter: formatter ? formatter : '{value}',
+      offsetCenter: [0, '0%']
+    },
+    data: [{ value: Math.min(value, max), name }]
+  }]
+});
+
+const initGaugeCharts = () => {
+  if (aqiGaugeRef.value) {
+    if (aqiGaugeChart) aqiGaugeChart.dispose();
+    aqiGaugeChart = echarts.init(aqiGaugeRef.value);
+  }
+  if (dbGaugeRef.value) {
+    if (dbGaugeChart) dbGaugeChart.dispose();
+    dbGaugeChart = echarts.init(dbGaugeRef.value);
+  }
+  if (luxGaugeRef.value) {
+    if (luxGaugeChart) luxGaugeChart.dispose();
+    luxGaugeChart = echarts.init(luxGaugeRef.value);
+  }
+  if (uvGaugeRef.value) {
+    if (uvGaugeChart) uvGaugeChart.dispose();
+    uvGaugeChart = echarts.init(uvGaugeRef.value);
+  }
+  initGaugeChartOption();
+  updateGaugeCharts();
+};
+
+const initGaugeChartOption = () => {
+  const aqiColor = aqiValue.value > 150 ? '#f56c6c' : aqiValue.value > 100 ? '#e6a23c' : '#67c23a';
+  const dbColor = dbValue.value > 85 ? '#f56c6c' : dbValue.value > 65 ? '#e6a23c' : '#67c23a';
+  const aqiBg = aqiValue.value > 150 ? '#f56c6c1a' : aqiValue.value > 100 ? '#e6a23c1a' : '#67c23a1a';
+  const dbBg = dbValue.value > 85 ? '#f56c6c1a' : dbValue.value > 65 ? '#e6a23c1a' : '#67c23a1a';
+  const luxVal = slidingAvg(luxHistory);
+  const luxColorVal = getLuxColor(luxVal);
+  const luxBgVal = getLuxBg(luxVal);
+  const uvVal = slidingAvg(uvHistory);
+  const uvColorVal = getUVColor(uvVal);
+  const uvBgVal = getUVBg(uvVal);
+
+  if (aqiGaugeChart) {
+    aqiGaugeChart.setOption(getGaugeOption(300, aqiColor, aqiBg, aqiValue.value, 'AQI'));
+  }
+  if (dbGaugeChart) {
+    dbGaugeChart.setOption(getGaugeOption(120, dbColor, dbBg, dbValue.value, 'dB'));
+  }
+  if (luxGaugeChart) {
+    luxGaugeChart.setOption(getGaugeOption(100000, luxColorVal, luxBgVal, luxVal, 'Lux', formatLux));
+  }
+  if (uvGaugeChart) {
+    uvGaugeChart.setOption(getGaugeOption(12, uvColorVal, uvBgVal, uvVal, 'UV'));
+  }
+};
+
+const updateGaugeCharts = () => {
+  const aqiColor = aqiValue.value > 150 ? '#f56c6c' : aqiValue.value > 100 ? '#e6a23c' : '#67c23a';
+  const dbColor = dbValue.value > 85 ? '#f56c6c' : dbValue.value > 65 ? '#e6a23c' : '#67c23a';
+  const aqiBg = aqiValue.value > 150 ? '#f56c6c1a' : aqiValue.value > 100 ? '#e6a23c1a' : '#67c23a1a';
+  const dbBg = dbValue.value > 85 ? '#f56c6c1a' : dbValue.value > 65 ? '#e6a23c1a' : '#67c23a1a';
+  const luxVal = slidingAvg(luxHistory);
+  const luxColorVal = getLuxColor(luxVal);
+  const luxBgVal = getLuxBg(luxVal);
+  const uvVal = slidingAvg(uvHistory);
+  const uvColorVal = getUVColor(uvVal);
+  const uvBgVal = getUVBg(uvVal);
+
+  if (aqiGaugeChart) {
+    aqiGaugeChart.setOption(getGaugeOption(300, aqiColor, aqiBg, aqiValue.value, 'AQI'));
+  }
+  if (dbGaugeChart) {
+    dbGaugeChart.setOption(getGaugeOption(120, dbColor, dbBg, dbValue.value, 'dB'));
+  }
+  if (luxGaugeChart) {
+    luxGaugeChart.setOption(getGaugeOption(100000, luxColorVal, luxBgVal, luxVal, 'Lux', formatLux));
+  }
+  if (uvGaugeChart) {
+    uvGaugeChart.setOption(getGaugeOption(12, uvColorVal, uvBgVal, uvVal, 'UV'));
+  }
+};
+
+const updateLuxGauge = () => {
+  const luxVal = slidingAvg(luxHistory);
+  const luxColorVal = getLuxColor(luxVal);
+  const luxBgVal = getLuxBg(luxVal);
+  if (luxGaugeChart) {
+    luxGaugeChart.setOption(getGaugeOption(100000, luxColorVal, luxBgVal, luxVal, 'Lux', formatLux));
+  }
+};
+
+const updateUVGauge = () => {
+  const uvVal = slidingAvg(uvHistory);
+  const uvColorVal = getUVColor(uvVal);
+  const uvBgVal = getUVBg(uvVal);
+  if (uvGaugeChart) {
+    uvGaugeChart.setOption(getGaugeOption(12, uvColorVal, uvBgVal, uvVal, 'UV'));
+  }
+};
+
 // 检查用户是否已认领雏鸟
 const checkAdoptedBird = async () => {
   try {
@@ -600,6 +1044,7 @@ const checkAdoptedBird = async () => {
     if (response.code === 200 && response.data?.adopted_bird && Object.keys(response.data.adopted_bird).length > 0) {
       adoptedBird.value = response.data.adopted_bird;
       // 后端返回的雏鸟信息中包含 device_id 字段
+      birdDeviceId.value = response.data.adopted_bird.device_id;
       console.log('Adopted bird data:', response.data.adopted_bird);
       console.log('Bird device ID:', birdDeviceId.value);
     } else {
@@ -625,10 +1070,39 @@ onMounted(() => {
   startFpsUpdate();
 });
 
+// 监听 adoptedBird 变化，当有设备时启动环境数据采集
+watch(adoptedBird, (newBird) => {
+  if (newBird && birdDeviceId.value) {
+    nextTick(() => {
+      initGaugeCharts();
+      startEnvDataTimer();
+    });
+  } else {
+    stopEnvDataTimer();
+  }
+});
+
+// 监听 birdDeviceId 变化
+watch(birdDeviceId, (newId) => {
+  if (newId) {
+    nextTick(() => {
+      initGaugeCharts();
+      startEnvDataTimer();
+    });
+  } else {
+    stopEnvDataTimer();
+  }
+});
+
 // 页面卸载时清理
 onUnmounted(() => {
   stopRealtimeMonitoring();
   stopFpsUpdate();
+  stopEnvDataTimer();
+  aqiGaugeChart?.dispose();
+  dbGaugeChart?.dispose();
+  luxGaugeChart?.dispose();
+  uvGaugeChart?.dispose();
 });
 </script>
 
@@ -1314,6 +1788,15 @@ onUnmounted(() => {
     font-size: 28px;
   }
   
+  .gauge-chart {
+    width: 110px;
+    height: 110px;
+  }
+  
+  .gauge-label {
+    font-size: 12px;
+  }
+  
   .bird-details-section {
     margin: 0 12px;
     padding: 20px;
@@ -1376,6 +1859,15 @@ onUnmounted(() => {
     font-size: 12px;
   }
   
+  .gauge-chart {
+    width: 100px;
+    height: 100px;
+  }
+  
+  .gauge-label {
+    font-size: 11px;
+  }
+  
   .bird-details-section {
     padding: 16px;
   }
@@ -1394,6 +1886,64 @@ onUnmounted(() => {
     font-size: 14px;
     min-width: 160px;
   }
+}
+
+/* 环境数据环形进度条 */
+.env-gauges-section {
+  margin-top: 20px;
+}
+
+.gauges-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #166534;
+  margin: 0 0 14px 0;
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.gauges-row {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+
+.gauges-row-second {
+  margin-top: 16px;
+}
+
+.gauge-item {
+  flex: 1;
+  max-width: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(139, 173, 66, 0.2);
+  border-radius: 20px;
+  padding: 20px 16px 16px;
+  box-shadow: 0 8px 32px rgba(139, 173, 66, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transition: all 0.3s ease;
+}
+
+.gauge-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(139, 173, 66, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.gauge-chart {
+  width: 130px;
+  height: 130px;
+}
+
+.gauge-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #4a6741;
+  margin-top: 2px;
+  letter-spacing: 0.5px;
 }
 
 /* 监控控制栏 */
