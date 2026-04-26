@@ -10,20 +10,6 @@ WS_Context_t ws_context;
 
 bool Websocket_isConnected = false;
 
-// static void reconnect_timer_callback(void *arg)
-// {
-//     ESP_LOGI(TAG, "Attempting to reconnect WebSocket...");
-//     // 销毁旧客户端（如果还存在）
-//     if (Websocket_client != NULL)
-//     {
-//         esp_websocket_client_stop(Websocket_client);
-//         esp_websocket_client_destroy(Websocket_client);
-//         Websocket_client = NULL;
-//     }
-//     // 重新启动连接
-//     WebsocketStart(websocket_cfg.host, websocket_cfg.path, websocket_cfg.port);
-// }
-
 void Websocket_event_handler_register(void (*ws_disconnected_handler)(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data),
                                        void (* ws_text_handler)(void *handler_args, int len, const char *data_ptr))
 {
@@ -87,11 +73,14 @@ void WebsocketStart(const char *host, const char *path, uint16_t port)
     websocket_cfg.port = port;
     websocket_cfg.crt_bundle_attach = esp_crt_bundle_attach;
     // websocket_cfg.disable_auto_reconnect = true;
-    websocket_cfg.buffer_size = 64 * 1024;
+    websocket_cfg.buffer_size = 2048;          // 收发缓冲区 2KB（收 JSON 指令足够，发送由 transport 层分片）
     websocket_cfg.task_stack = 6144;
-    websocket_cfg.reconnect_timeout_ms = 10000;
-    websocket_cfg.pingpong_timeout_sec = 10;
+    websocket_cfg.reconnect_timeout_ms = 5000; // 断连后 5 秒重连
+    websocket_cfg.network_timeout_ms = 10000;  // 传输层读写超时 10 秒
+    websocket_cfg.ping_interval_sec = 30;      // PING 间隔 30s——推流时数据帧本身就是心跳
+    websocket_cfg.disable_pingpong_discon = true; // 禁止 PONG 超时断连——推流拥塞时 PONG 会延迟，不应因此断连
     websocket_cfg.enable_close_reconnect = true;
+    websocket_cfg.task_prio = 6;               // WS 任务优先级 6
 
     // 初始化客户端
     Websocket_client = esp_websocket_client_init(&websocket_cfg);
@@ -108,9 +97,14 @@ void WebsocketStart(const char *host, const char *path, uint16_t port)
 
 bool WebsocketSendbytes(uint8_t *data, int len)
 {
+    return WebsocketSendbytesTimeout(data, len, pdMS_TO_TICKS(15000));
+}
+
+bool WebsocketSendbytesTimeout(uint8_t *data, int len, TickType_t timeout)
+{
     if (Websocket_isConnected)
     {
-        int num = esp_websocket_client_send_bin(Websocket_client, data, len, portMAX_DELAY);
+        int num = esp_websocket_client_send_bin(Websocket_client, data, len, timeout);
         if (num != -1)
         {
             ESP_LOGD(TAG, "发送 bin: %d bytes", num);
@@ -118,7 +112,7 @@ bool WebsocketSendbytes(uint8_t *data, int len)
         }
         else
         {
-            ESP_LOGE(TAG, "bin 发送失败: 缓冲区满");
+            ESP_LOGD(TAG, "bin 发送超时/失败 (len=%d)", len);
             return false;
         }
     }

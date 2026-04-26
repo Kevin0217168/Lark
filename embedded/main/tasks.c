@@ -4,9 +4,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
+#include "freertos/queue.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_heap_caps.h"
+#include "esp_timer.h"
 
 #include "Wifista.h"
 #include "Camera.h"
@@ -15,6 +17,7 @@
 #include "device_secret.h"
 #include "i2c_recovery.h"
 #include "tasks.h"
+#include "remote_log.h"
 
 static const char *TAG = "task";
 
@@ -28,10 +31,40 @@ extern bool Wifi_isConnected;
 /* ───── 摄像头推流信号量 ───── */
 SemaphoreHandle_t camera_stream_sem = NULL;
 
-void camera_stream_sem_init(void)
+/* ───── OTA 进行中标志 ───── */
+volatile bool ota_in_progress = false;
+
+/* ═══════════════════════════════════════════════════════════════
+ * 零拷贝帧队列流水线
+ * ═══════════════════════════════════════════════════════════════
+ *
+ *  capture_task                queue (depth=1)           send_task
+ *  ────────────                ──────────────            ─────────
+ *  esp_camera_fb_get() ──→ xQueueOverwrite(fb*) ──→ xQueuePeek(fb*)
+ *     (camera 驱动在 PSRAM 管理 3 个 fb)                 ├→ WS send
+ *                                                        └→ esp_camera_fb_return()
+ *
+ *  - Camera fb_count=3: 驱动在 PSRAM 预分配 3 块帧缓冲区
+ *  - CAMERA_GRAB_LATEST: fb_get() 总是返回最新帧
+ *  - 队列深度 1 + overwrite: 如果发送慢于采集，队列中旧 fb
+ *    先被归还相机池再覆盖，始终只发送最新帧，无 memcpy
+ * ═══════════════════════════════════════════════════════════════ */
+
+static QueueHandle_t      frame_queue    = NULL;  /* 队列元素 = camera_fb_t* */
+static SemaphoreHandle_t  send_start_sem = NULL;  /* 采集任务唤醒发送任务 */
+
+void camera_pipeline_init(void)
 {
     camera_stream_sem = xSemaphoreCreateBinary();
     configASSERT(camera_stream_sem);
+
+    send_start_sem = xSemaphoreCreateBinary();
+    configASSERT(send_start_sem);
+
+    frame_queue = xQueueCreate(1, sizeof(camera_fb_t *));
+    configASSERT(frame_queue);
+
+    ESP_LOGI(TAG, "零拷贝帧队列已初始化 (camera fb_count=3, queue depth=1)");
 }
 
 /* ───────────────── 诊断 ───────────────── */
@@ -59,44 +92,164 @@ bool diagnostic(void)
         return false;
     }
     ESP_LOGI(TAG, "摄像头初始化成功");
-
-    ESP_LOGI(TAG, "固件诊断通过");
     return true;
 }
 
-/* ───────────────── 摄像头图像传输 ───────────────── */
+/* ───────────────── 摄像头图像传输（零拷贝队列流水线） ───────────────── */
 
-static void PhotoTransmit(camera_fb_t *fb)
-{
-    WebsocketSendbytes(fb->buf, fb->len);
-}
+/* 推流发送超时（ms）——每个 2KB 分块的 poll_write 等待上限
+ * 必须足够长：10KB 帧在 WiFi+TLS 15~40KB/s 下需要 250ms~700ms 才能完全离开设备。
+ * 若 TCP 缓冲区(32KB)满，排空需 800ms~2s。1500ms 不够，5000ms 足矣。
+ * 超时≠阻塞：TCP 有空间时 poll_write 立即返回，不影响 FPS。 */
+#define STREAM_SEND_TIMEOUT_MS      10000
 
-void camera_transmit_task(void *pvParameter)
+/* 帧间隔下限/上限（ms）——自适应区间 */
+#define STREAM_MIN_INTERVAL_MS      10
+#define STREAM_MAX_INTERVAL_MS      500
+
+/* ─── 采集任务：fb_get → 放入队列（若满则先归还旧帧再覆盖） ─── */
+void camera_capture_task(void *pvParameter)
 {
     (void)pvParameter;
+
     while (1)
     {
-        /* 阻塞等待信号量，直到被唤醒才开始推流，不占用 CPU */
-        ESP_LOGI(TAG, "摄像头待机, 等待推流信号");
+        ESP_LOGI(TAG, "[采集] 待机, 等待推流信号");
         xSemaphoreTake(camera_stream_sem, portMAX_DELAY);
+        ESP_LOGI(TAG, "[采集] 开始采集");
 
-        ESP_LOGI(TAG, "开始图像推流");
-        /* 持续推流，直到状态不再是 DEVICE_ON_STREAM */
+        /* 唤醒发送任务 */
+        xSemaphoreGive(send_start_sem);
+
+        int captured = 0, replaced = 0;
+
         while (device.status == DEVICE_ON_STREAM)
         {
-            CameraTakePhoto(PhotoTransmit);
+            camera_fb_t *fb = esp_camera_fb_get();
+            if (fb == NULL) {
+                ESP_LOGE(TAG, "[采集] 获取帧失败");
+                vTaskDelay(pdMS_TO_TICKS(50));
+                continue;
+            }
+
+            /* 尝试立即放入队列 */
+            if (xQueueSend(frame_queue, &fb, 0) != pdTRUE) {
+                /* 队列满：取出旧帧归还相机池，再放入新帧 */
+                camera_fb_t *old_fb = NULL;
+                xQueueReceive(frame_queue, &old_fb, 0);
+                if (old_fb) {
+                    esp_camera_fb_return(old_fb);
+                }
+                xQueueSend(frame_queue, &fb, 0);
+                replaced++;
+            }
+            captured++;
+
+            /* 让出 CPU 一个 tick，避免饿死低优先级任务 */
+            taskYIELD();
         }
-        /* 状态已切换，回到外层循环重新等待信号量 */
+
+        /* 推流结束：清空队列中残留帧 */
+        camera_fb_t *drain = NULL;
+        while (xQueueReceive(frame_queue, &drain, 0) == pdTRUE) {
+            if (drain) esp_camera_fb_return(drain);
+        }
+
+        ESP_LOGI(TAG, "[采集] 已停止 (采集=%d, 覆盖=%d)", captured, replaced);
     }
 }
 
+/* ─── 发送任务：从队列取帧 → WS 发送 → 归还相机池 ─── */
+void camera_send_task(void *pvParameter)
+{
+    (void)pvParameter;
+
+    while (1)
+    {
+        /* ── 阻塞等待推流开始，不占 CPU ── */
+        ESP_LOGI(TAG, "[发送] 待机, 等待推流信号");
+        xSemaphoreTake(send_start_sem, portMAX_DELAY);
+        ESP_LOGI(TAG, "[发送] 开始发送");
+
+        int total_sent  = 0;
+        int total_drop  = 0;
+        int total_skip  = 0;
+        int interval_ms = STREAM_MIN_INTERVAL_MS;
+
+        /* ── 推流循环：核心逻辑 = 发送 → 按耗时算下次间隔 ── */
+        while (device.status == DEVICE_ON_STREAM)
+        {
+            camera_fb_t *fb = NULL;
+
+            /* 自适应节拍等待 */
+            vTaskDelay(pdMS_TO_TICKS(interval_ms));
+
+            if (xQueueReceive(frame_queue, &fb, pdMS_TO_TICKS(200)) != pdTRUE || fb == NULL)
+                continue;
+
+            if (!WebsocketIsConnected()) {
+                esp_camera_fb_return(fb);
+                total_skip++;
+                interval_ms = STREAM_MIN_INTERVAL_MS;
+                vTaskDelay(pdMS_TO_TICKS(200));
+                continue;
+            }
+
+            /* 零拷贝发送 */
+            size_t len = fb->len;
+            int64_t t0 = esp_timer_get_time();
+            bool ok = WebsocketSendbytesTimeout(fb->buf, len,
+                                                 pdMS_TO_TICKS(STREAM_SEND_TIMEOUT_MS));
+            float send_ms = (esp_timer_get_time() - t0) / 1000.0f;
+            esp_camera_fb_return(fb);
+
+            if (!ok) {
+                total_drop++;
+                interval_ms = STREAM_MAX_INTERVAL_MS;   /* 失败：最大退避 */
+                ESP_LOGW(TAG, "[发送] 超时 %uB %.0fms [drop=%d/%d]",
+                         (unsigned)len, send_ms, total_drop, total_sent + total_drop);
+            } else {
+                total_sent++;
+                ESP_LOGI(TAG, "[发送] %uB %.0fms (%.1f FPS)",
+                         (unsigned)len, send_ms, 1000.0f / send_ms);
+                /*
+                 * 自适应间隔：interval = send_ms × 0.3
+                 *   - 发送快 (50ms)  → 间隔 15ms  → ~15 FPS
+                 *   - 发送慢 (500ms) → 间隔 150ms → ~1.5 FPS
+                 *   - 结果钳制在 [MIN, MAX] 范围内
+                 */
+                interval_ms = (int)(send_ms * 0.3f);
+                if (interval_ms < STREAM_MIN_INTERVAL_MS) interval_ms = STREAM_MIN_INTERVAL_MS;
+                if (interval_ms > STREAM_MAX_INTERVAL_MS) interval_ms = STREAM_MAX_INTERVAL_MS;
+            }
+        }
+
+        /* 推流结束，清空队列残留帧 */
+        camera_fb_t *drain = NULL;
+        while (xQueueReceive(frame_queue, &drain, 0) == pdTRUE) {
+            if (drain) esp_camera_fb_return(drain);
+        }
+        ESP_LOGI(TAG, "[发送] 推流结束 (发送=%d, 丢弃=%d, 跳过=%d)",
+                 total_sent, total_drop, total_skip);
+    }  /* while(1) — 回到外层等待信号量 */
+}
+
 /* ───────────────── 传感器数据采集与上报 ───────────────── */
+
+// 传感器上报重试配置
+#define SENSOR_POST_MAX_RETRY   3       // 每轮最大重试次数
+#define SENSOR_POST_RETRY_MS    3000    // 重试间隔 3 秒（等待其他 TLS 连接释放内部 SRAM）
+#define SENSOR_CONSEC_FAIL_MAX  5       // 连续多轮全失败后重启（即连续5分钟全失败）
 
 void sensor_data_transmit_task(void *pvParameter)
 {
     (void)pvParameter;
     time_t now = 0;
     struct tm timeinfo = {0};
+    int consec_fail_rounds = 0;  // 连续多轮全失败计数
+
+    // 启动后延迟 5 秒，错开 OTA/rlog 首次 TLS 握手的内存高峰
+    vTaskDelay(pdMS_TO_TICKS(5000));
 
     while (1)
     {
@@ -131,11 +284,41 @@ void sensor_data_transmit_task(void *pvParameter)
                          secret, temp_c, hum_pct);
             }
 
-            int ret_code = WifiSecurityRequest("https://lark.mintlab.top", "/api/sensors", 443,
+            // 带重试的 HTTPS POST（TLS 连接持久化，不会重复握手）
+            int ret_code = ESP_FAIL;
+            if (ota_in_progress) {
+                ESP_LOGW(TAG, "OTA 进行中，跳过传感器上报");
+            } else {
+            for (int attempt = 0; attempt < SENSOR_POST_MAX_RETRY; attempt++) {
+                if (ota_in_progress) {
+                    ESP_LOGW(TAG, "OTA 进行中，取消传感器上报重试");
+                    break;
+                }
+                ret_code = WifiSecurityRequest("https://lark.mintlab.top", "/api/sensors", 443,
                                                WS_CLINENT_METHOD_POST, post_data, NULL);
+                if (ret_code == ESP_OK) {
+                    break;
+                }
+                ESP_LOGW(TAG, "传感器上报失败 (%d/%d), %dms 后重试...",
+                         attempt + 1, SENSOR_POST_MAX_RETRY, SENSOR_POST_RETRY_MS);
+                vTaskDelay(pdMS_TO_TICKS(SENSOR_POST_RETRY_MS));
+            }
+            }
             if (ret_code != ESP_OK)
             {
-                ESP_LOGE(TAG, "传感器数据上报失败, err=%d", ret_code);
+                consec_fail_rounds++;
+                ESP_LOGE(TAG, "传感器数据上报失败 (已重试 %d 次), 连续失败轮数=%d/%d",
+                         SENSOR_POST_MAX_RETRY, consec_fail_rounds, SENSOR_CONSEC_FAIL_MAX);
+                if (consec_fail_rounds >= SENSOR_CONSEC_FAIL_MAX) {
+                    ESP_LOGE(TAG, "传感器上报连续 %d 轮失败，可能内存碎片化或网络故障，重启设备...",
+                             consec_fail_rounds);
+                    remote_log_flush_sync();
+                    esp_restart();
+                }
+            }
+            else
+            {
+                consec_fail_rounds = 0;
             }
         }
         else
@@ -178,18 +361,19 @@ static void log_system_status(void)
     int pct_heap     = (total_internal + total_spiram) ?
         (int)(free_heap * 100 / (total_internal + total_spiram)) : 0;
 
-    ESP_LOGI("sys_mon", "[内存] 堆=%u/%uB(%d%%) 最低=%uB | 内部=%u/%uB(%d%%) | PSRAM=%u/%uB(%d%%)",
+    size_t largest_internal = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
+
+    ESP_LOGI("sys_mon", "[内存] 堆=%u/%uB(%d%%) 最低=%uB | 内部=%u/%uB(%d%%) 最大连续=%uB | PSRAM=%u/%uB(%d%%)",
         (unsigned)free_heap, (unsigned)(total_internal + total_spiram), pct_heap, (unsigned)min_free_heap,
-        (unsigned)free_internal, (unsigned)total_internal, pct_internal,
+        (unsigned)free_internal, (unsigned)total_internal, pct_internal, (unsigned)largest_internal,
         (unsigned)free_spiram, (unsigned)total_spiram, pct_spiram);
 
     /* ── 任务列表（逐条打印，每条 < 120 字节，远程日志不会截断） ── */
+    /* 使用静态数组避免反复 malloc/free 加剧内存碎片化 */
+    #define MAX_MONITORED_TASKS 20
+    static TaskStatus_t task_array[MAX_MONITORED_TASKS];
     UBaseType_t task_count = uxTaskGetNumberOfTasks();
-    TaskStatus_t *task_array = malloc(task_count * sizeof(TaskStatus_t));
-    if (task_array == NULL) {
-        ESP_LOGW(TAG, "[系统状态] 任务快照分配失败");
-        return;
-    }
+    if (task_count > MAX_MONITORED_TASKS) task_count = MAX_MONITORED_TASKS;
 
     UBaseType_t got = uxTaskGetSystemState(task_array, task_count, NULL);
 
@@ -208,7 +392,6 @@ static void log_system_status(void)
                  (unsigned)(task_array[i].usStackHighWaterMark * sizeof(StackType_t)));
     }
 
-    free(task_array);
 }
 
 void health_monitor_task(void *pvParameter)
@@ -265,12 +448,25 @@ void health_monitor_task(void *pvParameter)
         if (wifi_disconnect_count >= HEALTH_MAX_DISCONNECT_COUNT) {
             ESP_LOGE(TAG, "[健康监控] WiFi 持续断开超过 %d 秒，重启设备...",
                      HEALTH_MAX_DISCONNECT_COUNT * HEALTH_CHECK_INTERVAL_MS / 1000);
+            remote_log_flush_sync();
             esp_restart();
         }
         if (ws_disconnect_count >= HEALTH_MAX_DISCONNECT_COUNT) {
             ESP_LOGE(TAG, "[健康监控] WebSocket 持续断开超过 %d 秒，重启设备...",
                      HEALTH_MAX_DISCONNECT_COUNT * HEALTH_CHECK_INTERVAL_MS / 1000);
+            remote_log_flush_sync();
             esp_restart();
+        }
+
+        // 内存碎片化监控（仅记录日志，不主动重启）
+        // 实际重启由传感器上报连续失败 / WiFi/WS 断连检测触发
+        {
+            size_t largest_block = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
+            size_t free_internal = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+            if (largest_block < 12288) {
+                ESP_LOGW(TAG, "[健康监控] 内存碎片化: 内部空闲=%u B, 最大连续块=%u B",
+                         (unsigned)free_internal, (unsigned)largest_block);
+            }
         }
     }
 }
