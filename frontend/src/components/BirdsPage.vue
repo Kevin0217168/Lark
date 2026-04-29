@@ -45,7 +45,12 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="device_id" label="设备ID" width="100" />
+        <el-table-column label="鸟笼" width="140">
+          <template #default="scope">
+            <span v-if="scope.row.area">{{ scope.row.area }} #{{ scope.row.number }}</span>
+            <span v-else class="no-cage">未绑定</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="scope">
             <el-button size="small" @click="handleEditBird(scope.row)">编辑</el-button>
@@ -96,9 +101,9 @@
               <span class="info-label">出生日期:</span>
               <span class="info-value">{{ bird.birth_date }}</span>
             </div>
-            <div class="bird-info" v-if="bird.device_id">
-              <span class="info-label">设备ID:</span>
-              <span class="info-value">{{ bird.device_id }}</span>
+            <div class="bird-info" v-if="bird.area">
+              <span class="info-label">鸟笼:</span>
+              <span class="info-value">{{ bird.area }} #{{ bird.number }}</span>
             </div>
           </div>
           <div class="card-footer">
@@ -150,8 +155,15 @@
             style="width: 100%"
           />
         </el-form-item>
-        <el-form-item label="设备ID">
-          <el-input v-model="birdForm.device_id" type="number" placeholder="请输入设备ID" />
+        <el-form-item label="鸟笼">
+          <el-select v-model="birdCageKey" placeholder="选择鸟笼（可选）" clearable style="width: 100%">
+            <el-option
+              v-for="group in birdcageGroups"
+              :key="`${group.area}|${group.number}`"
+              :label="group.label"
+              :value="`${group.area}|${group.number}`"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="状态" prop="status">
           <el-select v-model="birdForm.status" placeholder="请选择状态">
@@ -214,7 +226,8 @@ interface Bird {
   species: string;
   birth_date: string;
   status: string;
-  device_id?: number;
+  area?: string;
+  number?: number;
   description?: string;
   avatar_url?: string;
   created_at?: string;
@@ -245,12 +258,15 @@ const birdForm = reactive({
   species: '',
   birth_date: '',
   status: 'available',
-  device_id: undefined,
+  area: '',
+  number: undefined as number | undefined,
   description: '',
   avatar_url: ''
 });
 const birdFormRef = ref();
 const birdIdToDelete = ref(0);
+const birdCageKey = ref('');
+const birdcageGroups = ref<{ area: string; number: number; label: string; devices: any[] }[]>([]);
 
 // 表单验证规则
 const rules = reactive({
@@ -316,26 +332,47 @@ const fetchBirds = async () => {
   }
 };
 
+// 获取可用鸟笼列表
+const fetchBirdcageGroups = async () => {
+  try {
+    const response = await api.get('/api/devices/birdcage-groups');
+    if (response.code === 200) {
+      birdcageGroups.value = response.data || [];
+    }
+  } catch (error) {
+    console.error('获取鸟笼列表失败:', error);
+  }
+};
+
 // 新增雏鸟
 const handleAddBird = () => {
   dialogTitle.value = '新增雏鸟';
+  birdCageKey.value = '';
   Object.assign(birdForm, {
     id: 0,
     name: '',
     species: '',
     birth_date: '',
     status: 'available',
-    device_id: undefined,
+    area: '',
+    number: undefined,
     description: '',
     avatar_url: ''
   });
+  fetchBirdcageGroups();
   dialogVisible.value = true;
 };
 
 // 编辑雏鸟
 const handleEditBird = (bird: Bird) => {
   dialogTitle.value = '编辑雏鸟';
-  Object.assign(birdForm, bird);
+  Object.assign(birdForm, {
+    ...bird,
+    area: bird.area || '',
+    number: bird.number ?? undefined,
+  });
+  birdCageKey.value = bird.area ? `${bird.area}|${bird.number}` : '';
+  fetchBirdcageGroups();
   dialogVisible.value = true;
 };
 
@@ -379,13 +416,24 @@ const handleSaveBird = async () => {
   await birdFormRef.value.validate(async (valid: boolean) => {
     if (valid) {
       try {
+        // 从鸟笼选择器中解析 area/number
+        const payload: any = { ...birdForm };
+        delete (payload as any).id;
+        
+        if (birdCageKey.value) {
+          const [area, numStr] = birdCageKey.value.split('|');
+          payload.area = area;
+          payload.number = parseInt(numStr || '0', 10);
+        } else {
+          payload.area = '';
+          payload.number = null;
+        }
+
         let response;
         if (birdForm.id) {
-          // 编辑
-          response = await api.put(`/api/birds/${birdForm.id}`, birdForm);
+          response = await api.put(`/api/birds/${birdForm.id}`, payload);
         } else {
-          // 新增
-          response = await api.post('/api/birds', birdForm);
+          response = await api.post('/api/birds', payload);
         }
         
         if (response.code === 200) {
@@ -393,16 +441,12 @@ const handleSaveBird = async () => {
           dialogVisible.value = false;
           fetchBirds();
         } else {
-          // 显示后端返回的错误信息
           ElMessage.error(response.msg || '操作失败');
         }
       } catch (error: any) {
-        // 处理网络错误或其他异常
         if (error.response) {
-          // 服务器返回了错误状态码
           ElMessage.error(error.response.data?.msg || '操作失败');
         } else if (error.message) {
-          // 网络错误等
           ElMessage.error(error.message);
         } else {
           ElMessage.error('操作失败');
@@ -1099,5 +1143,9 @@ onMounted(() => {
   .mobile-empty {
     display: none;
   }
+}
+.no-cage {
+  color: #c0c4cc;
+  font-style: italic;
 }
 </style>

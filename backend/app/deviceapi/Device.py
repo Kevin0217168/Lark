@@ -24,9 +24,10 @@ router = APIRouter(prefix="/devices", tags=["Devices"])
 esp32IdDict = {}
 
 # ──────────────────── 设备指令常量 ────────────────────
-CMD_RESTART = {"code": 1, "item": "device", "key": "restart", "values": ""}
-CMD_OTA     = {"code": 1, "item": "device", "key": "ota", "values": ""}
-CMD_VERSION = {"code": 0, "item": "device", "key": "version", "values": ""}
+CMD_RESTART  = {"code": 1, "item": "device", "key": "restart", "values": ""}
+CMD_OTA      = {"code": 1, "item": "device", "key": "ota", "values": ""}
+CMD_VERSION  = {"code": 0, "item": "device", "key": "version", "values": ""}
+CMD_FEEDING  = {"code": 1, "item": "servo", "key": "feeding", "values": ""}
 
 class Esp32:
     def __init__(self, device:Db.M_Devices):
@@ -146,7 +147,7 @@ async def register_device(
     """
     # 注册新设备（设备密钥唯一）
     
-    区域+编号不可出现重复
+    同一个鸟笼（区域+编号）中，每种设备类型（ESP32-CAM / ESP32-C3）最多只能存在一台。
     
     ## 权限要求
     仅 root 用户可操作
@@ -160,16 +161,26 @@ async def register_device(
             ).model_dump(),
         )
     
-    # 检查密钥和区域+编号
+    # 检查密钥唯一性
     s = Db.GetDevices(db, secret=body.secret)
-    an = Db.GetDevices(db, area=body.area, number=body.number)
-    if s or an:
+    if s:
         return JSONResponse(
             status_code=400,
             content=CommonOut(
-                code=400, msg="Device already exist.", data=None
+                code=400, msg="Device secret already exist.", data=None
             ).model_dump(),
         )
+    
+    # 检查鸟笼约束：同一区域+编号下，每种设备类型最多一台
+    constraint_err = Db.ValidateBirdcageConstraint(
+        db, body.area, body.number, body.device_type
+    )
+    if constraint_err:
+        return JSONResponse(
+            status_code=400,
+            content=CommonOut(code=400, msg=constraint_err, data=None).model_dump(),
+        )
+    
     new_device = Db.RegisterDevice(db, **body.model_dump(exclude_unset=True))
     return CommonOut(data=new_device)
 
@@ -205,6 +216,29 @@ async def update_device(
                 code=403, msg="Permission denied.", data=None
             ).model_dump(),
         )
+    
+    # 检查设备是否存在
+    existing = db.query(Db.M_Devices).filter(Db.M_Devices.id == id).first()
+    if not existing:
+        return JSONResponse(
+            status_code=404,
+            content=CommonOut(code=404, msg="Device not found", data=None).model_dump(),
+        )
+    
+    # 如果更新了 area/number/device_type，检查鸟笼约束
+    new_area = body.area if body.area is not None else existing.area
+    new_number = body.number if body.number is not None else existing.number
+    new_type = body.device_type if body.device_type is not None else existing.device_type
+    
+    if (body.area is not None or body.number is not None or body.device_type is not None):
+        constraint_err = Db.ValidateBirdcageConstraint(
+            db, new_area, new_number, new_type, exclude_device_id=id
+        )
+        if constraint_err:
+            return JSONResponse(
+                status_code=400,
+                content=CommonOut(code=400, msg=constraint_err, data=None).model_dump(),
+            )
     
     updated = Db.UpdateDevice(db, id=id, **body.model_dump(exclude_unset=True))
     if not updated:
@@ -243,6 +277,19 @@ async def delete_device(
             content=CommonOut(code=404, msg="Device not found", data=None).model_dump(),
         )
     return CommonOut(data=None)
+
+
+@router.get(
+    "/birdcage-groups",
+    response_model=CommonOut[List[dict]],
+    summary="获取鸟笼设备分组",
+)
+async def get_birdcage_groups(
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
+    db: Db.Session = Depends(Db.GetDb("GetBirdcageGroups")),
+):
+    groups = Db.GetBirdcageGroups(db)
+    return CommonOut(data=groups)
 
 
 # ──────────────────── 设备 WebSocket 指令工具 ────────────────────

@@ -1,9 +1,11 @@
 from pydantic import BaseModel
 from sqlalchemy import Column, Integer, String, Boolean
-from typing import Optional, Literal, List
+from typing import Optional, Literal, List, Dict
 from sqlalchemy.orm import sessionmaker, Session, declarative_base
 
 DeviceBase = declarative_base()
+
+BIRDCAGE_DEVICE_TYPES = {"ESP32-CAM", "ESP32-C3"}
 
 
 class M_Devices(DeviceBase):
@@ -162,3 +164,52 @@ def DeleteDevice(db: Session, id: int) -> Optional[int]:
     db.delete(device)
     db.commit()
     return 1
+
+
+def GetDevicesByAreaNumber(db: Session, area: str, number: int) -> List[M_Devices]:
+    return db.query(M_Devices).filter(
+        M_Devices.area == area,
+        M_Devices.number == number,
+    ).all()
+
+
+def GetBirdcageGroups(db: Session) -> List[Dict]:
+    rows = db.query(M_Devices.area, M_Devices.number).distinct().order_by(
+        M_Devices.area, M_Devices.number
+    ).all()
+    groups = []
+    for area, number in rows:
+        devices = GetDevicesByAreaNumber(db, area, number)
+        cam = next((d for d in devices if d.device_type == "ESP32-CAM"), None)
+        c3 = next((d for d in devices if d.device_type == "ESP32-C3"), None)
+        groups.append({
+            "area": area,
+            "number": number,
+            "label": f"{area} #{number}",
+            "devices": [DeviceOut.from_orm(d) for d in devices],
+            "cam_device": DeviceOut.from_orm(cam) if cam else None,
+            "c3_device": DeviceOut.from_orm(c3) if c3 else None,
+        })
+    return groups
+
+
+def ValidateBirdcageConstraint(
+    db: Session,
+    area: str,
+    number: int,
+    device_type: Optional[str],
+    exclude_device_id: Optional[int] = None,
+) -> Optional[str]:
+    if device_type not in BIRDCAGE_DEVICE_TYPES:
+        return None
+
+    existing = GetDevicesByAreaNumber(db, area, number)
+    same_type = [
+        d for d in existing
+        if d.device_type == device_type and (exclude_device_id is None or d.id != exclude_device_id)
+    ]
+
+    if len(same_type) > 0:
+        return f"鸟笼 {area} #{number} 中已存在 {device_type} 设备"
+
+    return None

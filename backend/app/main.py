@@ -16,6 +16,7 @@ from sensorapi import SensorUpload
 from invitationapi import router as invitation_router
 from firmwareapi import Firmware
 from logapi import DeviceLog
+from feedingapi import Feeding
 
 import os
 from Logset import async_log, logger, request_logger, log_executor
@@ -99,6 +100,7 @@ app.include_router(SensorUpload.router)
 app.include_router(invitation_router)
 app.include_router(Firmware.router)
 app.include_router(DeviceLog.router)
+app.include_router(Feeding.router)
 
 # 挂载静态文件
 from fastapi.staticfiles import StaticFiles

@@ -59,13 +59,6 @@
           </el-select>
         </div>
         <div class="search-row">
-          <el-input 
-            v-model="searchParams.device_id" 
-            placeholder="设备ID"
-            type="number"
-            class="modern-input"
-            size="large"
-          />
           <el-button 
             type="primary" 
             @click="searchBirds" 
@@ -111,9 +104,9 @@
               <el-icon class="meta-icon"><Calendar /></el-icon>
               {{ bird.birth_date }}
             </span>
-            <span class="meta-item" v-if="bird.device_id">
+            <span class="meta-item" v-if="bird.area">
               <el-icon class="meta-icon"><Monitor /></el-icon>
-              设备 {{ bird.device_id }}
+              {{ bird.area }} #{{ bird.number }}
             </span>
           </div>
           <p class="bird-description" v-if="bird.description">
@@ -169,8 +162,7 @@ const router = useRouter();
 const searchParams = ref({
   name: '',
   species: '',
-  status: '',
-  device_id: ''
+  status: ''
 });
 
 // 雏鸟列表
@@ -205,10 +197,6 @@ const searchBirds = async () => {
     if (searchParams.value.status) {
       params.status = searchParams.value.status;
     }
-    
-    if (searchParams.value.device_id) {
-      params.device_id = parseInt(searchParams.value.device_id, 10);
-    }
 
     // 调用后端 API
     const response = await api.get('/api/birds', params);
@@ -230,8 +218,7 @@ const resetSearch = () => {
   searchParams.value = {
     name: '',
     species: '',
-    status: '',
-    device_id: ''
+    status: ''
   };
   searchBirds();
 };
