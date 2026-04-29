@@ -18,22 +18,22 @@ export default defineConfig({
   server: {
     proxy: {
       '/fastapi': {
-        //target: 'http://localhost:8080',
-        target: 'http://192.168.216.109:8080',
+        target: 'http://localhost:8080',
+        //target: 'http://192.168.216.109:8080',
         changeOrigin: true,
         rewrite: path => path.replace(/^\/fastapi/, '')
       },
       '/api': {
-        //target: 'http://localhost:8080',
-        target: 'https://lark.mintlab.top',
+        target: 'http://localhost:8080',
+        //target: 'https://lark.mintlab.top',
         changeOrigin: true,
         secure: false,
         rewrite: path => path,
         ws: true // 支持WebSocket代理
       },
       '/stream': {
-        //target: 'http://localhost:8080',
-        target: 'https://lark.mintlab.top',
+        target: 'http://localhost:8080',
+        //target: 'https://lark.mintlab.top',
         changeOrigin: true,
         secure: false,
         rewrite: path => path,

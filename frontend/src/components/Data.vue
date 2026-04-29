@@ -22,65 +22,69 @@
         <div class="data-left">
           <!-- 设备选择 -->
           <div class="device-selector">
-            <h3>设备选择</h3>
-            <el-select v-model="selectedDeviceId" placeholder="选择设备" @change="handleDeviceChange" style="width: 100%;">
-              <el-option 
-                v-for="device in devices" 
-                :key="device.id" 
-                :label="device.name" 
-                :value="device.id" 
+            <h3>鸟笼选择</h3>
+            <el-select v-model="selectedBirdcageKey" placeholder="选择鸟笼" @change="handleBirdcageChange" style="width: 100%;">
+              <el-option
+                v-for="group in birdcageGroups"
+                :key="`${group.area}-${group.number}`"
+                :label="group.label"
+                :value="`${group.area}|${group.number}`"
               />
             </el-select>
           </div>
           
-          <!-- 设备数据 -->
+          <!-- 鸟笼设备信息 -->
           <div class="device-data" v-if="selectedDevice">
-            <h3>设备数据</h3>
-            <div class="data-card-content compact">
-              <div class="data-row">
-                <div class="data-cell">
-                  <el-icon><Monitor /></el-icon>
-                  <span class="cell-label">名称</span>
-                  <span class="cell-value">{{ selectedDevice.name }}</span>
-                </div>
-                <div class="data-cell">
-                  <el-icon><CircleCheck v-if="selectedDevice.isOnline" /><CircleClose v-else /></el-icon>
-                  <span class="cell-label">状态</span>
-                  <el-tag :type="selectedDevice.isOnline ? 'success' : 'danger'" size="small">
-                    {{ selectedDevice.isOnline ? '在线' : '离线' }}
-                  </el-tag>
+            <h3>鸟笼设备</h3>
+            <div class="birdcage-device-list">
+              <!-- CAM 设备行 -->
+              <div class="device-info-row">
+                <span class="device-type-tag cam-tag">CAM</span>
+                <span class="device-info-item">ID: {{ selectedDevice.id }}</span>
+                <span class="device-info-sep">|</span>
+                <span class="device-info-item name">{{ selectedDevice.name }}</span>
+                <span class="device-info-sep">|</span>
+                <span class="device-info-item type">ESP32-CAM</span>
+                <el-tag :type="selectedDevice.isOnline ? 'success' : 'danger'" size="small">
+                  {{ selectedDevice.isOnline ? '在线' : '离线' }}
+                </el-tag>
+              </div>
+              <!-- C3 设备行 -->
+              <div class="device-info-row" v-if="selectedC3Device">
+                <span class="device-type-tag c3-tag">C3</span>
+                <span class="device-info-item">ID: {{ selectedC3Device.id }}</span>
+                <span class="device-info-sep">|</span>
+                <span class="device-info-item name">{{ selectedC3Device.name }}</span>
+                <span class="device-info-sep">|</span>
+                <span class="device-info-item type">ESP32-C3</span>
+                <el-tag :type="selectedC3Device.isOnline ? 'success' : 'danger'" size="small">
+                  {{ selectedC3Device.isOnline ? '在线' : '离线' }}
+                </el-tag>
+              </div>
+            </div>
+            
+            <!-- 温度湿度数据卡片 -->
+            <div class="temp-humid-cards">
+              <div class="th-card temp-card">
+                <div class="th-card-icon">🌡️</div>
+                <div class="th-card-body">
+                  <span class="th-card-label">温度</span>
+                  <span class="th-card-value">{{ selectedDevice.temperature ?? '--' }}<small>°C</small></span>
                 </div>
               </div>
-              <div class="data-row">
-                <div class="data-cell">
-                  <el-icon><Odometer /></el-icon>
-                  <span class="cell-label">温度</span>
-                  <span class="cell-value highlight">{{ selectedDevice.temperature }}°C</span>
-                </div>
-                <div class="data-cell">
-                  <el-icon><Sort /></el-icon>
-                  <span class="cell-label">湿度</span>
-                  <span class="cell-value highlight">{{ selectedDevice.humidity }}%</span>
-                </div>
-                <div class="data-cell">
-                  <el-icon><Monitor /></el-icon>
-                  <span class="cell-label">类型</span>
-                  <span class="cell-value">{{ selectedDevice.device_type || '未设置' }}</span>
-                </div>
-              </div>
-              <div class="data-row full">
-                <div class="data-cell">
-                  <el-icon><Clock /></el-icon>
-                  <span class="cell-label">创建时间</span>
-                  <span class="cell-value time">{{ selectedDevice.createTime }}</span>
+              <div class="th-card humid-card">
+                <div class="th-card-icon">💧</div>
+                <div class="th-card-body">
+                  <span class="th-card-label">湿度</span>
+                  <span class="th-card-value">{{ selectedDevice.humidity ?? '--' }}<small>%</small></span>
                 </div>
               </div>
             </div>
           </div>
           
           <!-- 环境数据环形进度条 -->
-          <div class="env-gauges" v-if="selectedDevice">
-            <h3>环境数据</h3>
+          <div class="env-gauges" v-if="selectedC3Device">
+            <h3>环境数据 (ESP32-C3)</h3>
             <div class="gauges-row">
               <div class="gauge-item">
                 <div ref="aqiGaugeRef" class="gauge-chart"></div>
@@ -107,13 +111,13 @@
         <!-- 右侧视频流区域 -->
         <div class="data-right">
           <div class="video-header">
-            <h3>实时监控</h3>
+            <h3>实时监控 (ESP32-CAM)</h3>
             <div class="video-controls">
               <el-button 
                 type="warning"
                 size="small"
                 @click="reconnectWebSocket"
-                :disabled="!selectedDeviceId || isWebSocketConnected"
+                :disabled="!camDeviceId || isWebSocketConnected"
               >
                 <el-icon><Refresh /></el-icon>
                 手动重连
@@ -181,7 +185,7 @@
               <el-empty description="未开始实时监控" />
             </div>
             <div class="video-placeholder" v-else>
-              <el-empty description="请选择设备" />
+              <el-empty description="请选择鸟笼" />
             </div>
           </div>
         </div>
@@ -194,12 +198,12 @@
             <span>数据分析</span>
           </div>
           <div class="card-actions">
-            <el-select v-model="selectedDeviceId" @change="handleDeviceChange" class="device-select">
-                <el-option
-                v-for="device in devices"
-                :key="device.id"
-                :label="device.name"
-                :value="device.id"
+            <el-select v-model="analysisBirdcageKey" @change="handleAnalysisBirdcageChange" class="device-select" placeholder="选择鸟笼">
+              <el-option
+                v-for="group in birdcageGroups"
+                :key="`${group.area}-${group.number}`"
+                :label="group.label"
+                :value="`${group.area}|${group.number}`"
               />
             </el-select>
           </div>
@@ -221,20 +225,36 @@
         </div>
 
         <div class="analysis-content">
-          <!-- 所有设备平均值图表 -->
-          <div class="chart-container average-chart">
-            <h3>所有设备平均值 <span class="time-range">({{ timeRangeText }})</span></h3>
-            <div ref="averageChartRef" class="chart"></div>
-          </div>
+          <!-- 温度数据 -->
           <div class="chart-container">
             <h3>温度数据 <span class="time-range">({{ timeRangeText }})</span></h3>
             <div ref="temperatureChartRef" class="chart"></div>
           </div>
+          <!-- 湿度数据 -->
           <div class="chart-container">
             <h3>湿度数据 <span class="time-range">({{ timeRangeText }})</span></h3>
             <div ref="humidityChartRef" class="chart"></div>
           </div>
-
+          <!-- 空气质量数据 -->
+          <div class="chart-container">
+            <h3>空气质量 (AQI) <span class="time-range">({{ timeRangeText }})</span></h3>
+            <div ref="analysisAqiChartRef" class="chart"></div>
+          </div>
+          <!-- 声音分贝数据 -->
+          <div class="chart-container">
+            <h3>声音分贝 <span class="time-range">({{ timeRangeText }})</span></h3>
+            <div ref="analysisSoundChartRef" class="chart"></div>
+          </div>
+          <!-- 光照强度数据 -->
+          <div class="chart-container">
+            <h3>光照强度 <span class="time-range">({{ timeRangeText }})</span></h3>
+            <div ref="analysisLuxChartRef" class="chart"></div>
+          </div>
+          <!-- 紫外线指数数据 -->
+          <div class="chart-container">
+            <h3>紫外线指数 <span class="time-range">({{ timeRangeText }})</span></h3>
+            <div ref="analysisUvChartRef" class="chart"></div>
+          </div>
         </div>
       </div>
       
@@ -250,12 +270,18 @@
             <div class="device-selector">
               <h3>设备选择</h3>
               <el-select v-model="historyDeviceId" @change="handleHistoryDeviceChange" class="device-select">
-                <el-option
-                  v-for="device in devices"
-                  :key="device.id"
-                  :label="device.name"
-                  :value="device.id"
-                />
+                <el-option-group
+                  v-for="group in birdcageGroups"
+                  :key="`${group.area}-${group.number}`"
+                  :label="group.label"
+                >
+                  <el-option
+                    v-for="device in group.devices"
+                    :key="device.id"
+                    :label="`${device.name} (${device.device_type || '未知'})`"
+                    :value="device.id"
+                  />
+                </el-option-group>
               </el-select>
             </div>
             <div class="device-info">
@@ -321,12 +347,12 @@
     <div v-if="activeTab === 'realtime'" class="realtime-container">
       <!-- 设备选择 -->
       <div class="device-selector">
-        <el-select v-model="selectedDeviceId" placeholder="选择设备" @change="handleDeviceChange" style="width: 100%;">
-          <el-option 
-            v-for="device in devices" 
-            :key="device.id" 
-            :label="device.name" 
-            :value="device.id" 
+        <el-select v-model="selectedBirdcageKey" placeholder="选择鸟笼" @change="handleBirdcageChange" style="width: 100%;">
+          <el-option
+            v-for="group in birdcageGroups"
+            :key="`${group.area}-${group.number}`"
+            :label="group.label"
+            :value="`${group.area}|${group.number}`"
           />
         </el-select>
       </div>
@@ -341,36 +367,48 @@
         style="margin-bottom: 16px;"
       />
       
-      <!-- 设备数据卡片 -->
-      <div v-if="selectedDevice" class="device-data-card">
+      <!-- 鸟笼设备信息卡片 -->
+      <div v-if="selectedDevice || selectedC3Device" class="device-data-card">
         <div class="data-header">
-          <h3>{{ selectedDevice.name }}</h3>
+          <h3>鸟笼设备</h3>
+        </div>
+        <!-- CAM 设备行 -->
+        <div class="mobile-device-row" v-if="selectedDevice">
+          <span class="device-type-tag cam-tag">CAM</span>
+          <span class="mobile-device-info">ID: {{ selectedDevice.id }} | {{ selectedDevice.name }} | ESP32-CAM</span>
           <el-tag :type="selectedDevice.isOnline ? 'success' : 'danger'" size="small">
             {{ selectedDevice.isOnline ? '在线' : '离线' }}
           </el-tag>
         </div>
-        <div class="data-grid">
-          <div class="data-item">
-            <div class="data-label">温度</div>
-            <div class="data-value">{{ selectedDevice.temperature }}°C</div>
+        <!-- C3 设备行 -->
+        <div class="mobile-device-row" v-if="selectedC3Device">
+          <span class="device-type-tag c3-tag">C3</span>
+          <span class="mobile-device-info">ID: {{ selectedC3Device.id }} | {{ selectedC3Device.name }} | ESP32-C3</span>
+          <el-tag :type="selectedC3Device.isOnline ? 'success' : 'danger'" size="small">
+            {{ selectedC3Device.isOnline ? '在线' : '离线' }}
+          </el-tag>
+        </div>
+        <!-- 温度湿度 -->
+        <div class="mobile-th-row" v-if="selectedDevice">
+          <div class="mobile-th-item temp">
+            <span class="mobile-th-icon">🌡️</span>
+            <div class="mobile-th-body">
+              <span class="mobile-th-label">温度</span>
+              <span class="mobile-th-value">{{ selectedDevice.temperature ?? '--' }}°C</span>
+            </div>
           </div>
-          <div class="data-item">
-            <div class="data-label">湿度</div>
-            <div class="data-value">{{ selectedDevice.humidity }}%</div>
-          </div>
-          <div class="data-item full">
-            <div class="data-label">类型</div>
-            <div class="data-value">{{ selectedDevice.device_type || '未设置' }}</div>
-          </div>
-          <div class="data-item full">
-            <div class="data-label">创建时间</div>
-            <div class="data-value small">{{ selectedDevice.createTime }}</div>
+          <div class="mobile-th-item humid">
+            <span class="mobile-th-icon">💧</span>
+            <div class="mobile-th-body">
+              <span class="mobile-th-label">湿度</span>
+              <span class="mobile-th-value">{{ selectedDevice.humidity ?? '--' }}%</span>
+            </div>
           </div>
         </div>
       </div>
       
       <!-- 环境数据环形进度条（移动端） -->
-      <div v-if="selectedDevice" class="mobile-gauges">
+      <div v-if="selectedC3Device" class="mobile-gauges">
         <div class="mobile-gauges-row">
           <div class="mobile-gauge-item">
              <div ref="aqiGaugeRefMobile" class="mobile-gauge-chart"></div>
@@ -397,13 +435,13 @@
       <div v-if="selectedDevice" class="video-section">
         <div class="video-header">
           <div class="video-header-top">
-            <h3>实时监控</h3>
+            <h3>实时监控 (ESP32-CAM)</h3>
             <div class="video-controls">
               <el-button 
                 type="warning"
                 size="small"
                 @click="reconnectWebSocket"
-                :disabled="!selectedDeviceId || isWebSocketConnected"
+                :disabled="!camDeviceId || isWebSocketConnected"
               >
                 <el-icon><Refresh /></el-icon>
                 重连
@@ -490,12 +528,12 @@
     <!-- 分析 -->
     <div v-else-if="activeTab === 'analysis'" class="analysis-container">
       <div class="device-selector">
-        <el-select v-model="selectedDeviceId" placeholder="选择设备" @change="handleDeviceChange" style="width: 100%;">
+        <el-select v-model="analysisBirdcageKey" placeholder="选择鸟笼" @change="handleAnalysisBirdcageChange" style="width: 100%;">
           <el-option
-            v-for="device in devices"
-            :key="device.id"
-            :label="device.name"
-            :value="device.id"
+            v-for="group in birdcageGroups"
+            :key="`${group.area}-${group.number}`"
+            :label="group.label"
+            :value="`${group.area}|${group.number}`"
           />
         </el-select>
       </div>
@@ -515,24 +553,14 @@
             </span>
           </div>
           <div class="slider-track">
-            <div
-              class="slider-progress"
-              :style="{ width: getTimeRangeProgress() + '%' }"
-            ></div>
-            <div
-              class="slider-thumb"
-              :style="{ left: getTimeRangeProgress() + '%' }"
-            ></div>
+            <div class="slider-progress" :style="{ width: getTimeRangeProgress() + '%' }"></div>
+            <div class="slider-thumb" :style="{ left: getTimeRangeProgress() + '%' }"></div>
           </div>
         </div>
       </div>
 
       <!-- 图表 -->
       <div class="chart-section">
-        <div class="chart-card">
-          <h3>所有设备平均值 <span class="time-range">({{ timeRangeText }})</span></h3>
-          <div ref="averageChartRef" class="chart"></div>
-        </div>
         <div class="chart-card">
           <h3>温度数据 <span class="time-range">({{ timeRangeText }})</span></h3>
           <div ref="temperatureChartRef" class="chart"></div>
@@ -541,7 +569,22 @@
           <h3>湿度数据 <span class="time-range">({{ timeRangeText }})</span></h3>
           <div ref="humidityChartRef" class="chart"></div>
         </div>
-
+        <div class="chart-card">
+          <h3>空气质量 (AQI) <span class="time-range">({{ timeRangeText }})</span></h3>
+          <div ref="analysisAqiChartRef" class="chart"></div>
+        </div>
+        <div class="chart-card">
+          <h3>声音分贝 <span class="time-range">({{ timeRangeText }})</span></h3>
+          <div ref="analysisSoundChartRef" class="chart"></div>
+        </div>
+        <div class="chart-card">
+          <h3>光照强度 <span class="time-range">({{ timeRangeText }})</span></h3>
+          <div ref="analysisLuxChartRef" class="chart"></div>
+        </div>
+        <div class="chart-card">
+          <h3>紫外线指数 <span class="time-range">({{ timeRangeText }})</span></h3>
+          <div ref="analysisUvChartRef" class="chart"></div>
+        </div>
       </div>
     </div>
     
@@ -549,12 +592,18 @@
     <div v-else-if="activeTab === 'history'" class="history-container">
       <div class="device-selector">
         <el-select v-model="historyDeviceId" placeholder="选择设备" @change="handleHistoryDeviceChange" style="width: 100%;">
-          <el-option 
-            v-for="device in devices" 
-            :key="device.id" 
-            :label="device.name" 
-            :value="device.id" 
-          />
+          <el-option-group
+            v-for="group in birdcageGroups"
+            :key="`${group.area}-${group.number}`"
+            :label="group.label"
+          >
+            <el-option
+              v-for="device in group.devices"
+              :key="device.id"
+              :label="`${device.name} (${device.device_type || '未知'})`"
+              :value="device.id"
+            />
+          </el-option-group>
         </el-select>
       </div>
       
@@ -620,7 +669,7 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useDeviceStore } from '../stores/deviceStore';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Warning, Switch, Sort, Monitor, CircleCheck, CircleClose, Odometer, Clock, Refresh } from '@element-plus/icons-vue';
+import { Warning, Switch, Sort, Refresh } from '@element-plus/icons-vue';
 import { api } from '../utils/api';
 import * as echarts from 'echarts';
 import { shouldUseMobilePage } from '../utils/mobileAdapter';
@@ -636,6 +685,31 @@ const { getDevices, getDeviceHistoryData, getDeviceAverageData, fetchDevices, up
 
 // 直接获取设备数据
 const devices = getDevices();
+
+const birdcageGroups = computed(() => {
+  const allDevices = getDevices() as any[];
+  const groupMap = new Map<string, { area: string; number: number; label: string; devices: any[] }>();
+  for (const d of allDevices) {
+    const key = `${d.area || '未知'}-${d.number ?? '?'}`;
+    if (!groupMap.has(key)) {
+      groupMap.set(key, { area: d.area || '未知', number: d.number ?? 0, label: `${d.area || '未知'} #${d.number ?? '?'}`, devices: [] });
+    }
+    groupMap.get(key)!.devices.push(d);
+  }
+  return Array.from(groupMap.values()).sort((a, b) => a.label.localeCompare(b.label));
+});
+
+const birdcagePairedDevice = computed(() => {
+  if (!selectedDeviceId.value) return null;
+  const allDevices = getDevices() as any[];
+  const current = allDevices.find((d: any) => d.id === selectedDeviceId.value);
+  if (!current || !current.area) return null;
+  return allDevices.find((d: any) =>
+    d.id !== current.id &&
+    d.area === current.area &&
+    d.number === current.number
+  ) || null;
+});
 
 // 接收父组件传递的activeTab
 const props = withDefaults(defineProps<{
@@ -654,14 +728,67 @@ const checkMobileStatus = () => {
 };
 
 const selectedDeviceId = ref<number | null>(null);
+const selectedBirdcageKey = ref<string>('');
+const analysisBirdcageKey = ref<string>('');
 const showAllOfflineAlert = ref(false);
+
+const analysisCamDeviceId = computed(() => {
+  if (!analysisBirdcageKey.value) return null;
+  const allDevices = getDevices() as any[];
+  const [area, numStr] = analysisBirdcageKey.value.split('|');
+  const cam = allDevices.find((d: any) =>
+    d.area === area && d.number === Number(numStr) && d.device_type === 'ESP32-CAM'
+  );
+  return cam?.id ?? null;
+});
+
+const analysisC3DeviceId = computed(() => {
+  if (!analysisBirdcageKey.value) return null;
+  const allDevices = getDevices() as any[];
+  const [area, numStr] = analysisBirdcageKey.value.split('|');
+  const c3 = allDevices.find((d: any) =>
+    d.area === area && d.number === Number(numStr) && d.device_type === 'ESP32-C3'
+  );
+  return c3?.id ?? null;
+});
+
+const camDeviceId = computed(() => {
+  if (!selectedBirdcageKey.value) return null;
+  const allDevices = getDevices() as any[];
+  const [area, numStr] = selectedBirdcageKey.value.split('|');
+  const cam = allDevices.find((d: any) =>
+    d.area === area && d.number === Number(numStr) && d.device_type === 'ESP32-CAM'
+  );
+  return cam?.id ?? null;
+});
+
+const c3DeviceId = computed(() => {
+  if (!selectedBirdcageKey.value) return null;
+  const allDevices = getDevices() as any[];
+  const [area, numStr] = selectedBirdcageKey.value.split('|');
+  const c3 = allDevices.find((d: any) =>
+    d.area === area && d.number === Number(numStr) && d.device_type === 'ESP32-C3'
+  );
+  return c3?.id ?? null;
+});
+
+watch(camDeviceId, (newId) => {
+  if (activeTab.value === 'realtime') {
+    selectedDeviceId.value = newId;
+  }
+});
 
 const selectedDevice = computed(() => {
   if (!selectedDeviceId.value) return null;
-  // 每次计算时重新获取最新的设备列表
   const latestDevices = getDevices();
   const device = latestDevices.find((device: any) => device.id === selectedDeviceId.value) || null;
   return device;
+});
+
+const selectedC3Device = computed(() => {
+  if (!c3DeviceId.value) return null;
+  const latestDevices = getDevices() as any[];
+  return latestDevices.find((d: any) => d.id === c3DeviceId.value) || null;
 });
 
 // 计算WebSocket是否已连接
@@ -686,10 +813,10 @@ const fetchRealtimeData = async () => {
 };
 
 const fetchLuxData = async () => {
-  if (!selectedDeviceId.value) return;
+  if (!c3DeviceId.value) return;
   try {
     const response = await api.get('/api/sensor-upload', {
-      device_id: selectedDeviceId.value,
+      device_id: c3DeviceId.value,
       sensor_type: 'veml7700',
       limit: 1,
     });
@@ -707,10 +834,10 @@ const fetchLuxData = async () => {
 };
 
 const fetchUVData = async () => {
-  if (!selectedDeviceId.value) return;
+  if (!c3DeviceId.value) return;
   try {
     const response = await api.get('/api/sensor-upload', {
-      device_id: selectedDeviceId.value,
+      device_id: c3DeviceId.value,
       sensor_type: 'uv_meter',
       limit: 1,
     });
@@ -760,17 +887,14 @@ const getOnlineDevices = () => {
   return onlineDevices;
 };
 
-// 自动选择第一个在线设备
+// 自动选择第一个有CAM设备的鸟笼
 const autoSelectFirstOnlineDevice = async () => {
-  const onlineDevices = getOnlineDevices();
-
-  if (onlineDevices.length > 0 && onlineDevices[0]) {
-    // 有在线设备，选择第一个
-    const firstDevice = onlineDevices[0];
-    selectedDeviceId.value = firstDevice.id;
+  const onlineCageKey = birdcageGroups.value.find(g =>
+    g.devices.some((d: any) => d.isOnline && d.device_type === 'ESP32-CAM')
+  );
+  if (onlineCageKey) {
+    selectedBirdcageKey.value = `${onlineCageKey.area}|${onlineCageKey.number}`;
     showAllOfflineAlert.value = false;
-
-    // 立即获取实时温湿度数据并启动定时器
     await fetchRealtimeData();
     startRealtimeDataTimer();
     startEnvDataTimer();
@@ -778,8 +902,33 @@ const autoSelectFirstOnlineDevice = async () => {
       initGaugeCharts();
     });
   } else {
-    selectedDeviceId.value = null;
+    selectedBirdcageKey.value = '';
     showAllOfflineAlert.value = true;
+  }
+};
+
+const handleBirdcageChange = async () => {
+  if (!selectedBirdcageKey.value) return;
+  const allDevices = getDevices() as any[];
+  const [area, numStr] = selectedBirdcageKey.value.split('|');
+  const number = Number(numStr);
+  const cageDevices = allDevices.filter((d: any) => d.area === area && d.number === number);
+  const cam = cageDevices.find((d: any) => d.device_type === 'ESP32-CAM');
+  const c3 = cageDevices.find((d: any) => d.device_type === 'ESP32-C3');
+  
+  const parts: string[] = [];
+  if (cam) parts.push(`${cam.name}`);
+  if (c3) parts.push(`${c3.name}`);
+  ElMessage.success(`已选择鸟笼: ${area} #${number}${parts.length ? ' (' + parts.join(' + ') + ')' : ''}`);
+
+  if (activeTab.value === 'realtime') {
+    await fetchRealtimeData();
+    startRealtimeDataTimer();
+    startEnvDataTimer();
+    nextTick(() => {
+      initGaugeCharts();
+    });
+    startRealtimeMonitoring();
   }
 };
 
@@ -873,7 +1022,10 @@ const handleHistoryDeviceChange = async () => {
 // 图表容器引用
 const temperatureChartRef = ref<HTMLElement | null>(null);
 const humidityChartRef = ref<HTMLElement | null>(null);
-const averageChartRef = ref<HTMLElement | null>(null);
+const analysisAqiChartRef = ref<HTMLElement | null>(null);
+const analysisSoundChartRef = ref<HTMLElement | null>(null);
+const analysisLuxChartRef = ref<HTMLElement | null>(null);
+const analysisUvChartRef = ref<HTMLElement | null>(null);
 
 // 时间范围状态
 const timeRange = ref<'today' | 'two_days'>('today');
@@ -914,7 +1066,7 @@ const timeToMinutes = (timeStr: string): number => {
 
 // 根据时间范围刷新图表
 const refreshChartsForTimeRange = async () => {
-  if (!selectedDeviceId.value) return;
+  if (!analysisBirdcageKey.value) return;
 
   if (isMobile.value) {
     initMobileCharts();
@@ -926,7 +1078,10 @@ const refreshChartsForTimeRange = async () => {
 // 图表实例
 let temperatureChart: echarts.ECharts | null = null;
 let humidityChart: echarts.ECharts | null = null;
-let averageChart: echarts.ECharts | null = null;
+let analysisAqiChart: echarts.ECharts | null = null;
+let analysisSoundChart: echarts.ECharts | null = null;
+let analysisLuxChart: echarts.ECharts | null = null;
+let analysisUvChart: echarts.ECharts | null = null;
 
 // 实时监控图片帧
 const currentFrameImage = ref<string>('');
@@ -1094,10 +1249,10 @@ const updateAQIFromHistory = () => {
 };
 
 const fetchAirQualityData = async () => {
-  if (!selectedDeviceId.value) return;
+  if (!c3DeviceId.value) return;
   try {
     const response = await api.get('/api/sensor-upload', {
-      device_id: selectedDeviceId.value,
+      device_id: c3DeviceId.value,
       sensor_type: 'pms9103m',
       limit: 1,
     });
@@ -1116,10 +1271,10 @@ const fetchAirQualityData = async () => {
 };
 
 const fetchSGP30Data = async () => {
-  if (!selectedDeviceId.value) return;
+  if (!c3DeviceId.value) return;
   try {
     const response = await api.get('/api/sensor-upload', {
-      device_id: selectedDeviceId.value,
+      device_id: c3DeviceId.value,
       sensor_type: 'sgp30',
       limit: 1,
     });
@@ -1138,10 +1293,10 @@ const fetchSGP30Data = async () => {
 };
 
 const fetchSoundData = async () => {
-  if (!selectedDeviceId.value) return;
+  if (!c3DeviceId.value) return;
   try {
     const response = await api.get('/api/sensor-upload', {
-      device_id: selectedDeviceId.value,
+      device_id: c3DeviceId.value,
       sensor_type: 'sound_meter',
       limit: 1,
     });
@@ -1733,499 +1888,282 @@ const sampleData = (data: any[], count: number) => {
 const handleResize = () => {
   temperatureChart?.resize();
   humidityChart?.resize();
-  averageChart?.resize();
+  analysisAqiChart?.resize();
+  analysisSoundChart?.resize();
+  analysisLuxChart?.resize();
+  analysisUvChart?.resize();
+};
+
+const handleAnalysisBirdcageChange = async () => {
+  if (!analysisBirdcageKey.value) return;
+  await initCharts();
+};
+
+const fetchSensorTimeSeries = async (deviceId: number, sensorType: string, valueKey: string): Promise<{ times: string[]; values: number[] }> => {
+  const pairs: { time: string; value: number }[] = [];
+  try {
+    const response = await api.get('/api/sensor-upload', {
+      device_id: deviceId,
+      sensor_type: sensorType,
+      limit: 200,
+    });
+    if (response.code === 200 && response.data && Array.isArray(response.data)) {
+      const rawData: any[] = response.data;
+      const cutoff = new Date();
+      const secondsAgo = timeRange.value === 'today' ? 86400 : 172800;
+      cutoff.setSeconds(cutoff.getSeconds() - secondsAgo);
+      
+      for (const item of rawData) {
+        const ts = new Date(item.timestamp);
+        if (ts < cutoff) continue;
+        if (isNaN(ts.getTime())) continue;
+        let parsed: any;
+        try {
+          parsed = typeof item.data === 'string' ? JSON.parse(item.data) : item.data;
+        } catch {
+          continue;
+        }
+        if (parsed[valueKey] !== undefined && parsed[valueKey] !== null) {
+          // "今天"模式只显示时间，"两天"模式显示日期+时间避免重复
+          if (timeRange.value === 'two_days') {
+            const month = (ts.getMonth() + 1).toString().padStart(2, '0');
+            const day = ts.getDate().toString().padStart(2, '0');
+            const hh = ts.getHours().toString().padStart(2, '0');
+            const mm = ts.getMinutes().toString().padStart(2, '0');
+            pairs.push({ time: `${month}/${day} ${hh}:${mm}`, value: Number(parsed[valueKey]) });
+          } else {
+            const hh = ts.getHours().toString().padStart(2, '0');
+            const mm = ts.getMinutes().toString().padStart(2, '0');
+            pairs.push({ time: `${hh}:${mm}`, value: Number(parsed[valueKey]) });
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`获取${sensorType}时间序列数据失败:`, error);
+  }
+  const times = pairs.map(p => p.time);
+  const values = pairs.map(p => p.value);
+  return { times, values };
 };
 
 // 初始化图表
 const initCharts = async () => {
-  if (!selectedDeviceId.value) return;
+  if (!analysisCamDeviceId.value && !analysisC3DeviceId.value) return;
   
   if (isMobile.value) {
-    // 移动端图表初始化
-    initMobileCharts();
+    await initMobileCharts();
   } else {
-    // 桌面端图表初始化
-    initDesktopCharts();
+    await initDesktopCharts();
   }
+};
+
+const makeLineChartOption = (times: string[], values: number[], _name: string, color: string, unit: string) => {
+  const validValues = values.filter(v => v !== undefined && v !== null);
+  const vMin = validValues.length > 0 ? Math.min(...validValues) : 0;
+  const vMax = validValues.length > 0 ? Math.max(...validValues) : 100;
+  const range = vMax - vMin;
+  let yMin = vMin;
+  let yMax = vMax;
+  if (range < 5) { yMin = Math.floor(vMin - 1); yMax = Math.ceil(vMax + 1); }
+  
+  return {
+    tooltip: { trigger: 'axis' as const },
+    xAxis: { type: 'category' as const, data: times },
+    yAxis: { type: 'value' as const, name: unit, min: yMin, max: yMax },
+    series: [{
+      data: values,
+      type: 'line' as const,
+      smooth: true,
+      itemStyle: { color },
+      areaStyle: {
+        color: {
+          type: 'linear' as const,
+          x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [
+            { offset: 0, color: (areaColorMap[color] || ['rgba(0,0,0,0.1)'])[0] },
+            { offset: 1, color: (areaColorMap[color] || ['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.01)'])[1] }
+          ]
+        }
+      }
+    }]
+  };
+};
+
+const areaColorMap: Record<string, string[]> = {
+  '#ff7875': ['rgba(255, 120, 117, 0.3)', 'rgba(255, 120, 117, 0.05)'],
+  '#69c0ff': ['rgba(105, 192, 255, 0.3)', 'rgba(105, 192, 255, 0.05)'],
+  '#e6a23c': ['rgba(230, 162, 60, 0.3)', 'rgba(230, 162, 60, 0.05)'],
+  '#909399': ['rgba(144, 147, 153, 0.3)', 'rgba(144, 147, 153, 0.05)'],
+  '#67c23a': ['rgba(103, 194, 58, 0.3)', 'rgba(103, 194, 58, 0.05)'],
+  '#f56c6c': ['rgba(245, 108, 108, 0.3)', 'rgba(245, 108, 108, 0.05)'],
+};
+
+const filterAndSampleSensorData = async (camId: number) => {
+  const sensorData = await fetchSensorData(camId, timeRange.value);
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const filteredTimes: string[] = [];
+  const filteredTemp: number[] = [];
+  const filteredHum: number[] = [];
+  for (let i = 0; i < sensorData.times.length; i++) {
+    const ts = sensorData.times[i];
+    const tv = sensorData.temperatureValues[i];
+    const hv = sensorData.humidityValues[i];
+    if (ts) {
+      // "今天"模式下过滤掉未来时间点，"两天"模式不过滤（数据已由后端按时间范围过滤）
+      if (timeRange.value === 'today' && timeToMinutes(ts) > nowMinutes) continue;
+      filteredTimes.push(ts);
+      filteredTemp.push(tv !== undefined ? tv : null as unknown as number);
+      filteredHum.push(hv !== undefined ? hv : null as unknown as number);
+    }
+  }
+  return { filteredTimes, filteredTemp, filteredHum };
 };
 
 // 桌面端图表初始化
 const initDesktopCharts = async () => {
-  // 获取传感器数据
-  const sensorData = await fetchSensorData(selectedDeviceId.value!, timeRange.value);
+  const camId = analysisCamDeviceId.value;
+  const c3Id = analysisC3DeviceId.value;
   
-  // 获取时间范围
-  const now = new Date();
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
-
-  // 过滤数据 - fetchSensorData返回HH:MM格式的时间
-  // 今日：显示从00:00到当前时刻的数据
-  // 两天：显示所有48小时的数据
-  const filteredTimes = [];
-  const filteredTemperatureValues = [];
-  const filteredHumidityValues = [];
-
-  for (let i = 0; i < sensorData.times.length; i++) {
-    const timeStr = sensorData.times[i];
-    if (timeStr) {
-      const timeMinutes = timeToMinutes(timeStr);
-
-      if (timeRange.value === 'today') {
-        // 今日：只显示00:00到当前时刻的数据
-        if (timeMinutes <= nowMinutes) {
-          filteredTimes.push(timeStr);
-          filteredTemperatureValues.push(sensorData.temperatureValues[i]);
-          filteredHumidityValues.push(sensorData.humidityValues[i]);
-        }
-      } else {
-        // 两天：显示所有数据
-        filteredTimes.push(timeStr);
-        filteredTemperatureValues.push(sensorData.temperatureValues[i]);
-        filteredHumidityValues.push(sensorData.humidityValues[i]);
-      }
+  if (camId) {
+    const { filteredTimes, filteredTemp, filteredHum } = await filterAndSampleSensorData(camId);
+    
+    if (temperatureChartRef.value) {
+      temperatureChart?.dispose();
+      temperatureChart = echarts.init(temperatureChartRef.value);
+      temperatureChart.setOption(makeLineChartOption(filteredTimes, filteredTemp, '温度', '#ff7875', '温度 (℃)'));
+    }
+    if (humidityChartRef.value) {
+      humidityChart?.dispose();
+      humidityChart = echarts.init(humidityChartRef.value);
+      humidityChart.setOption(makeLineChartOption(filteredTimes, filteredHum, '湿度', '#69c0ff', '湿度 (%)'));
     }
   }
   
-  // 温度图表
-  if (temperatureChartRef.value) {
-    if (temperatureChart) {
-      temperatureChart.dispose();
-    }
-    temperatureChart = echarts.init(temperatureChartRef.value);
-    // 计算温度数据的最小值和最大值
-    const validTempValues = filteredTemperatureValues.filter(val => val !== undefined && val !== null) as number[];
-    const tempMin = validTempValues.length > 0 ? Math.min(...validTempValues) : 0;
-    const tempMax = validTempValues.length > 0 ? Math.max(...validTempValues) : 100;
-    // 调整纵轴范围，使数据更直观
-    const tempRange = tempMax - tempMin;
-    let tempYMin = tempMin;
-    let tempYMax = tempMax;
-    if (tempRange < 5) {
-      tempYMin = Math.floor(tempMin - 1);
-      tempYMax = Math.ceil(tempMax + 1);
-    }
-    temperatureChart.setOption({
-      tooltip: {
-        trigger: 'axis'
-      },
-      xAxis: {
-        type: 'category',
-        data: filteredTimes
-      },
-      yAxis: {
-        type: 'value',
-        name: '温度 (℃)',
-        min: tempYMin,
-        max: tempYMax
-      },
-      series: [{
-        data: filteredTemperatureValues,
-        type: 'line',
-        smooth: true,
-        itemStyle: {
-          color: '#ff7875'
-        },
-        areaStyle: {
-          color: {
-            type: 'linear',
-            x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [{
-              offset: 0, color: 'rgba(255, 120, 117, 0.3)'
-            }, {
-              offset: 1, color: 'rgba(255, 120, 117, 0.1)'
-            }]
-          }
-        }
-      }]
-    });
-  }
-  
-  // 湿度图表
-  if (humidityChartRef.value) {
-    if (humidityChart) {
-      humidityChart.dispose();
-    }
-    humidityChart = echarts.init(humidityChartRef.value);
-    // 计算湿度数据的最小值和最大值
-    const validHumidityValues = filteredHumidityValues.filter(val => val !== undefined && val !== null) as number[];
-    const humidityMin = validHumidityValues.length > 0 ? Math.min(...validHumidityValues) : 0;
-    const humidityMax = validHumidityValues.length > 0 ? Math.max(...validHumidityValues) : 100;
-    // 调整纵轴范围，使数据更直观
-    const humidityRange = humidityMax - humidityMin;
-    let humidityYMin = humidityMin;
-    let humidityYMax = humidityMax;
-    if (humidityRange < 5) {
-      humidityYMin = Math.floor(humidityMin - 1);
-      humidityYMax = Math.ceil(humidityMax + 1);
-    }
-    humidityChart.setOption({
-      tooltip: {
-        trigger: 'axis'
-      },
-      xAxis: {
-        type: 'category',
-        data: filteredTimes
-      },
-      yAxis: {
-        type: 'value',
-        name: '湿度 (%)',
-        min: humidityYMin,
-        max: humidityYMax
-      },
-      series: [{
-        data: filteredHumidityValues,
-        type: 'line',
-        smooth: true,
-        itemStyle: {
-          color: '#69c0ff'
-        },
-        areaStyle: {
-          color: {
-            type: 'linear',
-            x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [{
-              offset: 0, color: 'rgba(105, 192, 255, 0.3)'
-            }, {
-              offset: 1, color: 'rgba(105, 192, 255, 0.1)'
-            }]
-          }
-        }
-      }]
-    });
-  }
-  
-  // 所有设备平均值图表
-  if (averageChartRef.value) {
-    if (averageChart) {
-      averageChart.dispose();
-    }
-    averageChart = echarts.init(averageChartRef.value);
-    
-    // 计算所有设备的平均值
-    const avgData = getDeviceAverageData();
-    
-    // 过滤平均数据
-    const filteredAvgTimes = [];
-    const filteredAvgTempValues = [];
-    const filteredAvgHumidityValues = [];
-    
-    for (let i = 0; i < avgData.times.length; i++) {
-      const timeStr = avgData.times[i];
-      if (timeStr) {
-        const timeMinutes = timeToMinutes(timeStr);
-        if (timeRange.value === 'today') {
-          if (timeMinutes <= nowMinutes) {
-            filteredAvgTimes.push(timeStr);
-            filteredAvgTempValues.push(avgData.temperatureValues[i]);
-            filteredAvgHumidityValues.push(avgData.humidityValues[i]);
-          }
-        } else {
-          filteredAvgTimes.push(timeStr);
-          filteredAvgTempValues.push(avgData.temperatureValues[i]);
-          filteredAvgHumidityValues.push(avgData.humidityValues[i]);
-        }
-      }
-    }
+  // 环境传感器 (C3)
+  if (c3Id) {
+    // 并行获取所有C3传感器数据，单个传感器失败不影响其他
+    const [aqiData, soundData, luxData, uvData] = await Promise.allSettled([
+      fetchSensorTimeSeries(c3Id, 'pms9103m', 'pm2_5_cf1'),
+      fetchSensorTimeSeries(c3Id, 'sound_meter', 'db'),
+      fetchSensorTimeSeries(c3Id, 'veml7700', 'lux'),
+      fetchSensorTimeSeries(c3Id, 'uv_meter', 'uv_index')
+    ]);
 
-    averageChart.setOption({
-      tooltip: {
-        trigger: 'axis'
-      },
-      legend: {
-        data: ['平均温度', '平均湿度']
-      },
-      xAxis: {
-        type: 'category',
-        data: filteredAvgTimes
-      },
-      yAxis: {
-        type: 'value',
-        name: '数值'
-      },
-      series: [
-        {
-          name: '平均温度',
-          data: filteredAvgTempValues,
-          type: 'line',
-          smooth: true,
-          itemStyle: {
-            color: '#ff7875'
-          }
-        },
-        {
-          name: '平均湿度',
-          data: filteredAvgHumidityValues,
-          type: 'line',
-          smooth: true,
-          itemStyle: {
-            color: '#69c0ff'
-          }
-        }
-      ]
-    });
+    // 空气质量图表
+    if (analysisAqiChartRef.value) {
+      analysisAqiChart?.dispose();
+      analysisAqiChart = echarts.init(analysisAqiChartRef.value);
+      const aqiResult = aqiData.status === 'fulfilled' ? aqiData.value : { times: [], values: [] };
+      analysisAqiChart.setOption(makeLineChartOption(aqiResult.times, aqiResult.values, 'AQI', '#e6a23c', 'PM2.5 (μg/m³)'));
+    }
+    // 声音分贝图表
+    if (analysisSoundChartRef.value) {
+      analysisSoundChart?.dispose();
+      analysisSoundChart = echarts.init(analysisSoundChartRef.value);
+      const soundResult = soundData.status === 'fulfilled' ? soundData.value : { times: [], values: [] };
+      analysisSoundChart.setOption(makeLineChartOption(soundResult.times, soundResult.values, 'dB', '#909399', '分贝 (dB)'));
+    }
+    // 光照强度图表
+    if (analysisLuxChartRef.value) {
+      analysisLuxChart?.dispose();
+      analysisLuxChart = echarts.init(analysisLuxChartRef.value);
+      const luxResult = luxData.status === 'fulfilled' ? luxData.value : { times: [], values: [] };
+      analysisLuxChart.setOption(makeLineChartOption(luxResult.times, luxResult.values, 'Lux', '#67c23a', '光照 (Lux)'));
+    }
+    // 紫外线图表
+    if (analysisUvChartRef.value) {
+      analysisUvChart?.dispose();
+      analysisUvChart = echarts.init(analysisUvChartRef.value);
+      const uvResult = uvData.status === 'fulfilled' ? uvData.value : { times: [], values: [] };
+      analysisUvChart.setOption(makeLineChartOption(uvResult.times, uvResult.values, 'UV', '#f56c6c', 'UV指数'));
+    }
   }
 };
 
+const makeMobileLineOption = (times: string[], values: number[], name: string, color: string) => {
+  const isTwoDays = timeRange.value === 'two_days';
+  return {
+    tooltip: { trigger: 'axis' as const },
+    grid: { left: '15%', right: '8%', bottom: isTwoDays ? '22%' : '15%', top: '12%', containLabel: false },
+    xAxis: { type: 'category' as const, data: times, axisLabel: { fontSize: isTwoDays ? 8 : 10, rotate: isTwoDays ? 45 : 0, interval: isTwoDays ? 'auto' : 1 } },
+    yAxis: { type: 'value' as const, name, nameTextStyle: { fontSize: 10 }, axisLabel: { fontSize: 10 } },
+    series: [{ data: values, type: 'line' as const, smooth: true, itemStyle: { color }, areaStyle: { color: { type: 'linear' as const, x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: (areaColorMap[color] || ['rgba(0,0,0,0.1)'])[0] }, { offset: 1, color: (areaColorMap[color] || ['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.01)'])[1] }] } } }]
+  };
+};
+
 // 移动端图表初始化
-const initMobileCharts = () => {
-  // 销毁旧图表实例
+const initMobileCharts = async () => {
+  const camId = analysisCamDeviceId.value;
+  const c3Id = analysisC3DeviceId.value;
+
   temperatureChart?.dispose();
   humidityChart?.dispose();
-  averageChart?.dispose();
+  analysisAqiChart?.dispose();
+  analysisSoundChart?.dispose();
+  analysisLuxChart?.dispose();
+  analysisUvChart?.dispose();
 
-  // 获取当前时间分钟数
-  const now = new Date();
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  // 温度 & 湿度 (CAM) - 使用 /sensors/grouped 接口
+  if (camId) {
+    const { filteredTimes, filteredTemp, filteredHum } = await filterAndSampleSensorData(camId);
+    const sampledTimes = sampleData(filteredTimes, 12);
+    const sampledTemp = sampleData(filteredTemp, 12);
+    const sampledHum = sampleData(filteredHum, 12);
 
-  // 初始化平均图表
-  if (averageChartRef.value) {
-    averageChart = echarts.init(averageChartRef.value);
-    const avgData = getDeviceAverageData();
-
-    // 过滤平均数据
-    const filteredAvgTimes = [];
-    const filteredAvgTempValues = [];
-    const filteredAvgHumidityValues = [];
-
-    for (let i = 0; i < avgData.times.length; i++) {
-      const timeStr = avgData.times[i];
-      if (timeStr) {
-        const timeMinutes = timeToMinutes(timeStr);
-        if (timeRange.value === 'today') {
-          if (timeMinutes <= nowMinutes) {
-            filteredAvgTimes.push(timeStr);
-            filteredAvgTempValues.push(avgData.temperatureValues[i]);
-            filteredAvgHumidityValues.push(avgData.humidityValues[i]);
-          }
-        } else {
-          filteredAvgTimes.push(timeStr);
-          filteredAvgTempValues.push(avgData.temperatureValues[i]);
-          filteredAvgHumidityValues.push(avgData.humidityValues[i]);
-        }
-      }
+    if (temperatureChartRef.value) {
+      temperatureChart = echarts.init(temperatureChartRef.value);
+      temperatureChart.setOption(makeMobileLineOption(sampledTimes, sampledTemp, '温度 (℃)', '#ff7875'));
     }
-    
-    // 采样12个点显示
-    const sampledTimes = sampleData(filteredAvgTimes, 12);
-    const sampledTempValues = sampleData(filteredAvgTempValues, 12);
-    const sampledHumidityValues = sampleData(filteredAvgHumidityValues, 12);
-    
-    averageChart.setOption({
-      tooltip: {
-        trigger: 'axis'
-      },
-      legend: {
-        data: ['平均温度', '平均湿度'],
-        top: 5,
-        textStyle: { fontSize: 11 },
-        itemGap: 15
-      },
-      grid: {
-        left: '12%',
-        right: '8%',
-        bottom: '15%',
-        top: '18%',
-        containLabel: false
-      },
-      xAxis: {
-        type: 'category',
-        data: sampledTimes,
-        axisLabel: { 
-          fontSize: 10, 
-          interval: 1
-        }
-      },
-      yAxis: {
-        type: 'value',
-        name: '数值',
-        nameTextStyle: {
-          fontSize: 10
-        },
-        axisLabel: { fontSize: 10 }
-      },
-      series: [
-        {
-          name: '平均温度',
-          data: sampledTempValues,
-          type: 'line',
-          smooth: true,
-          itemStyle: { color: '#ff7875' },
-          areaStyle: {
-            color: {
-              type: 'linear',
-              x: 0, y: 0, x2: 0, y2: 1,
-              colorStops: [{
-                offset: 0, color: 'rgba(255, 120, 117, 0.3)'
-              }, {
-                offset: 1, color: 'rgba(255, 120, 117, 0.05)'
-              }]
-            }
-          }
-        },
-        {
-          name: '平均湿度',
-          data: sampledHumidityValues,
-          type: 'line',
-          smooth: true,
-          itemStyle: { color: '#69c0ff' },
-          areaStyle: {
-            color: {
-              type: 'linear',
-              x: 0, y: 0, x2: 0, y2: 1,
-              colorStops: [{
-                offset: 0, color: 'rgba(105, 192, 255, 0.3)'
-              }, {
-                offset: 1, color: 'rgba(105, 192, 255, 0.05)'
-              }]
-            }
-          }
-        }
-      ]
-    });
+    if (humidityChartRef.value) {
+      humidityChart = echarts.init(humidityChartRef.value);
+      humidityChart.setOption(makeMobileLineOption(sampledTimes, sampledHum, '湿度 (%)', '#69c0ff'));
+    }
   }
-  
-  // 初始化温度图表
-  if (temperatureChartRef.value && selectedDeviceId.value) {
-    temperatureChart = echarts.init(temperatureChartRef.value);
-    const allHistoryData = getDeviceHistoryData(selectedDeviceId.value);
 
-    // 过滤数据 - historyData的timestamp是完整日期字符串，可以使用Date比较
-    const timeRangeStartDate = new Date();
-    timeRangeStartDate.setDate(timeRangeStartDate.getDate() - (timeRange.value === 'two_days' ? 1 : 0));
-    timeRangeStartDate.setHours(0, 0, 0, 0);
-    const historyData = allHistoryData.filter(d => new Date(d.timestamp) >= timeRangeStartDate);
-    
-    // 采样12个点显示
-    const sampledHistoryData = sampleData(historyData, 12);
-    const tempValues = sampledHistoryData.map(d => d.temperature);
-    const tempMin = tempValues.length > 0 ? Math.min(...tempValues) : 0;
-    const tempMax = tempValues.length > 0 ? Math.max(...tempValues) : 100;
-    // 调整纵轴范围，使数据更直观
-    const tempRange = tempMax - tempMin;
-    let tempYMin = tempMin;
-    let tempYMax = tempMax;
-    if (tempRange < 5) {
-      tempYMin = Math.floor(tempMin - 1);
-      tempYMax = Math.ceil(tempMax + 1);
-    }
-    
-    temperatureChart.setOption({
-      tooltip: { trigger: 'axis' },
-      grid: {
-        left: '15%',
-        right: '8%',
-        bottom: '15%',
-        top: '12%',
-        containLabel: false
-      },
-      xAxis: {
-        type: 'category',
-        data: sampledHistoryData.map(d => d.timestamp).map(formatTimeLabel),
-        axisLabel: { 
-          fontSize: 10, 
-          interval: 1
-        }
-      },
-      yAxis: {
-        type: 'value',
-        name: '温度 (℃)',
-        min: tempYMin,
-        max: tempYMax,
-        nameTextStyle: {
-          fontSize: 10
-        },
-        axisLabel: { fontSize: 10 }
-      },
-      series: [{
-        data: tempValues,
-        type: 'line',
-        smooth: true,
-        itemStyle: { color: '#ff7875' },
-        areaStyle: {
-          color: {
-            type: 'linear',
-            x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [{
-              offset: 0, color: 'rgba(255, 120, 117, 0.3)'
-            }, {
-              offset: 1, color: 'rgba(255, 120, 117, 0.05)'
-            }]
-          }
-        }
-      }]
-    });
-  }
-  
-  // 初始化湿度图表
-  if (humidityChartRef.value && selectedDeviceId.value) {
-    humidityChart = echarts.init(humidityChartRef.value);
-    const allHistoryData = getDeviceHistoryData(selectedDeviceId.value);
+  // 环境传感器 (C3)
+  if (c3Id) {
+    // 并行获取所有C3传感器数据，单个传感器失败不影响其他
+    const [aqiData, soundData, luxData, uvData] = await Promise.allSettled([
+      fetchSensorTimeSeries(c3Id, 'pms9103m', 'pm2_5_cf1'),
+      fetchSensorTimeSeries(c3Id, 'sound_meter', 'db'),
+      fetchSensorTimeSeries(c3Id, 'veml7700', 'lux'),
+      fetchSensorTimeSeries(c3Id, 'uv_meter', 'uv_index')
+    ]);
 
-    // 过滤数据 - historyData的timestamp是完整日期字符串，可以使用Date比较
-    const timeRangeStartDate = new Date();
-    timeRangeStartDate.setDate(timeRangeStartDate.getDate() - (timeRange.value === 'two_days' ? 1 : 0));
-    timeRangeStartDate.setHours(0, 0, 0, 0);
-    const historyData = allHistoryData.filter(d => new Date(d.timestamp) >= timeRangeStartDate);
-    
-    // 采样12个点显示
-    const sampledHistoryData = sampleData(historyData, 12);
-    const humidityValues = sampledHistoryData.map(d => d.humidity);
-    const humidityMin = humidityValues.length > 0 ? Math.min(...humidityValues) : 0;
-    const humidityMax = humidityValues.length > 0 ? Math.max(...humidityValues) : 100;
-    // 调整纵轴范围，使数据更直观
-    const humidityRange = humidityMax - humidityMin;
-    let humidityYMin = humidityMin;
-    let humidityYMax = humidityMax;
-    if (humidityRange < 5) {
-      humidityYMin = Math.floor(humidityMin - 1);
-      humidityYMax = Math.ceil(humidityMax + 1);
+    // 空气质量图表
+    if (analysisAqiChartRef.value) {
+      analysisAqiChart = echarts.init(analysisAqiChartRef.value);
+      const aqiResult = aqiData.status === 'fulfilled' ? aqiData.value : { times: [], values: [] };
+      const sAqi = aqiResult.times.length > 0 ? sampleData(aqiResult.times, 12) : [];
+      const sAqiV = aqiResult.values.length > 0 ? sampleData(aqiResult.values, 12) : [];
+      analysisAqiChart.setOption(makeMobileLineOption(sAqi, sAqiV, 'PM2.5 (μg/m³)', '#e6a23c'));
     }
-    
-    humidityChart.setOption({
-      tooltip: { trigger: 'axis' },
-      grid: {
-        left: '15%',
-        right: '8%',
-        bottom: '15%',
-        top: '12%',
-        containLabel: false
-      },
-      xAxis: {
-        type: 'category',
-        data: sampledHistoryData.map(d => d.timestamp).map(formatTimeLabel),
-        axisLabel: { 
-          fontSize: 10, 
-          interval: 1
-        }
-      },
-      yAxis: {
-        type: 'value',
-        name: '湿度 (%)',
-        min: humidityYMin,
-        max: humidityYMax,
-        nameTextStyle: {
-          fontSize: 10
-        },
-        axisLabel: { fontSize: 10 }
-      },
-      series: [{
-        data: humidityValues,
-        type: 'line',
-        smooth: true,
-        itemStyle: { color: '#69c0ff' },
-        areaStyle: {
-          color: {
-            type: 'linear',
-            x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [{
-              offset: 0, color: 'rgba(105, 192, 255, 0.3)'
-            }, {
-              offset: 1, color: 'rgba(105, 192, 255, 0.05)'
-            }]
-          }
-        }
-      }]
-    });
+    // 声音分贝图表
+    if (analysisSoundChartRef.value) {
+      analysisSoundChart = echarts.init(analysisSoundChartRef.value);
+      const soundResult = soundData.status === 'fulfilled' ? soundData.value : { times: [], values: [] };
+      const sSound = soundResult.times.length > 0 ? sampleData(soundResult.times, 12) : [];
+      const sSoundV = soundResult.values.length > 0 ? sampleData(soundResult.values, 12) : [];
+      analysisSoundChart.setOption(makeMobileLineOption(sSound, sSoundV, '分贝 (dB)', '#909399'));
+    }
+    // 光照强度图表
+    if (analysisLuxChartRef.value) {
+      analysisLuxChart = echarts.init(analysisLuxChartRef.value);
+      const luxResult = luxData.status === 'fulfilled' ? luxData.value : { times: [], values: [] };
+      const sLux = luxResult.times.length > 0 ? sampleData(luxResult.times, 12) : [];
+      const sLuxV = luxResult.values.length > 0 ? sampleData(luxResult.values, 12) : [];
+      analysisLuxChart.setOption(makeMobileLineOption(sLux, sLuxV, '光照 (Lux)', '#67c23a'));
+    }
+    // 紫外线图表
+    if (analysisUvChartRef.value) {
+      analysisUvChart = echarts.init(analysisUvChartRef.value);
+      const uvResult = uvData.status === 'fulfilled' ? uvData.value : { times: [], values: [] };
+      const sUv = uvResult.times.length > 0 ? sampleData(uvResult.times, 12) : [];
+      const sUvV = uvResult.values.length > 0 ? sampleData(uvResult.values, 12) : [];
+      analysisUvChart.setOption(makeMobileLineOption(sUv, sUvV, 'UV指数', '#f56c6c'));
+    }
   }
 };
 
@@ -2247,10 +2185,7 @@ onMounted(async () => {
 
     if (currentDevices.length > 0) {
       if (activeTab.value === 'realtime') {
-        const currentDevice = currentDevices.find((d: any) => d.id === selectedDeviceId.value);
-        const isCurrentDeviceOnline = currentDevice?.isOnline ?? false;
-        
-        if (!selectedDeviceId.value || !isCurrentDeviceOnline) {
+        if (!selectedBirdcageKey.value) {
           await autoSelectFirstOnlineDevice();
         } else {
           await fetchRealtimeData();
@@ -2270,23 +2205,32 @@ onMounted(async () => {
           }
         }
       } else if (activeTab.value === 'analysis') {
-        if (!selectedDeviceId.value) {
-          selectedDeviceId.value = currentDevices[0]?.id || null;
+        // 确保 analysisBirdcageKey 已设置后再初始化图表
+        if (!analysisBirdcageKey.value && birdcageGroups.value.length > 0) {
+          const g = birdcageGroups.value[0]!;
+          analysisBirdcageKey.value = `${g.area}|${g.number}`;
         }
         if (isMobile.value) {
           await getOrUpdateDeviceHistoryData();
         } else {
           await fetchDeviceHistoryData();
         }
+        // 历史数据获取完成后初始化图表
+        nextTick(async () => {
+          await initCharts();
+        });
       }
     }
   }, 1000);
 
-  // 如果在分析标签页，初始化图表
+  // 如果在分析标签页，初始化图表（等待 watch 和 setTimeout 完成后再初始化）
   if (activeTab.value === 'analysis') {
-    nextTick(async () => {
-      await initCharts();
-    });
+    // 延迟初始化，确保 analysisBirdcageKey 和设备数据都已就绪
+    setTimeout(async () => {
+      if (analysisBirdcageKey.value) {
+        await initCharts();
+      }
+    }, 1200);
   }
 });
 
@@ -2303,7 +2247,10 @@ onUnmounted(() => {
   }
   temperatureChart?.dispose();
   humidityChart?.dispose();
-  averageChart?.dispose();
+  analysisAqiChart?.dispose();
+  analysisSoundChart?.dispose();
+  analysisLuxChart?.dispose();
+  analysisUvChart?.dispose();
   aqiGaugeChart?.dispose();
   dbGaugeChart?.dispose();
   aqiGaugeChartMobile?.dispose();
@@ -2317,10 +2264,9 @@ onUnmounted(() => {
 // 监听activeTab变化，重置设备选择
 watch(() => props.activeTab, async (newTab, oldTab) => {
   if (newTab === 'analysis') {
-    if (isMobile.value) {
-      await getOrUpdateDeviceHistoryData();
-    } else {
-      await fetchDeviceHistoryData();
+    if (!analysisBirdcageKey.value && birdcageGroups.value.length > 0) {
+      const g = birdcageGroups.value[0]!;
+      analysisBirdcageKey.value = `${g.area}|${g.number}`;
     }
     nextTick(async () => {
       await initCharts();
@@ -2719,13 +2665,19 @@ const goToFullscreen = () => {
 }
 
 .analysis-content {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 20px;
 }
 
+@media (max-width: 768px) {
+  .analysis-content {
+    grid-template-columns: 1fr;
+  }
+}
+
 .chart-container {
-  margin-bottom: 20px;
+  margin-bottom: 0;
 }
 
 .chart-container h3 {
@@ -3620,5 +3572,224 @@ const goToFullscreen = () => {
   .video-placeholder {
     height: 300px;
   }
+}
+
+/* ==================== 鸟笼设备信息样式 ==================== */
+.birdcage-device-list {
+  background: #f8f9fa;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.device-info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  flex-wrap: wrap;
+}
+
+.device-info-row + .device-info-row {
+  border-top: 1px solid #e8e8e8;
+  margin-top: 6px;
+  padding-top: 10px;
+}
+
+.device-type-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.device-type-tag.cam-tag {
+  background: linear-gradient(135deg, #8BAD42 0%, #6A9A35 100%);
+}
+
+.device-type-tag.c3-tag {
+  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+}
+
+.device-info-item {
+  font-size: 13px;
+  color: #303133;
+}
+
+.device-info-item.name {
+  font-weight: 600;
+  color: #166534;
+}
+
+.device-info-item.type {
+  color: #909399;
+  font-size: 12px;
+}
+
+.device-info-sep {
+  color: #dcdfe6;
+  font-size: 13px;
+}
+
+/* 温度湿度卡片 */
+.temp-humid-cards {
+  display: flex;
+  gap: 12px;
+}
+
+.th-card {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.th-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+}
+
+.th-card.temp-card {
+  background: linear-gradient(135deg, #fff5f5 0%, #ffe7e7 100%);
+  border-color: rgba(248, 113, 113, 0.2);
+}
+
+.th-card.humid-card {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.th-card-icon {
+  font-size: 32px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.th-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.th-card-label {
+  font-size: 13px;
+  color: #909399;
+  font-weight: 500;
+}
+
+.th-card-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #303133;
+  line-height: 1.1;
+}
+
+.th-card-value small {
+  font-size: 16px;
+  font-weight: 500;
+  color: #909399;
+  margin-left: 2px;
+}
+
+.th-card.temp-card .th-card-value {
+  color: #e53e3e;
+}
+
+.th-card.humid-card .th-card-value {
+  color: #2563eb;
+}
+
+/* 移动端鸟笼设备行 */
+.mobile-device-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  flex-wrap: wrap;
+}
+
+.mobile-device-row + .mobile-device-row {
+  border-top: 1px solid #f0f0f0;
+}
+
+.mobile-device-info {
+  font-size: 13px;
+  color: #303133;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 移动端温度湿度行 */
+.mobile-th-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.mobile-th-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.mobile-th-item.temp {
+  background: linear-gradient(135deg, #fff5f5 0%, #ffe7e7 100%);
+  border-color: rgba(248, 113, 113, 0.2);
+}
+
+.mobile-th-item.humid {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.mobile-th-icon {
+  font-size: 28px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.mobile-th-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mobile-th-label {
+  font-size: 12px;
+  color: #909399;
+  font-weight: 500;
+}
+
+.mobile-th-value {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.mobile-th-item.temp .mobile-th-value {
+  color: #e53e3e;
+}
+
+.mobile-th-item.humid .mobile-th-value {
+  color: #2563eb;
 }
 </style>
