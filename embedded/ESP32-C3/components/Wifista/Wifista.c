@@ -3,6 +3,7 @@
 static const char *TAG = "wifi";
 
 bool Wifi_isConnected = false;
+bool Wifi_gotIp = false;
 
 void Wifista_event_handler(void* event_handler_arg, esp_event_base_t event_base, int32_t event_id, void* event_data){
     if (event_base == WIFI_EVENT){
@@ -24,6 +25,7 @@ void Wifista_event_handler(void* event_handler_arg, esp_event_base_t event_base,
     }else if (event_base == IP_EVENT)
     {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*)event_data;
+        Wifi_gotIp = true;
         ESP_LOGI(TAG, "获取 IP: %d.%d.%d.%d",
             esp_ip4_addr1_16(&event->ip_info.ip),
             esp_ip4_addr2_16(&event->ip_info.ip),

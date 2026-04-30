@@ -87,5 +87,5 @@ direct_dependencies:
 - uv_meter
 - veml7700
 manifest_hash: 6d0f4b44240087c132320278a8b869b65803ed2b8ce4d76c7f275c37a7d813d5
-target: esp32c3
+target: esp32s3
 version: 2.0.0

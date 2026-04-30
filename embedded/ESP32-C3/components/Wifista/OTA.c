@@ -192,7 +192,11 @@ static bool ota_download_and_update(const esp_partition_t *running)
     }
 
     update_partition = esp_ota_get_next_update_partition(NULL);
-    assert(update_partition != NULL);
+    if (update_partition == NULL) {
+        ESP_LOGE(TAG, "找不到可用的 OTA 更新分区");
+        http_cleanup(client);
+        return false;
+    }
     ESP_LOGI(TAG, "Writing to partition subtype %d at offset 0x%"PRIx32,
              update_partition->subtype, update_partition->address);
 
@@ -310,24 +314,53 @@ static bool ota_download_and_update(const esp_partition_t *running)
 
 // ===================== OTA 主任务 =====================
 /**
- * @brief OTA 任务入口：检查一次服务器固件版本，有新版本则下载更新，无论结果如何任务结束后自行退出
- *
- * 流程：
- *   ① POST /api/firmwares/latest  {"secret":"..."}  → 获取最新固件版本号
- *   ② 比较本地版本与服务器版本
- *   ③ 若有更新 → POST /api/firmwares/download {"secret":"..."} → 流式下载固件
- *   ④ 写入 flash → 重启
- *   ⑤ 若无更新 / 失败 → 任务退出，等待下次启动或 WS 命令再触发
+ * @brief 检查当前分区表是否支持 OTA（存在 otadata 和至少两个 APP 分区）
+ * @return true  OTA 可用
+ * @return false 不支持 OTA（单分区模式）
  */
+static bool ota_is_supported(void)
+{
+    const esp_partition_t *otadata = esp_partition_find_first(
+        ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, NULL);
+    if (otadata == NULL) {
+        ESP_LOGW(TAG, "分区表无 otadata，OTA 不可用（当前为单应用分区表）");
+        return false;
+    }
+    /* 确保至少有两个 OTA 应用槽 */
+    const esp_partition_t *ota0 = esp_partition_find_first(
+        ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, NULL);
+    const esp_partition_t *ota1 = esp_partition_find_first(
+        ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, NULL);
+    if (ota0 == NULL || ota1 == NULL) {
+        ESP_LOGW(TAG, "OTA 应用槽不足，OTA 不可用");
+        return false;
+    }
+    return true;
+}
+
 void ota_task(void *pvParameter)
 {
     ESP_LOGI(TAG, "OTA task started");
 
+    /* ── 前置检查：分区表是否支持 OTA ── */
+    if (!ota_is_supported()) {
+        ESP_LOGE(TAG, "当前分区表不支持 OTA，任务退出。"
+                 "请切换到双 OTA 分区表（如 partitions_two_ota.csv）");
+        goto exit;
+    }
+
     const esp_partition_t *configured = esp_ota_get_boot_partition();
     const esp_partition_t *running = esp_ota_get_running_partition();
 
+    if (configured == NULL || running == NULL) {
+        ESP_LOGE(TAG, "获取分区信息失败 (configured=%p, running=%p)，任务退出",
+                 (void *)configured, (void *)running);
+        goto exit;
+    }
+
     if (configured != running) {
-        ESP_LOGW(TAG, "Configured OTA boot partition at offset 0x%08"PRIx32", but running from offset 0x%08"PRIx32,
+        ESP_LOGW(TAG, "Configured OTA boot partition at offset 0x%08"PRIx32
+                 ", but running from offset 0x%08"PRIx32,
                  configured->address, running->address);
     }
     ESP_LOGI(TAG, "Running partition type %d subtype %d (offset 0x%08"PRIx32")",

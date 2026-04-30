@@ -41,6 +41,8 @@ typedef struct
     void (* ws_text_handler)(void *handler_args, int len, const char *data_ptr);
 }WS_Context_t;
 
+extern bool Wifi_gotIp;
+
 void WifistaInit(const uint8_t *ssid, const uint8_t *pwd);
 void obtain_time(void);
 bool is_time_synced(void);

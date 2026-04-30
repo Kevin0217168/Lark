@@ -87,11 +87,15 @@ void WebsocketStart(const char *host, const char *path, uint16_t port)
     websocket_cfg.port = port;
     websocket_cfg.crt_bundle_attach = esp_crt_bundle_attach;
     // websocket_cfg.disable_auto_reconnect = true;
-    websocket_cfg.buffer_size = 64 * 1024;
+    websocket_cfg.buffer_size = 4096;
     websocket_cfg.task_stack = 6144;
+    websocket_cfg.network_timeout_ms = 10000;
     websocket_cfg.reconnect_timeout_ms = 10000;
     websocket_cfg.pingpong_timeout_sec = 10;
     websocket_cfg.enable_close_reconnect = true;
+    websocket_cfg.user_agent = "ESP32";
+
+    ESP_LOGI(TAG, "启动 WebSocket 连接: %s:%d%s", host, port, path);
 
     // 初始化客户端
     Websocket_client = esp_websocket_client_init(&websocket_cfg);

@@ -17,6 +17,7 @@
 #include "Adafruit_VEML7700_espidf.h"
 
 #include "tasks.h"
+#include "device_secret.h"
 
 static const char *TAG = "sensor_task";
 
@@ -61,8 +62,7 @@ static bool g_pms_ready      = false;
 static bool g_sound_ready    = false;
 static bool g_uv_ready       = false;
 
-/* ────────── device_secret 弱符号（可被外部 device_secret.h 覆盖） ────────── */
-__attribute__((weak)) const char *secret = "default-secret";
+/* ────────── device_secret 由 device_secret.c 提供（4MB 分区表需要） ────────── */
 
 /* ═══════════════════════════════════════════════════════════
  * 熔断器逻辑

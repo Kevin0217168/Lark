@@ -20,7 +20,7 @@ static const char *TAG = "sensor_hub";
 #define I2C_MASTER_FREQ_HZ 100000
 
 #define WIFI_SSID "关闭"
-    #define WIFI_PASS "kaiwen0818"
+#define WIFI_PASS "kaiwen0818"
 
 extern bool Wifi_isConnected;
 
@@ -29,8 +29,6 @@ extern "C" void auto_feed_task(void *pvParameter);
 
 extern "C" void app_main(void)
 {
-    ESP_LOGI(TAG, "启动传感器集线器");
-
     esp_err_t nvs_ret = nvs_flash_init();
     if (nvs_ret == ESP_ERR_NVS_NO_FREE_PAGES || nvs_ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
@@ -52,7 +50,7 @@ extern "C" void app_main(void)
 
     Websocket_event_handler_register(NULL, ws_text_handler);
 
-    char ws_path[128];
+    char ws_path[256];
     snprintf(ws_path, sizeof(ws_path), "/api/stream/device/ws?secret=%s", secret);
     WebsocketStart("wss://lark.mintlab.top", ws_path, 443);
 
@@ -77,6 +75,8 @@ extern "C" void app_main(void)
     remote_log_start("https://lark.mintlab.top", "/api/logs", 443, secret);
 
     // ── INA231 初始化 ──
+
+    ESP_LOGI(TAG, "启动传感器集线器");
     ESP_ERROR_CHECK(ina231_init(I2C_MASTER_PORT, I2C_MASTER_SDA,
                                 I2C_MASTER_SCL, I2C_MASTER_FREQ_HZ));
 
