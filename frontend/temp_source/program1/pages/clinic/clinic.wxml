@@ -1,0 +1,190 @@
+<!--pages/clinic/clinic.wxml-->
+<view class="page-container">
+  <!-- 自定义导航栏 -->
+  <view class="custom-navbar">
+    <view class="navbar-content">
+      <text class="navbar-title">伴鸟 · 线上问诊</text>
+      <view class="clinic-badge">
+        <text class="badge-icon">🏥</text>
+        <text class="badge-text">专业兽医</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 在线急诊入口 -->
+  <view class="emergency-section">
+    <view class="emergency-card" bindtap="handleEmergency">
+      <view class="emergency-content">
+        <view class="emergency-icon">⚡</view>
+        <view class="emergency-info">
+          <text class="emergency-title">在线急诊</text>
+          <text class="emergency-desc">紧急情况优先响应，24小时在线</text>
+        </view>
+      </view>
+      <view class="emergency-btn">
+        <text class="btn-text">立即求助</text>
+        <text class="btn-arrow">></text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 搜索筛选区 -->
+  <view class="search-section">
+    <view class="search-box">
+      <text class="search-icon">🔍</text>
+      <input 
+        class="search-input" 
+        placeholder="搜索医生姓名或专科" 
+        bindinput="onSearchInput"
+        value="{{searchKeyword}}"
+      />
+    </view>
+    <view class="filter-tags">
+      <view 
+        class="filter-tag {{selectedFilter === 'all' ? 'active' : ''}}" 
+        bindtap="selectFilter"
+        data-filter="all"
+      >
+        <text>全部</text>
+      </view>
+      <view 
+        class="filter-tag {{selectedFilter === '鸟类' ? 'active' : ''}}" 
+        bindtap="selectFilter"
+        data-filter="鸟类"
+      >
+        <text>鸟类专科</text>
+      </view>
+      <view 
+        class="filter-tag {{selectedFilter === '爬行' ? 'active' : ''}}" 
+        bindtap="selectFilter"
+        data-filter="爬行"
+      >
+        <text>爬行类</text>
+      </view>
+      <view 
+        class="filter-tag {{selectedFilter === '两栖' ? 'active' : ''}}" 
+        bindtap="selectFilter"
+        data-filter="两栖"
+      >
+        <text>两栖类</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 电子健康报告入口 -->
+  <view class="report-section">
+    <view class="report-card" bindtap="gotoReports">
+      <view class="report-header">
+        <view class="report-title">
+          <text class="title-icon">📋</text>
+          <text>我的电子健康报告与医嘱</text>
+        </view>
+        <view class="report-badge" wx:if="{{unreadReports > 0}}">
+          <text>{{unreadReports}}</text>
+        </view>
+      </view>
+      <view class="report-preview">
+        <view class="preview-item">
+          <text class="preview-label">最新报告</text>
+          <text class="preview-value">{{latestReport}}</text>
+        </view>
+        <view class="preview-divider"></view>
+        <view class="preview-item">
+          <text class="preview-label">医嘱状态</text>
+          <text class="preview-value {{hasAdvice ? 'has-advice' : ''}}">
+            {{hasAdvice ? '待执行' : '暂无医嘱'}}
+          </text>
+        </view>
+      </view>
+      <view class="report-footer">
+        <text class="report-tips">包含健康评估、诊断报告、用药指导等完整记录</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 医生列表区 -->
+  <view class="doctors-section">
+    <view class="section-header">
+      <text class="section-title">认证兽医团队</text>
+      <view class="section-sort" bindtap="toggleSort">
+        <text class="sort-text">{{sortType === 'rating' ? '评分优先' : '接诊量优先'}}</text>
+        <text class="sort-icon">🔄</text>
+      </view>
+    </view>
+
+    <view class="doctors-list">
+      <view 
+        class="doctor-card" 
+        wx:for="{{filteredDoctors}}" 
+        wx:key="id"
+        bindtap="viewDoctorDetail"
+        data-id="{{item.id}}"
+      >
+        <view class="doctor-main">
+          <view class="doctor-avatar">
+            <image src="{{item.avatar}}" mode="aspectFill"></image>
+            <view class="online-status {{item.isOnline ? 'online' : 'offline'}}">
+              <text class="status-dot"></text>
+            </view>
+          </view>
+          <view class="doctor-info">
+            <view class="doctor-header">
+              <text class="doctor-name">{{item.name}}</text>
+              <view class="doctor-tags">
+                <text class="tag tag-certified">认证</text>
+                <text class="tag tag-specialty">{{item.specialty}}</text>
+              </view>
+            </view>
+            <text class="doctor-title">{{item.title}}</text>
+            <view class="doctor-stats">
+              <view class="stat-item">
+                <text class="stat-icon">⭐</text>
+                <text class="stat-value">{{item.rating}}</text>
+              </view>
+              <view class="stat-divider">|</view>
+              <view class="stat-item">
+                <text class="stat-icon">👥</text>
+                <text class="stat-value">{{item.consultCount}}次</text>
+              </view>
+              <view class="stat-divider">|</view>
+              <view class="stat-item">
+                <text class="stat-icon">🎯</text>
+                <text class="stat-value">{{item.successRate}}%</text>
+              </view>
+            </view>
+            <text class="doctor-intro">{{item.intro}}</text>
+          </view>
+        </view>
+        
+        <view class="doctor-footer">
+          <view class="consult-price">
+            <text class="price-label">咨询费</text>
+            <text class="price-value">¥{{item.price}}</text>
+          </view>
+          <button 
+            class="consult-btn {{item.isOnline ? 'active' : ''}}" 
+            bindtap="bookDoctor"
+            data-id="{{item.id}}"
+            catchtap="true"
+          >
+            <text wx:if="{{item.isOnline}}">立即预约</text>
+            <text wx:else>离线中</text>
+          </button>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 加载更多 -->
+  <view class="load-more" wx:if="{{hasMore}}">
+    <text wx:if="{{!loadingMore}}">加载更多医生</text>
+    <text wx:else>加载中...</text>
+  </view>
+
+  <!-- 空状态 -->
+  <view class="empty-state" wx:if="{{filteredDoctors.length === 0}}">
+    <view class="empty-icon">🔍</view>
+    <text class="empty-text">未找到相关医生</text>
+    <text class="empty-tip">试试其他关键词或筛选条件</text>
+  </view>
+</view>

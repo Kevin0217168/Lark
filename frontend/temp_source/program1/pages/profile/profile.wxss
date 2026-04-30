@@ -1,0 +1,526 @@
+/* pages/profile/profile.wxss */
+.page-container {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #E8F8F5 0%, #F5F7FA 30%);
+}
+
+/* 自定义导航栏 */
+.custom-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: linear-gradient(135deg, #00B894, #00A884);
+  padding: 88rpx 32rpx 24rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 184, 148, 0.2);
+}
+
+.navbar-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.navbar-title {
+  font-size: 36rpx;
+  font-weight: 600;
+  color: #FFFFFF;
+}
+
+.settings-icon {
+  font-size: 40rpx;
+  padding: 8rpx;
+}
+
+/* 用户信息卡片 */
+.user-section {
+  padding: 24rpx;
+}
+
+.user-card {
+  background: linear-gradient(135deg, #FFFFFF, #F8F9FA);
+  border-radius: 32rpx;
+  padding: 40rpx;
+  box-shadow: 0 12rpx 32rpx rgba(0, 0, 0, 0.08);
+}
+
+.user-main {
+  display: flex;
+  gap: 32rpx;
+  margin-bottom: 32rpx;
+}
+
+.user-avatar {
+  position: relative;
+  width: 128rpx;
+  height: 128rpx;
+  flex-shrink: 0;
+}
+
+.user-avatar image {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 4rpx solid #FFFFFF;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.1);
+}
+
+.vip-badge {
+  position: absolute;
+  bottom: -4rpx;
+  right: -4rpx;
+  background: linear-gradient(135deg, #FFD700, #FFA500);
+  padding: 6rpx 12rpx;
+  border-radius: 12rpx;
+  box-shadow: 0 2rpx 8rpx rgba(255, 215, 0, 0.4);
+}
+
+.vip-text {
+  font-size: 18rpx;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+
+.user-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.user-name-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.user-name {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #2D3436;
+}
+
+.user-id {
+  padding: 6rpx 12rpx;
+  background: #F5F7FA;
+  border-radius: 8rpx;
+  font-size: 20rpx;
+  color: #B2BEC3;
+}
+
+.user-stats {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.stat-value {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #00B894;
+}
+
+.stat-label {
+  font-size: 20rpx;
+  color: #B2BEC3;
+}
+
+.stat-divider {
+  width: 1rpx;
+  height: 40rpx;
+  background: #DFE6E9;
+}
+
+.user-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 32rpx;
+  border-top: 1rpx solid #DFE6E9;
+}
+
+.device-list {
+  display: flex;
+  gap: 16rpx;
+}
+
+.device-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+  padding: 16rpx 20rpx;
+  background: linear-gradient(135deg, #F5F7FA, #E8F8F5);
+  border-radius: 16rpx;
+}
+
+.device-icon {
+  font-size: 36rpx;
+}
+
+.device-name {
+  font-size: 20rpx;
+  color: #636E72;
+}
+
+.device-more {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  font-size: 22rpx;
+  color: #00B894;
+}
+
+.arrow {
+  font-size: 20rpx;
+}
+
+/* 订阅区域 */
+.subscription-section {
+  padding: 0 24rpx 24rpx;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24rpx;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #2D3436;
+}
+
+.title-icon {
+  font-size: 40rpx;
+}
+
+.section-desc {
+  font-size: 24rpx;
+  color: #636E72;
+}
+
+.subscription-card {
+  background: #FFFFFF;
+  border-radius: 32rpx;
+  padding: 32rpx;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.06);
+}
+
+/* 订阅对比 */
+.plan-compare {
+  display: flex;
+  gap: 16rpx;
+  margin-bottom: 32rpx;
+}
+
+.plan-item {
+  flex: 1;
+  padding: 24rpx;
+  border-radius: 24rpx;
+  border: 3rpx solid #DFE6E9;
+  transition: all 0.3s ease;
+}
+
+.plan-item.active {
+  border-color: #00B894;
+  background: linear-gradient(135deg, #E8F8F5, #FFFFFF);
+  box-shadow: 0 8rpx 20rpx rgba(0, 184, 148, 0.15);
+}
+
+.plan-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.plan-name {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #2D3436;
+}
+
+.plan-badge {
+  padding: 6rpx 12rpx;
+  border-radius: 8rpx;
+  font-size: 20rpx;
+  font-weight: 500;
+}
+
+.plan-badge.basic {
+  background: #DFE6E9;
+  color: #636E72;
+}
+
+.plan-badge.premium {
+  background: linear-gradient(135deg, #FF7675, #D63031);
+  color: #FFFFFF;
+}
+
+.plan-price {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+  margin-bottom: 24rpx;
+}
+
+.price-value {
+  font-size: 48rpx;
+  font-weight: 700;
+  color: #FF7675;
+}
+
+.price-period {
+  font-size: 24rpx;
+  color: #B2BEC3;
+}
+
+.plan-features {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.feature-item {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.feature-icon {
+  font-size: 24rpx;
+  color: #00B894;
+}
+
+.feature-text {
+  font-size: 24rpx;
+  color: #636E72;
+  line-height: 1.5;
+}
+
+/* 深度版权益 */
+.premium-benefits {
+  padding: 32rpx;
+  background: linear-gradient(135deg, #FFF9E6, #FFF4D6);
+  border-radius: 24rpx;
+  margin-bottom: 32rpx;
+  border: 2rpx solid #FFD700;
+}
+
+.benefits-title {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 24rpx;
+}
+
+.benefits-title text {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #2D3436;
+}
+
+.benefits-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.benefit-item {
+  display: flex;
+  gap: 16rpx;
+}
+
+.benefit-icon {
+  width: 56rpx;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #FFFFFF;
+  border-radius: 12rpx;
+  font-size: 32rpx;
+  flex-shrink: 0;
+}
+
+.benefit-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.benefit-name {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #2D3436;
+}
+
+.benefit-desc {
+  font-size: 22rpx;
+  color: #636E72;
+  line-height: 1.6;
+}
+
+/* 订阅按钮 */
+.subscribe-btn {
+  width: 100%;
+  padding: 28rpx;
+  background: #B2BEC3;
+  color: #FFFFFF;
+  border-radius: 48rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.subscribe-btn.premium {
+  background: linear-gradient(135deg, #FF7675, #D63031);
+  box-shadow: 0 8rpx 24rpx rgba(214, 48, 49, 0.3);
+}
+
+.subscribe-btn::after {
+  border: none;
+}
+
+/* 功能菜单 */
+.menu-section {
+  padding: 0 24rpx 24rpx;
+}
+
+.menu-card {
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  overflow: hidden;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.06);
+}
+
+.menu-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 32rpx;
+  border-bottom: 1rpx solid #F5F7FA;
+  transition: background 0.2s ease;
+}
+
+.menu-item:active {
+  background: #F8F9FA;
+}
+
+.menu-item:last-child {
+  border-bottom: none;
+}
+
+.menu-left {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.menu-icon {
+  width: 56rpx;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12rpx;
+  font-size: 32rpx;
+}
+
+.device-icon {
+  background: linear-gradient(135deg, #74B9FF, #0984E3);
+}
+
+.order-icon {
+  background: linear-gradient(135deg, #A29BFE, #6C5CE7);
+}
+
+.recovery-icon {
+  background: linear-gradient(135deg, #00B894, #00A884);
+}
+
+.report-icon {
+  background: linear-gradient(135deg, #FDCB6E, #F39C12);
+}
+
+.support-icon {
+  background: linear-gradient(135deg, #FF7675, #D63031);
+}
+
+.about-icon {
+  background: linear-gradient(135deg, #B2BEC3, #636E72);
+}
+
+.menu-text {
+  font-size: 28rpx;
+  color: #2D3436;
+  font-weight: 500;
+}
+
+.menu-right {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.menu-tips {
+  font-size: 22rpx;
+  color: #B2BEC3;
+}
+
+.menu-badge {
+  padding: 4rpx 10rpx;
+  background: #FF7675;
+  color: #FFFFFF;
+  border-radius: 10rpx;
+  font-size: 20rpx;
+  font-weight: 500;
+}
+
+.menu-arrow {
+  font-size: 24rpx;
+  color: #B2BEC3;
+}
+
+/* 退出登录 */
+.logout-section {
+  padding: 0 24rpx 24rpx;
+}
+
+.logout-btn {
+  width: 100%;
+  padding: 28rpx;
+  background: #FFFFFF;
+  color: #FF7675;
+  border-radius: 48rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  border: none;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.06);
+}
+
+.logout-btn::after {
+  border: none;
+}
+
+/* 版本信息 */
+.version-info {
+  text-align: center;
+  padding: 24rpx;
+  font-size: 22rpx;
+  color: #B2BEC3;
+}

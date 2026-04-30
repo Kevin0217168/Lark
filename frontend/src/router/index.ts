@@ -53,46 +53,33 @@ const router = createRouter({
       component: BirdsPage,
     },
     {
-      path: "/cloud",
-      component: CloudApp,
-      children: [
-        {
-          path: '',
-          redirect: '/cloud/login'
-        },
-        {
-          path: 'login',
-          component: () => import('@/cloud/pages/LoginPage.vue')
-        },
-        {
-          path: 'register',
-          component: () => import('@/cloud/pages/RegisterPage.vue')
-        },
-        {
-          path: 'home',
-          component: () => import('@/cloud/pages/CloudHomePage.vue')
-        },
-        {
-          path: 'birds',
-          component: () => import('@/cloud/pages/BirdsPage.vue')
-        },
-        {
-          path: 'adopt-birds',
-          component: () => import('@/cloud/pages/AdoptBirdsPage.vue')
-        },
-        {
-          path: 'my',
-          component: () => import('@/cloud/pages/MyPage.vue')
-        },
-        {
-          path: 'bird/:id',
-          component: () => import('@/cloud/pages/BirdDetailPage.vue')
-        }
-      ]
-    },
-    {
       path: "/",
       redirect: "/Login"
+    }, // <-- 老师在这里帮你补上了关键的逗号
+    
+    // ======== 下面是咱们全新开辟的 C 端大平层 ========
+    {
+      path: '/cloud',
+      component: () => import('../cloud/CloudLayout.vue'),
+      redirect: '/cloud/home',
+      children: [
+        {
+          path: 'home',
+          component: () => import('../cloud/pages/Monitor.vue')
+        },
+        {
+          path: 'consultation',
+          component: () => import('../cloud/pages/Consultation.vue')
+        },
+        {
+          path: 'checkup',
+          component: () => import('../cloud/pages/AICheckup.vue')
+        },
+        {
+          path: 'profile',
+          component: () => import('../cloud/pages/Profile.vue')
+        }
+      ]
     }
   ],
 });
