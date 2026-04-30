@@ -265,60 +265,91 @@
             <span>历史数据</span>
           </div>
         </div>
-        <div class="history-content" v-if="historyDeviceId">
+        <div class="history-content" v-if="historyBirdcageKey">
+          <!-- 鸟笼选择器 -->
           <div class="top-section">
             <div class="device-selector">
-              <h3>设备选择</h3>
-              <el-select v-model="historyDeviceId" @change="handleHistoryDeviceChange" class="device-select">
-                <el-option-group
+              <h3>鸟笼选择</h3>
+              <el-select v-model="historyBirdcageKey" @change="handleHistoryBirdcageChange" class="device-select" placeholder="请选择鸟笼">
+                <el-option
                   v-for="group in birdcageGroups"
                   :key="`${group.area}-${group.number}`"
                   :label="group.label"
-                >
-                  <el-option
-                    v-for="device in group.devices"
-                    :key="device.id"
-                    :label="`${device.name} (${device.device_type || '未知'})`"
-                    :value="device.id"
-                  />
-                </el-option-group>
+                  :value="`${group.area}|${group.number}`"
+                />
               </el-select>
             </div>
+            <!-- 鸟笼信息 -->
             <div class="device-info">
-              <h3>设备信息</h3>
+              <h3>鸟笼信息</h3>
               <div class="info-card">
                 <div class="info-item">
-                <span class="info-label">设备名称:</span>
-                <span class="info-value">{{ selectedHistoryDevice?.name }}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">设备ID:</span>
-                <span class="info-value">{{ selectedHistoryDevice?.id }}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">设备类型:</span>
-                <span class="info-value">{{ selectedHistoryDevice?.device_type || '未设置' }}</span>
-              </div>
+                  <span class="info-label">ESP32-CAM:</span>
+                  <span class="info-value" :class="historyCamDevice?.isOnline ? 'online' : 'offline'">
+                    {{ historyCamDevice?.name || '未配置' }}
+                    <el-tag v-if="historyCamDevice" :type="historyCamDevice.isOnline ? 'success' : 'danger'" size="small" class="status-tag-inline">
+                      {{ historyCamDevice.isOnline ? '在线' : '离线' }}
+                    </el-tag>
+                  </span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">ESP32-C3:</span>
+                  <span class="info-value" :class="historyC3Device?.isOnline ? 'online' : 'offline'">
+                    {{ historyC3Device?.name || '未配置' }}
+                    <el-tag v-if="historyC3Device" :type="historyC3Device.isOnline ? 'success' : 'danger'" size="small" class="status-tag-inline">
+                      {{ historyC3Device.isOnline ? '在线' : '离线' }}
+                    </el-tag>
+                  </span>
+                </div>
               </div>
             </div>
           </div>
-          
+
+          <!-- 合并历史数据表格 -->
           <div class="history-table">
-            <h3>历史数据记录</h3>
-            <el-table :data="paginatedHistoryData" stripe style="width: 100%;" max-height="400" border>
-              <el-table-column prop="deviceName" label="设备名称" min-width="150" align="left" />
-              <el-table-column prop="deviceId" label="设备ID" min-width="100" align="center" />
-              <el-table-column prop="device_type" label="设备类型" min-width="120" align="center" />
-              <el-table-column prop="timestamp" label="时间" min-width="180" align="left" />
-              <el-table-column prop="temperature" label="温度 (℃)" min-width="120" align="center" />
-              <el-table-column prop="humidity" label="湿度 (%)" min-width="120" align="center" />
+            <h3>历史数据记录（温度 / 湿度 / 空气质量 / 声音 / 光照 / 紫外线）</h3>
+            <div v-if="historyC3Loading" class="c3-loading">
+              <span>加载中...</span>
+            </div>
+            <el-table v-else :data="paginatedHistoryData" stripe style="width: 100%;" max-height="400" border>
+              <el-table-column prop="timestamp" label="时间" min-width="160" align="left" />
+              <el-table-column prop="temperature" label="温度 (℃)" min-width="100" align="center">
+                <template #default="{ row }">
+                  {{ row.temperature !== null ? row.temperature.toFixed(1) : '-' }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="humidity" label="湿度 (%)" min-width="100" align="center">
+                <template #default="{ row }">
+                  {{ row.humidity !== null ? row.humidity.toFixed(1) : '-' }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="pm25" label="PM2.5 (μg/m³)" min-width="120" align="center">
+                <template #default="{ row }">
+                  {{ row.pm25 !== null ? row.pm25.toFixed(1) : '-' }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="db" label="分贝 (dB)" min-width="100" align="center">
+                <template #default="{ row }">
+                  {{ row.db !== null ? row.db.toFixed(1) : '-' }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="lux" label="光照 (Lux)" min-width="100" align="center">
+                <template #default="{ row }">
+                  {{ row.lux !== null ? row.lux.toFixed(1) : '-' }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="uv" label="UV指数" min-width="90" align="center">
+                <template #default="{ row }">
+                  {{ row.uv !== null ? row.uv.toFixed(1) : '-' }}
+                </template>
+              </el-table-column>
             </el-table>
             <div class="pagination-container">
               <el-pagination
                 v-model:current-page="currentPage"
                 v-model:page-size="pageSize"
                 :page-sizes="[10, 20, 50, 100]"
-                :total="historyDataList.length"
+                :total="mergedHistoryData.length"
                 layout="total, sizes, prev, pager, next, jumper"
                 background
                 :prev-text="'上一页'"
@@ -335,7 +366,7 @@
           </div>
         </div>
         <div class="history-placeholder" v-else>
-          <el-empty description="请选择设备查看历史数据" />
+          <el-empty description="请选择鸟笼查看历史数据" />
         </div>
       </div>
     </div>
@@ -591,74 +622,105 @@
     <!-- 历史数据 -->
     <div v-else-if="activeTab === 'history'" class="history-container">
       <div class="device-selector">
-        <el-select v-model="historyDeviceId" placeholder="选择设备" @change="handleHistoryDeviceChange" style="width: 100%;">
-          <el-option-group
+        <el-select v-model="historyBirdcageKey" placeholder="选择鸟笼" @change="handleHistoryBirdcageChange" style="width: 100%;">
+          <el-option
             v-for="group in birdcageGroups"
             :key="`${group.area}-${group.number}`"
             :label="group.label"
-          >
-            <el-option
-              v-for="device in group.devices"
-              :key="device.id"
-              :label="`${device.name} (${device.device_type || '未知'})`"
-              :value="device.id"
-            />
-          </el-option-group>
+            :value="`${group.area}|${group.number}`"
+          />
         </el-select>
       </div>
-      
-      <div v-if="selectedHistoryDevice" class="history-content">
-        <!-- 设备信息卡片 -->
-        <div class="device-info-card">
-          <div class="info-item">
-            <span class="info-label">设备名称</span>
-            <span class="info-value">{{ selectedHistoryDevice.name }}</span>
+
+      <div v-if="historyBirdcageKey" class="history-content">
+        <!-- 鸟笼信息卡片 -->
+        <div class="birdcage-info-card">
+          <div class="birdcage-header">
+            <span class="birdcage-icon">🏠</span>
+            <span class="birdcage-name">{{ historyBirdcageGroup?.label || '' }}</span>
           </div>
-          <div class="info-item">
-            <span class="info-label">设备类型</span>
-            <span class="info-value">{{ selectedHistoryDevice.device_type || '未设置' }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">设备状态</span>
-            <el-tag :type="selectedHistoryDevice.isOnline ? 'success' : 'danger'" size="small">
-              {{ selectedHistoryDevice.isOnline ? '在线' : '离线' }}
-            </el-tag>
-          </div>
-        </div>
-        
-        <!-- 历史数据列表 -->
-        <div class="history-list">
-          <div v-for="(item, index) in paginatedHistoryData" :key="index" class="history-item">
-            <div class="history-row">
-              <span class="device-name">{{ item.deviceName }}</span>
-              <span class="device-id">ID: {{ item.deviceId }}</span>
-              <span class="history-time">{{ item.timestamp }}</span>
+          <div class="birdcage-devices">
+            <div class="device-chip" :class="historyCamDevice?.isOnline ? 'online' : 'offline'">
+              <span class="chip-dot"></span>
+              <span class="chip-label">CAM</span>
+              <span class="chip-name">{{ historyCamDevice?.name || '未配置' }}</span>
             </div>
-            <div class="history-row data-row">
-              <span class="data-item">温度 {{ item.temperature }}°C</span>
-              <span class="data-item">湿度 {{ item.humidity }}%</span>
+            <div class="device-chip" :class="historyC3Device?.isOnline ? 'online' : 'offline'">
+              <span class="chip-dot"></span>
+              <span class="chip-label">C3</span>
+              <span class="chip-name">{{ historyC3Device?.name || '未配置' }}</span>
             </div>
           </div>
         </div>
-        
-        <!-- 分页组件 -->
-        <div class="pagination-container">
-          <el-pagination
-            v-model:current-page="currentPage"
-            v-model:page-size="pageSize"
-            :page-sizes="[5, 10, 20]"
-            :total="historyDataList.length"
-            layout="prev, pager, next"
-            background
-            :pager-count="3"
-            @size-change="handleSizeChange"
-            @current-change="handleCurrentChange"
-          />
+
+        <!-- 合并历史数据列表 -->
+        <div class="history-data-section">
+          <div v-if="historyC3Loading" class="history-loading">
+            <div class="loading-spinner"></div>
+            <span>加载传感器数据中...</span>
+          </div>
+          <div v-else-if="paginatedHistoryData.length === 0" class="history-empty">
+            <span class="empty-icon">📊</span>
+            <span class="empty-text">暂无历史数据</span>
+          </div>
+          <div v-else class="history-cards">
+            <div v-for="(item, index) in paginatedHistoryData" :key="'merged-' + index" class="history-data-card">
+              <div class="card-time">
+                <span class="time-icon">🕐</span>
+                <span class="time-text">{{ item.timestamp }}</span>
+              </div>
+              <div class="sensor-grid">
+                <div class="sensor-cell temp">
+                  <span class="sensor-icon">🌡️</span>
+                  <span class="sensor-value">{{ item.temperature !== null ? item.temperature.toFixed(1) : '-' }}</span>
+                  <span class="sensor-unit">°C</span>
+                </div>
+                <div class="sensor-cell humidity">
+                  <span class="sensor-icon">💧</span>
+                  <span class="sensor-value">{{ item.humidity !== null ? item.humidity.toFixed(1) : '-' }}</span>
+                  <span class="sensor-unit">%</span>
+                </div>
+                <div class="sensor-cell aqi">
+                  <span class="sensor-icon">🌫️</span>
+                  <span class="sensor-value">{{ item.pm25 !== null ? item.pm25.toFixed(1) : '-' }}</span>
+                  <span class="sensor-unit">PM2.5</span>
+                </div>
+                <div class="sensor-cell sound">
+                  <span class="sensor-icon">🔊</span>
+                  <span class="sensor-value">{{ item.db !== null ? item.db.toFixed(1) : '-' }}</span>
+                  <span class="sensor-unit">dB</span>
+                </div>
+                <div class="sensor-cell lux">
+                  <span class="sensor-icon">☀️</span>
+                  <span class="sensor-value">{{ item.lux !== null ? item.lux.toFixed(1) : '-' }}</span>
+                  <span class="sensor-unit">Lux</span>
+                </div>
+                <div class="sensor-cell uv">
+                  <span class="sensor-icon">🔆</span>
+                  <span class="sensor-value">{{ item.uv !== null ? item.uv.toFixed(1) : '-' }}</span>
+                  <span class="sensor-unit">UV</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="pagination-container">
+            <el-pagination
+              v-model:current-page="currentPage"
+              v-model:page-size="pageSize"
+              :page-sizes="[5, 10, 20]"
+              :total="mergedHistoryData.length"
+              layout="prev, pager, next"
+              background
+              :pager-count="3"
+              @size-change="handleSizeChange"
+              @current-change="handleCurrentChange"
+            />
+          </div>
         </div>
       </div>
-      
+
       <div v-else class="history-placeholder">
-        <el-empty description="请选择设备查看历史数据" />
+        <el-empty description="请选择鸟笼查看历史数据" />
       </div>
     </div>
   </div>
@@ -960,40 +1022,90 @@ const handleDeviceChange = async () => {
   }
 };
 
-// 历史数据相关
-const historyDeviceId = ref<number | null>(null);
+// 历史数据相关 - 以鸟笼为单位
+const historyBirdcageKey = ref<string>('');
+const historyC3Data = ref<Array<{ timestamp: string; pm25: number | null; db: number | null; lux: number | null; uv: number | null }>>([]);
+const historyC3Loading = ref(false);
 
-const selectedHistoryDevice = computed(() => {
-  if (!historyDeviceId.value) return null;
-  // 每次计算时重新获取最新的设备列表
-  const latestDevices = getDevices();
-  return latestDevices.find((device: any) => device.id === historyDeviceId.value) || null;
+const historyBirdcageGroup = computed(() => {
+  if (!historyBirdcageKey.value) return null;
+  const [area, numStr] = historyBirdcageKey.value.split('|');
+  const number = Number(numStr);
+  return birdcageGroups.value.find(g => g.area === area && g.number === number) || null;
 });
 
-const historyDataList = computed(() => {
-  if (!historyDeviceId.value) return [];
-  const historyData = getDeviceHistoryData(historyDeviceId.value);
-  const device = selectedHistoryDevice.value;
+const historyCamDeviceId = computed(() => {
+  if (!historyBirdcageGroup.value) return null;
+  const cam = historyBirdcageGroup.value.devices.find((d: any) => d.device_type === 'ESP32-CAM');
+  return cam?.id ?? null;
+});
+
+const historyC3DeviceId = computed(() => {
+  if (!historyBirdcageGroup.value) return null;
+  const c3 = historyBirdcageGroup.value.devices.find((d: any) => d.device_type === 'ESP32-C3');
+  return c3?.id ?? null;
+});
+
+const historyCamDevice = computed(() => {
+  if (!historyBirdcageGroup.value) return null;
+  return historyBirdcageGroup.value.devices.find((d: any) => d.device_type === 'ESP32-CAM') || null;
+});
+
+const historyC3Device = computed(() => {
+  if (!historyBirdcageGroup.value) return null;
+  return historyBirdcageGroup.value.devices.find((d: any) => d.device_type === 'ESP32-C3') || null;
+});
+
+const historyCamDataList = computed(() => {
+  if (!historyCamDeviceId.value) return [];
+  const historyData = getDeviceHistoryData(historyCamDeviceId.value);
+  const device = historyCamDevice.value;
   const deviceName = device?.name || '';
   return historyData
     .map(data => ({
       ...data,
       deviceName: deviceName,
-      deviceId: historyDeviceId.value,
+      deviceId: historyCamDeviceId.value,
       timestamp: data.timestamp
     }))
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+});
+
+// 合并 CAM 和 C3 数据为一个统一的列表
+const mergedHistoryData = computed(() => {
+  const c3Map = new Map<string, { pm25: number | null; db: number | null; lux: number | null; uv: number | null }>();
+  for (const item of historyC3Data.value) {
+    c3Map.set(item.timestamp, { pm25: item.pm25, db: item.db, lux: item.lux, uv: item.uv });
+  }
+  const allTimes = new Set<string>();
+  for (const item of historyCamDataList.value) allTimes.add(item.timestamp);
+  for (const item of historyC3Data.value) allTimes.add(item.timestamp);
+  return Array.from(allTimes)
+    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
+    .map(ts => {
+      const camItem = historyCamDataList.value.find(d => d.timestamp === ts);
+      const c3Item = c3Map.get(ts);
+      return {
+        timestamp: ts,
+        temperature: camItem?.temperature ?? null,
+        humidity: camItem?.humidity ?? null,
+        pm25: c3Item?.pm25 ?? null,
+        db: c3Item?.db ?? null,
+        lux: c3Item?.lux ?? null,
+        uv: c3Item?.uv ?? null,
+      };
+    });
 });
 
 // 分页相关
 const currentPage = ref(1);
 const pageSize = ref(10);
 
-// 分页后的历史数据
+// 分页后的合并历史数据
 const paginatedHistoryData = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value;
   const end = start + pageSize.value;
-  return historyDataList.value.slice(start, end);
+  return mergedHistoryData.value.slice(start, end);
 });
 
 // 处理每页条数变化
@@ -1007,15 +1119,68 @@ const handleCurrentChange = (val: number) => {
   currentPage.value = val;
 };
 
-const handleHistoryDeviceChange = async () => {
-  if (selectedHistoryDevice.value && historyDeviceId.value) {
-    ElMessage.success(`已切换到设备: ${selectedHistoryDevice.value.name}`);
-    if (isMobile.value) {
-      await getOrUpdateDeviceHistoryData(historyDeviceId.value);
-    } else {
-      await fetchDeviceHistoryData(historyDeviceId.value);
+// 获取 C3 历史传感器数据
+const fetchHistoryC3Data = async (c3DeviceId: number) => {
+  historyC3Loading.value = true;
+  try {
+    const [aqiData, soundData, luxData, uvData] = await Promise.allSettled([
+      fetchSensorTimeSeries(c3DeviceId, 'pms9103m', 'pm2_5_cf1'),
+      fetchSensorTimeSeries(c3DeviceId, 'sound_meter', 'db'),
+      fetchSensorTimeSeries(c3DeviceId, 'veml7700', 'lux'),
+      fetchSensorTimeSeries(c3DeviceId, 'uv_meter', 'uv_index')
+    ]);
+    const aqiResult = aqiData.status === 'fulfilled' ? aqiData.value : { times: [], values: [] };
+    const soundResult = soundData.status === 'fulfilled' ? soundData.value : { times: [], values: [] };
+    const luxResult = luxData.status === 'fulfilled' ? luxData.value : { times: [], values: [] };
+    const uvResult = uvData.status === 'fulfilled' ? uvData.value : { times: [], values: [] };
+    const soundMap = new Map<string, number>();
+    soundResult.times.forEach((t: string, i: number) => soundMap.set(t, soundResult.values[i]!));
+    const luxMap = new Map<string, number>();
+    luxResult.times.forEach((t: string, i: number) => luxMap.set(t, luxResult.values[i]!));
+    const uvMap = new Map<string, number>();
+    uvResult.times.forEach((t: string, i: number) => uvMap.set(t, uvResult.values[i]!));
+    const merged: Array<{ timestamp: string; pm25: number | null; db: number | null; lux: number | null; uv: number | null }> = [];
+    const allTimestamps = new Set([...aqiResult.times, ...soundResult.times, ...luxResult.times, ...uvResult.times]);
+    const sortedTimestamps = Array.from(allTimestamps).sort().reverse();
+    for (const ts of sortedTimestamps) {
+      const idx = aqiResult.times.indexOf(ts);
+      merged.push({
+        timestamp: ts,
+        pm25: idx >= 0 ? (aqiResult.values[idx] ?? null) : null,
+        db: soundMap.get(ts) ?? null,
+        lux: luxMap.get(ts) ?? null,
+        uv: uvMap.get(ts) ?? null,
+      });
     }
-    currentPage.value = 1;
+    historyC3Data.value = merged;
+  } catch (error) {
+    console.error('获取C3历史数据失败:', error);
+    historyC3Data.value = [];
+  } finally {
+    historyC3Loading.value = false;
+  }
+};
+
+const handleHistoryBirdcageChange = async () => {
+  if (!historyBirdcageKey.value) return;
+  const group = historyBirdcageGroup.value;
+  if (!group) return;
+  const parts: string[] = [];
+  if (historyCamDevice.value) parts.push(historyCamDevice.value.name);
+  if (historyC3Device.value) parts.push(historyC3Device.value.name);
+  ElMessage.success(`已选择鸟笼: ${group.area} #${group.number}${parts.length ? ' (' + parts.join(' + ') + ')' : ''}`);
+  currentPage.value = 1;
+  if (historyCamDeviceId.value) {
+    if (isMobile.value) {
+      await getOrUpdateDeviceHistoryData(historyCamDeviceId.value);
+    } else {
+      await fetchDeviceHistoryData(historyCamDeviceId.value);
+    }
+  }
+  if (historyC3DeviceId.value) {
+    await fetchHistoryC3Data(historyC3DeviceId.value);
+  } else {
+    historyC3Data.value = [];
   }
 };
 
@@ -2195,13 +2360,19 @@ onMounted(async () => {
             initGaugeCharts();
           });
         }
-      } else if (activeTab.value === 'history' && !historyDeviceId.value) {
-        historyDeviceId.value = currentDevices[0]?.id || null;
-        if (historyDeviceId.value) {
-          if (isMobile.value) {
-            await getOrUpdateDeviceHistoryData(historyDeviceId.value);
-          } else {
-            await fetchDeviceHistoryData(historyDeviceId.value);
+      } else if (activeTab.value === 'history' && !historyBirdcageKey.value) {
+        if (birdcageGroups.value.length > 0) {
+          const g = birdcageGroups.value[0]!;
+          historyBirdcageKey.value = `${g.area}|${g.number}`;
+          if (historyCamDeviceId.value) {
+            if (isMobile.value) {
+              await getOrUpdateDeviceHistoryData(historyCamDeviceId.value);
+            } else {
+              await fetchDeviceHistoryData(historyCamDeviceId.value);
+            }
+          }
+          if (historyC3DeviceId.value) {
+            await fetchHistoryC3Data(historyC3DeviceId.value);
           }
         }
       } else if (activeTab.value === 'analysis') {
@@ -2275,20 +2446,20 @@ watch(() => props.activeTab, async (newTab, oldTab) => {
     stopRealtimeDataTimer();
   } else if (newTab === 'history') {
     stopRealtimeDataTimer();
-    fetchDevices().then(() => {
-      const latestDevices = getDevices();
-      if (latestDevices.length > 0) {
-        const deviceId = latestDevices[0]?.id || null;
-        historyDeviceId.value = deviceId;
+    fetchDevices().then(async () => {
+      if (birdcageGroups.value.length > 0 && !historyBirdcageKey.value) {
+        const g = birdcageGroups.value[0]!;
+        historyBirdcageKey.value = `${g.area}|${g.number}`;
         
-        if (deviceId) {
-          nextTick(async () => {
-            if (isMobile.value) {
-              await getOrUpdateDeviceHistoryData(deviceId);
-            } else {
-              await fetchDeviceHistoryData(deviceId);
-            }
-          });
+        if (historyCamDeviceId.value) {
+          if (isMobile.value) {
+            await getOrUpdateDeviceHistoryData(historyCamDeviceId.value);
+          } else {
+            await fetchDeviceHistoryData(historyCamDeviceId.value);
+          }
+        }
+        if (historyC3DeviceId.value) {
+          await fetchHistoryC3Data(historyC3DeviceId.value);
         }
       }
     });
@@ -2318,7 +2489,7 @@ watch(() => props.activeTab, async (newTab, oldTab) => {
     });
   } else {
     selectedDeviceId.value = null;
-    historyDeviceId.value = null;
+    historyBirdcageKey.value = '';
     stopRealtimeMonitoring();
   }
 }, { immediate: true });
@@ -3432,9 +3603,9 @@ const goToFullscreen = () => {
   height: 200px;
 }
 
-/* 历史数据 */
+/* 历史数据 - 移动端 */
 .mobile-data .history-container {
-  padding: 0;
+  padding: 0 12px;
 }
 
 .mobile-data .history-content {
@@ -3443,91 +3614,253 @@ const goToFullscreen = () => {
   gap: 16px;
 }
 
-.mobile-data .device-info-card {
-  background: white;
-  border-radius: 12px;
-  padding: 16px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+/* 鸟笼信息卡片 */
+.mobile-data .birdcage-info-card {
+  background: linear-gradient(135deg, rgba(139, 173, 66, 0.08) 0%, rgba(106, 154, 53, 0.05) 100%);
+  backdrop-filter: blur(16px);
+  border-radius: 20px;
+  padding: 20px;
+  border: 1px solid rgba(139, 173, 66, 0.15);
+  box-shadow: 0 4px 16px rgba(139, 173, 66, 0.08);
+}
+
+.mobile-data .birdcage-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
-.mobile-data .device-info-card .info-item {
+.mobile-data .birdcage-icon {
+  font-size: 24px;
+}
+
+.mobile-data .birdcage-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #166534;
+}
+
+.mobile-data .birdcage-devices {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-.mobile-data .device-info-card .info-label {
+.mobile-data .device-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 50px;
   font-size: 12px;
-  color: #909399;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
 }
 
-.mobile-data .device-info-card .info-value {
-  font-size: 14px;
+.mobile-data .device-chip.online {
+  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.mobile-data .device-chip.offline {
+  border-color: rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.mobile-data .device-chip .chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #9ca3af;
+}
+
+.mobile-data .device-chip.online .chip-dot {
+  background: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.4);
+}
+
+.mobile-data .device-chip.offline .chip-dot {
+  background: #ef4444;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.3);
+}
+
+.mobile-data .device-chip .chip-label {
   font-weight: 600;
-  color: #303133;
+  color: #4b5563;
 }
 
-.mobile-data .history-list {
+.mobile-data .device-chip .chip-name {
+  color: #6b7280;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 历史数据区域 */
+.mobile-data .history-data-section {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.mobile-data .history-item {
-  background: white;
-  border-radius: 8px;
-  padding: 10px 12px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-}
-
-.mobile-data .history-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 6px;
-}
-
-.mobile-data .history-row .device-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: #303133;
-  flex-shrink: 0;
-}
-
-.mobile-data .history-row .device-id {
-  font-size: 12px;
-  color: #909399;
-  flex-shrink: 0;
-}
-
-.mobile-data .history-row .history-time {
-  font-size: 12px;
-  color: #909399;
-  margin-left: auto;
-}
-
-.mobile-data .history-row.data-row {
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px solid #f0f0f0;
-}
-
-.mobile-data .history-row .data-item {
-  font-size: 14px;
-  color: #303133;
-}
-
-.mobile-data .history-list {
+.mobile-data .history-loading {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 20px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.mobile-data .history-loading .loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(139, 173, 66, 0.2);
+  border-top: 3px solid #8BAD42;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.mobile-data .history-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 20px;
+  color: #9ca3af;
+}
+
+.mobile-data .history-empty .empty-icon {
+  font-size: 48px;
+  opacity: 0.6;
+}
+
+.mobile-data .history-empty .empty-text {
+  font-size: 14px;
+}
+
+/* 历史数据卡片 */
+.mobile-data .history-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mobile-data .history-data-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border-radius: 16px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
+}
+
+.mobile-data .history-data-card:active {
+  transform: scale(0.98);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.04);
+}
+
+.mobile-data .card-time {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.mobile-data .card-time .time-icon {
+  font-size: 14px;
+}
+
+.mobile-data .card-time .time-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4b5563;
+  letter-spacing: 0.3px;
+}
+
+/* 传感器网格 */
+.mobile-data .sensor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
 
+.mobile-data .sensor-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 10px 4px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease;
+}
+
+.mobile-data .sensor-cell.temp {
+  background: linear-gradient(135deg, rgba(255, 120, 117, 0.08) 0%, rgba(255, 120, 117, 0.03) 100%);
+  border-color: rgba(255, 120, 117, 0.15);
+}
+
+.mobile-data .sensor-cell.humidity {
+  background: linear-gradient(135deg, rgba(105, 192, 255, 0.08) 0%, rgba(105, 192, 255, 0.03) 100%);
+  border-color: rgba(105, 192, 255, 0.15);
+}
+
+.mobile-data .sensor-cell.aqi {
+  background: linear-gradient(135deg, rgba(230, 162, 60, 0.08) 0%, rgba(230, 162, 60, 0.03) 100%);
+  border-color: rgba(230, 162, 60, 0.15);
+}
+
+.mobile-data .sensor-cell.sound {
+  background: linear-gradient(135deg, rgba(144, 147, 153, 0.08) 0%, rgba(144, 147, 153, 0.03) 100%);
+  border-color: rgba(144, 147, 153, 0.15);
+}
+
+.mobile-data .sensor-cell.lux {
+  background: linear-gradient(135deg, rgba(103, 194, 58, 0.08) 0%, rgba(103, 194, 58, 0.03) 100%);
+  border-color: rgba(103, 194, 58, 0.15);
+}
+
+.mobile-data .sensor-cell.uv {
+  background: linear-gradient(135deg, rgba(245, 108, 108, 0.08) 0%, rgba(245, 108, 108, 0.03) 100%);
+  border-color: rgba(245, 108, 108, 0.15);
+}
+
+.mobile-data .sensor-cell .sensor-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.mobile-data .sensor-cell .sensor-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #303133;
+  line-height: 1.2;
+}
+
+.mobile-data .sensor-cell .sensor-unit {
+  font-size: 10px;
+  color: #9ca3af;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 .mobile-data .pagination-container {
-  margin-top: 16px;
+  margin-top: 8px;
   display: flex;
   justify-content: center;
   padding: 0 4px;
