@@ -2,323 +2,259 @@
 
 ## 项目简介
 
-Lark 是一个智能鸟厂监控系统前端项目，提供设备管理、实时数据监控、数据分析等功能。用户可以通过 Web 界面实时监控鸟厂环境数据、管理设备、查看历史记录等。项目支持桌面端和移动端自适应，提供一致的用户体验。
+Lark 是一个智能鸟厂监控系统前端项目，提供设备管理、实时数据监控、数据分析、雏鸟管理等功能。用户可以通过 Web 界面实时监控鸟厂环境数据、管理设备、查看历史记录、领养雏鸟等。项目支持桌面端和移动端双端适配，提供一致且现代化的用户体验。
 
 ## 技术栈
 
 ### 核心框架
-- **Vue 3** - 渐进式 JavaScript 框架，使用 Composition API
-- **TypeScript** - JavaScript 的超集，提供静态类型检查
-- **Vite** - 下一代前端构建工具，提供快速的开发体验
+- **Vue 3.5** - 渐进式 JavaScript 框架，使用 Composition API
+- **TypeScript 5.9** - JavaScript 的超集，提供静态类型检查
+- **Vite 7.3** - 下一代前端构建工具，提供快速的开发体验
 
 ### UI 组件库
-- **Element Plus** - 基于 Vue 3 的组件库
+- **Element Plus 2.13** - 基于 Vue 3 的企业级组件库
 - **@element-plus/icons-vue** - Element Plus 图标库
 
 ### 数据可视化
-- **ECharts 6** - 强大的图表库，用于数据可视化
+- **ECharts 6** - 强大的图表库，用于数据可视化展示
 
 ### HTTP 请求
-- **Axios** - 基于 Promise 的 HTTP 客户端
+- **原生 Fetch API** - 封装了请求/响应拦截器、Token 自动刷新、错误处理
+
+### 状态管理
+- **Pinia（通过组合式函数）** - `deviceStore.ts` 使用组合式 API 管理设备状态
 
 ## 文件树结构
 
 ```
 ├── README.md                  本文档
-├── SETUP_README.md            项目设置说明
 ├── index.html                 HTML 入口文件
 ├── package.json               项目配置文件
-├── pnpm-lock.yaml             依赖版本锁定文件
+├── vite.config.ts             Vite 配置文件
+├── tsconfig.json              TypeScript 配置
+├── tsconfig.app.json          TypeScript 应用配置
+├── tsconfig.node.json         TypeScript Node 配置
 ├── public                     公共资源目录
 │   ├── banner.jpg             横幅图片
 │   └── favicon.ico            网站图标
 ├── src                        源代码目录
-│   ├── App.vue                根组件
+│   ├── App.vue                根组件（管理后台布局）
 │   ├── main.ts                Vue 入口文件
 │   ├── assets                 静态资源目录
 │   │   └── style.css          全局样式文件
-│   ├── components             组件目录
-│   │   ├── mobile/            移动端组件目录
-│   │   │   ├── MobileData.vue        移动端数据管理组件
-│   │   │   ├── MobileDevice.vue      移动端设备管理组件
-│   │   │   ├── MobileHome.vue        移动端总览页面组件
-│   │   │   ├── MobileLogin.vue       移动端登录组件
-│   │   │   ├── MobileProfile.vue     移动端用户信息组件
-│   │   │   ├── MobileRegister.vue    移动端注册组件
-│   │   │   └── MobileUserManage.vue  移动端用户管理组件
-│   │   ├── Data.vue           数据管理组件
-│   │   ├── Device.vue         设备管理组件
-│   │   ├── FullscreenMode.vue 全屏模式组件
-│   │   ├── Header.vue         全局导航栏组件
-│   │   ├── Home.vue           总览页面组件
-│   │   ├── Login.vue          登录组件
-│   │   ├── Old_Home.vue       旧版主页面组件
-│   │   ├── Profile.vue        用户信息组件
-│   │   ├── Register.vue       注册组件
-│   │   ├── Sider.vue          侧边导航栏组件
-│   │   ├── Stream.vue         实时数据流组件
+│   ├── components             管理后台组件目录
+│   │   ├── AuthPage.vue       身份验证页面
+│   │   ├── BirdsPage.vue      雏鸟管理页面（管理后台）
+│   │   ├── Data.vue           数据管理组件（实时/分析/历史）
+│   │   ├── DevicePage.vue     设备管理组件（总览/管理/日志）
+│   │   ├── Header.vue         顶部导航栏
+│   │   ├── HomePage.vue       总览页面
+│   │   ├── ProfilePage.vue    用户信息页面
+│   │   ├── Sider.vue          侧边导航栏
+│   │   ├── Stream.vue         实时视频流组件
 │   │   └── UserManage.vue     用户管理组件
-│   ├── pages                  页面目录
-│   │   └── MobilePage.vue     移动端页面容器组件
-│   ├── router                 路由配置目录
-│   │   └── index.ts           路由配置文件
-│   ├── stores                 状态管理目录
-│   │   └── deviceStore.ts     设备数据管理模块
-│   ├── utils                  工具函数目录
+│   ├── cloud                  云养鸟移动端系统
+│   │   ├── cloud_App.vue      云养系统根布局
+│   │   ├── components
+│   │   │   └── BottomNav.vue  底部导航栏
+│   │   └── pages
+│   │       ├── LoginPage.vue      云养登录
+│   │       ├── RegisterPage.vue   云养注册
+│   │       ├── CloudHomePage.vue  云养首页
+│   │       ├── BirdsPage.vue      雏鸟列表/详情
+│   │       ├── BirdDetailPage.vue 雏鸟详情
+│   │       ├── AdoptBirdsPage.vue 领养雏鸟
+│   │       └── MyPage.vue         个人中心
+│   ├── pages
+│   │   └── MobilePage.vue     移动端页面容器
+│   ├── router
+│   │   └── index.ts           路由配置
+│   ├── stores
+│   │   └── deviceStore.ts     设备状态管理
+│   ├── utils
+│   │   ├── api.ts             API 请求封装
 │   │   └── mobileAdapter.ts   移动端适配工具
-│   ├── views                  视图目录
-│   │   ├── LoginView.vue      登录视图包装器
-│   │   └── RegisterView.vue   注册视图包装器
-├── tsconfig.app.json          TypeScript 应用配置
-├── tsconfig.json              TypeScript 配置
-├── tsconfig.node.json         TypeScript Node 配置
-└── vite.config.ts             Vite 配置文件
+│   └── views
+│       ├── LoginView.vue      登录视图包装器
+│       └── RegisterView.vue   注册视图包装器
 ```
 
-## 页面导航结构
+## 双系统架构
 
-### 桌面端
+项目包含两个独立的用户系统：
 
-```
-Header（全局导航栏）
-├── 主页标志 (Lark)
-│   └── 未登录 → 宣传页
-│   └── 已登录 → 总览页面
-├── 总览
-│   └── 未登录 → 重定向到登录
-│   └── 已登录 → Home.vue
-├── 数据
-│   └── 未登录 → 重定向到登录
-│   └── 已登录 → Data.vue
-│       ├── 实时（Sider 导航）
-│       ├── 分析（Sider 导航）
-│       └── 历史数据（Sider 导航）
-├── 设备
-│   └── 未登录 → 重定向到登录
-│   └── 已登录 → Device.vue
-│       ├── 总览（Sider 导航）
-│       ├── 管理（Sider 导航）
-│       └── 日志（Sider 导航）
-├── 登录
-│   └── Login.vue
-└── 注册
-    └── Register.vue
-```
+### 1. 管理后台系统（桌面端为主）
+- **入口**：`/` → `/Login`
+- **用户角色**：root（管理员）、user（普通用户）
+- **布局**：Header 顶部导航 + Sider 侧边栏
+- **功能模块**：
+  - 总览（设备状态、环境数据、错误日志）
+  - 数据（实时监控、数据分析、历史数据）
+  - 设备（总览、管理、日志）
+  - 雏鸟管理
+  - 用户管理
 
-### 移动端
+### 2. 云养鸟系统（移动端专属）
+- **入口**：`/cloud`
+- **用户角色**：clouduser（云养用户）
+- **布局**：全屏页面 + BottomNav 底部导航
+- **功能模块**：
+  - 首页（鸟场介绍、可领养雏鸟）
+  - 雏鸟（我的雏鸟列表、详情、喂食、环境数据）
+  - 我的（个人中心、设置）
+- **限制**：桌面端访问会提示"请使用移动端访问"
+
+## 路由结构
 
 ```
-MobilePage（移动端页面容器）
-├── 顶部导航栏
-│   ├── Logo (Lark)
-│   └── 右上角
-│       ├── 未登录 → 登录/注册按钮
-│       └── 已登录 → 用户头像
-├── 页面内容
-│   ├── 登录 → MobileLogin.vue
-│   ├── 注册 → MobileRegister.vue
-│   ├── 总览 → MobileHome.vue
-│   ├── 数据 → MobileData.vue
-│   │   ├── 实时（顶部标签导航）
-│   │   ├── 分析（顶部标签导航）
-│   │   └── 历史数据（顶部标签导航）
-│   ├── 设备 → MobileDevice.vue
-│   │   ├── 总览（顶部标签导航）
-│   │   ├── 管理（顶部标签导航）
-│   │   └── 日志（顶部标签导航）
-│   ├── 我的 → MobileProfile.vue
-│   │   └── 用户管理入口（仅管理员可见）
-│   └── 用户管理 → MobileUserManage.vue（仅管理员可访问）
-└── 底部导航栏
-    ├── 总览
-    ├── 数据
-    ├── 设备
-    └── 我的
+/                            → 重定向到 /Login
+/Login                       → 管理后台登录
+/Register                    → 管理后台注册
+/Home                        → 总览页面
+/Stream                      → 实时视频流
+/Device                      → 设备管理
+/Data?activeTab=realtime     → 数据管理（实时/分析/历史）
+/Profile                     → 个人信息
+/UserManage                  → 用户管理（仅管理员）
+/birds                       → 雏鸟管理（管理后台）
+/cloud                       → 云养系统入口
+/cloud/login                 → 云养登录
+/cloud/register              → 云养注册
+/cloud/home                  → 云养首页
+/cloud/birds                 → 我的雏鸟
+/cloud/adopt-birds           → 领养雏鸟
+/cloud/my                    → 个人中心
+/cloud/bird/:id              → 雏鸟详情
 ```
 
-## 主要功能模块
+### 路由守卫
+- `clouduser` 角色只能访问 `/cloud/*` 路由，访问其他路由会被拦截并重定向
+- 管理后台路由（非 `/cloud`）需要登录状态，未登录重定向到 `/Login`
+- `/cloud/login` 和 `/cloud/register` 无需登录即可访问
 
-### 1. 用户认证模块
+## API 请求封装
 
-#### 登录功能
-- 用户名/密码登录
-- 表单验证（用户名 3-20 字符，密码 8-32 字符）
-- 自动登录（使用 refresh token）
-- JWT Token 认证
-- 登录状态持久化
+`src/utils/api.ts` 提供了统一的 HTTP 请求封装：
 
-#### 注册功能
-- 用户注册表单
-- 用户名、密码、邮箱验证
-- 密码强度验证
+### 特性
+- **请求拦截器**：自动添加 `Authorization` Header（JWT Token）
+- **响应拦截器**：统一错误处理、HTTP 状态码处理
+- **Token 自动刷新**：401 时自动调用 `/api/refresh` 刷新 Token
+- **请求队列**：刷新 Token 期间，新请求会进入队列等待
+- **登录失效处理**：刷新失败时清除登录状态并跳转登录页
 
-#### 用户信息管理
-- 查看用户信息（用户名、昵称、邮箱、账号类型）
-- 修改账号信息
-- 退出登录
-- 注销账号（需密码验证）
+### 使用方法
+```typescript
+import { api } from '@/utils/api';
 
-### 2. 总览页面
+// GET 请求
+const data = await api.get('/api/devices');
 
-#### 设备状态模块
-- 显示在线/离线设备数量
-- 进度条可视化展示设备在线率
-- 点击"设备管理"按钮跳转到设备管理子界面
+// POST 请求
+const result = await api.post('/api/login', { username, password });
 
-#### 环境数据模块
-- 显示平均温度、湿度、空气质量
-- 数据均匀分布展示
-- 点击"数据分析"按钮跳转到数据分析子界面
+// PUT 请求
+await api.put('/api/devices/1', { name: '新名称' });
 
-#### 错误数量模块
-- 显示错误日志数量
-- 预览最近两条错误日志（设备名称 + 日志内容）
-- 动态颜色变化（无错误时显示青绿色，有错误时显示红色）
-- 点击"查看日志"按钮跳转到设备日志子界面
+// DELETE 请求
+await api.delete('/api/devices/1');
+```
 
-#### 数据图表
-- ECharts 折线图展示所有设备平均值
-- 温度、湿度、空气质量趋势
-- 最近 24 小时数据展示
+## 状态管理
 
-### 3. 数据管理模块
+`src/stores/deviceStore.ts` 使用 Vue 3 Composition API 实现状态管理：
 
-#### 实时数据子界面
-- **设备选择**：下拉选择设备
-- **设备数据展示**：
-  - 设备名称、在线状态
-  - 实时温度、湿度数据
-  - 设备创建时间
-- **实时监控**：
-  - WebSocket 视频流传输
-  - 手动重连功能
-  - 左右翻转、上下翻转控制
-  - 视频质量调节
+### 核心数据
+- `devices` - 设备列表（含在线状态、温度、湿度等）
+- `deviceHistoryData` - 设备历史数据缓存
+- `deviceLogs` - 设备日志
+- `lastUpdateTime` / `lastHistoryUpdateTime` - 数据更新时间
 
-#### 数据分析子界面
-- ECharts 图表展示
-- 温度、湿度、空气质量趋势曲线
-- 时间范围选择
+### 主要方法
+- `fetchDevices()` - 获取所有设备
+- `fetchDeviceHistoryData(deviceId?)` - 获取设备历史数据（分组统计）
+- `getOrUpdateDeviceHistoryData(deviceId?)` - 获取或更新（带缓存）
+- `fetchSensorData(deviceId, timeRange)` - 获取传感器分组数据
+- `updateDevice(deviceId, data)` - 更新设备信息
 
-#### 历史数据子界面
-- 特定设备历史数据查询
-- 表格形式展示
-- 时间、温度、湿度、空气质量数据
+## 数据管理模块（Data.vue）
 
-### 4. 设备管理模块
+Data.vue 是核心数据展示组件，包含三个子界面：
 
-#### 设备总览子界面
-- 卡片形式展示所有设备
-- 显示设备名称、ID、在线状态
-- 在线设备显示绿色卡片，离线设备显示灰色卡片
+### 实时数据（realtime）
+- 鸟笼选择器（显示 CAM + C3 设备）
+- 实时温度、湿度卡片
+- 环境数据环形进度条（PM2.5、分贝、光照、UV）
+- WebSocket 视频流（MJPEG）
 
-#### 设备管理子界面
-- **设备列表**：
-  - 表格展示设备名称、ID、在线状态、添加时间
-  - 操作按钮：编辑、更新固件、删除
-- **添加设备**：
-  - 输入设备名称、设备密钥、所属区域、设备编号
-  - 后端自动生成设备 ID
-  - 编号重复验证（同区域内编号不能重复）
-- **编辑设备**：
-  - 修改设备名称、区域、编号
-  - 编号重复验证
-  - 不显示设备 ID
-- **删除设备**：
-  - 二次确认删除（防止误删除）
-  - 删除前自动刷新 Token
-  - 权限验证（仅 root 用户可删除）
-- **筛选功能**：
-  - 设备名称模糊搜索
-  - 所属区域多选筛选
-  - 在线状态筛选
-  - 重置筛选功能
+### 数据分析（analysis）
+- 鸟笼选择器
+- 时间范围切换（今天 / 两天）
+- 6 个传感器图表：温度、湿度、PM2.5、分贝、光照、UV
+- 桌面端：并排图表布局
+- 移动端：垂直滚动卡片布局
 
-#### 设备日志子界面
-- **日志列表**：
-  - 表格展示日志 ID、设备名称、级别、内容、时间
-  - 日志级别标签（信息、警告、错误）
-- **筛选功能**：
-  - 设备名称模糊搜索
-  - 所属区域多选筛选
-  - 日志级别多选筛选
-  - 重置筛选功能
+### 历史数据（history）
+- 鸟笼选择器
+- 合并 CAM + C3 数据的表格
+- 显示：时间、温度、湿度、PM2.5、分贝、光照、UV
+- 分页展示
 
-### 5. 用户管理模块
+## 设备管理模块（DevicePage.vue）
 
-#### 个人信息页面
-- 头像显示（默认显示昵称首字母）
-- 用户名、昵称、账号类型、邮箱展示
-- 修改账号信息
-- 退出登录
-- 注销账号（需密码验证 + 二次确认）
+### 总览子界面
+- 鸟笼卡片网格（每个卡片显示 CAM + C3 设备）
+- 设备在线状态指示
 
-#### 用户管理页面（仅管理员）
-- **用户列表**：
-  - 桌面端：表格展示用户信息
-  - 移动端：卡片形式展示用户信息
-  - 显示用户 ID、头像、用户名、昵称、角色、邮箱
-- **添加用户**：
-  - 输入用户名、密码、昵称、角色、邮箱、头像
-  - 表单验证
-- **编辑用户**：
-  - 修改用户名、昵称、角色、邮箱、头像
-  - 可选修改密码
-  - 不能修改自己的角色
-- **删除用户**：
-  - 单个删除（二次确认）
-  - 批量删除（二次确认）
-  - 不能删除自己的账号
-- **筛选功能**：
-  - 角色筛选（管理员/普通用户）
-  - 用户名/昵称/邮箱模糊搜索
+### 管理子界面
+- 设备表格（名称、类型、区域、编号、状态）
+- 添加/编辑/删除设备
+- 按鸟笼筛选
+
+### 日志子界面
+- 日志表格（ID、设备、级别、内容、时间）
+- 按鸟笼/级别筛选
+
+## 云养鸟系统（cloud/）
+
+### 设计风格
+- 自然绿色主题（#8BAD42 品牌色）
+- 毛玻璃效果（backdrop-filter）
+- 圆角卡片（16-20px）
+- 渐变背景
+- 底部安全区适配
+
+### 核心页面
+
+#### BirdsPage.vue（雏鸟界面）
+- 顶部：日龄、品种、鸟笼信息
+- 每日喂食模块（🐣 + 🍞 图标、喂食按钮）
+- 环境数据模块（温度、湿度、PM2.5、分贝、光照、UV 环形进度条）
+- 基本信息模块（体重、健康状态、备注）
+
+#### 数据绑定
+- 雏鸟绑定鸟笼（area + number）
+- 自动获取鸟笼内的 CAM/C3 设备数据
+- C3 缺失时显示 "未配置" 提示
 
 ## 移动端适配
 
-### 设备检测
-- 通过 User Agent 检测移动设备
-- 屏幕宽度检测（< 768px 视为移动端）
+### 检测方式
+- User Agent 检测
+- 屏幕宽度 < 768px
 - 触摸支持检测
 
-### 移动端特色设计
-- **底部导航栏**：经典移动端 Tab 导航设计
-- **顶部标签切换**：数据/设备页面的子功能切换
-- **卡片式布局**：用户管理等页面使用卡片替代表格
-- **大尺寸触摸目标**：按钮、输入框等适配触摸操作
-- **渐变背景**：登录/注册页面使用品牌色渐变
-- **平滑滚动**：页面切换时自动滚动到顶部
-
-### 移动端组件
-- `MobileLogin.vue` - 移动端登录页面
-- `MobileRegister.vue` - 移动端注册页面
-- `MobileHome.vue` - 移动端总览页面
-- `MobileData.vue` - 移动端数据管理页面
-- `MobileDevice.vue` - 移动端设备管理页面
-- `MobileProfile.vue` - 移动端个人信息页面
-- `MobileUserManage.vue` - 移动端用户管理页面
+### 响应式设计
+- Data.vue / DevicePage.vue 等组件内部通过 `isMobile` 计算属性切换模板
+- 桌面端：侧边栏导航 + 表格布局
+- 移动端：顶部标签切换 + 卡片布局
 
 ## 项目特点
 
-1. **现代化技术栈**：使用 Vue 3 + TypeScript + Vite，提供优秀的开发体验
-2. **组件化开发**：采用 Composition API，代码复用性强
-3. **类型安全**：TypeScript 提供静态类型检查，减少运行时错误
-4. **响应式设计**：自动适配桌面端和移动端，提供一致的用户体验
-5. **实时通信**：WebSocket 实现实时视频流传输
-6. **数据可视化**：ECharts 提供丰富的图表展示
-7. **用户体验优化**：
-   - 表单验证
-   - 二次确认删除
-   - 自动登录
-   - 错误提示
-   - 加载状态
-   - 平滑滚动
-8. **安全性**：
-   - JWT Token 认证
-   - Refresh Token 机制
-   - 权限验证
-   - 密码强度验证
-9. **权限管理**：
-   - 基于角色的访问控制
-   - 管理员专属功能
-   - 用户管理功能
-
+1. **双系统架构**：管理后台 + 云养鸟系统，独立路由和权限
+2. **鸟笼为中心**：设备按鸟笼（area + number）分组管理
+3. **六维传感器**：温度、湿度、PM2.5、分贝、光照、紫外线
+4. **实时视频流**：WebSocket MJPEG 流，支持翻转控制
+5. **Token 自动刷新**：无感刷新，请求队列保障
+6. **现代 UI 设计**：毛玻璃、渐变、圆角、动画过渡
+7. **类型安全**：TypeScript 全项目覆盖
