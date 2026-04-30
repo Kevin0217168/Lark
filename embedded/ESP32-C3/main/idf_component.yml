@@ -3,20 +3,7 @@ dependencies:
   ## Required IDF version
   idf:
     version: '>=4.1.0'
-  # # Put list of dependencies here
-  # # For components maintained by Espressif:
-  # component: "~1.0.0"
-  # # For 3rd party components:
-  # username/component: ">=1.0.0,<2.0.0"
-  # username2/component2:
-  #   version: "~1.0.0"
-  #   # For transient dependencies `public` flag can be set.
-  #   # `public` flag doesn't have an effect dependencies of the `main` component.
-  #   # All dependencies of `main` are public by default.
-  #   public: true
-  espressif/esp32-camera: '*'
-
-  # 通过相对路径定义本地依赖项
+  espressif/esp_websocket_client: '*'
   ina231:
     path: ../components/ina231
   pms9103m:
@@ -33,8 +20,9 @@ dependencies:
   device_secret:
     path: ../../ESP32-camera/components/device_secret
   remote_log:
-    path: ../../ESP32-camera/components/remote_log
+    path: ../components/remote_log
 
   Wifista:
-    path: ../../ESP32-camera/components/Wifista
-  espressif/esp_websocket_client: '*'
+    path: ../components/Wifista
+  esp_camera:
+    path: ../components/esp_camera

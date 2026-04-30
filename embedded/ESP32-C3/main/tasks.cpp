@@ -50,6 +50,17 @@ static SemaphoreHandle_t s_i2c_mutex = NULL;
 static int  s_cb_fail_count   = 0;
 static int64_t s_cb_cooldown_until = 0;
 
+/* ────────── 全局传感器对象（供 on-demand 查询复用） ────────── */
+static SGP30              *g_sgp30       = nullptr;
+static Adafruit_VEML7700  *g_veml7700    = nullptr;
+static sound_meter_handle_t g_sound_handle = {};
+static uv_meter_handle_t    g_uv_handle    = {};
+static bool g_sgp30_ready    = false;
+static bool g_veml7700_ready = false;
+static bool g_pms_ready      = false;
+static bool g_sound_ready    = false;
+static bool g_uv_ready       = false;
+
 /* ────────── device_secret 弱符号（可被外部 device_secret.h 覆盖） ────────── */
 __attribute__((weak)) const char *secret = "default-secret";
 
@@ -514,34 +525,36 @@ void task_sensor_collect(void *pvParameter)
 
     /* ── 阶段 2: 初始化 SGP30 ── */
     SemaphoreHandle_t i2c_mutex = sensor_get_i2c_mutex();
-    SGP30 sgp30(I2C_MASTER_PORT, GPIO_NUM_21, GPIO_NUM_20, 100000);
-    bool sgp30_ready = init_sgp30(sgp30);
-    if (!sgp30_ready) ESP_LOGE(TAG, "SGP30 初始化失败");
+    g_sgp30 = new SGP30(I2C_MASTER_PORT, GPIO_NUM_21, GPIO_NUM_20, 100000);
+    if (g_sgp30) {
+        g_sgp30_ready = init_sgp30(*g_sgp30);
+        if (!g_sgp30_ready) ESP_LOGE(TAG, "SGP30 初始化失败");
+    }
 
     /* ── 阶段 3: 初始化 VEML7700 ── */
-    Adafruit_VEML7700 veml(I2C_MASTER_PORT, GPIO_NUM_21, GPIO_NUM_20,
-                           VEML7700_I2CADDR_DEFAULT, i2c_mutex);
-    bool veml7700_ready = init_veml7700(veml);
-    if (!veml7700_ready) ESP_LOGE(TAG, "VEML7700 初始化失败");
+    g_veml7700 = new Adafruit_VEML7700(I2C_MASTER_PORT, GPIO_NUM_21, GPIO_NUM_20,
+                                       VEML7700_I2CADDR_DEFAULT, i2c_mutex);
+    if (g_veml7700) {
+        g_veml7700_ready = init_veml7700(*g_veml7700);
+        if (!g_veml7700_ready) ESP_LOGE(TAG, "VEML7700 初始化失败");
+    }
 
     /* ── 阶段 4: 初始化 PMS9103M ── */
-    bool pms_ready = init_pms9103m();
-    if (!pms_ready) ESP_LOGE(TAG, "PMS9103M 初始化失败");
+    g_pms_ready = init_pms9103m();
+    if (!g_pms_ready) ESP_LOGE(TAG, "PMS9103M 初始化失败");
 
     /* ── 阶段 5: 初始化 Sound Meter ── */
-    sound_meter_handle_t sound_handle = {};
-    bool sound_ready = init_sound_meter(sound_handle);
-    if (!sound_ready) ESP_LOGE(TAG, "Sound Meter 初始化失败");
+    g_sound_ready = init_sound_meter(g_sound_handle);
+    if (!g_sound_ready) ESP_LOGE(TAG, "Sound Meter 初始化失败");
 
-    /* ── 阶段 6: 初始化 UV Meter (复用 sound_meter 的 ADC1 handle) ── */
-    uv_meter_handle_t uv_handle = {};
-    bool uv_ready = init_uv_meter(uv_handle);
-    if (!uv_ready) ESP_LOGE(TAG, "UV Meter 初始化失败");
+    /* ── 阶段 6: 初始化 UV Meter ── */
+    g_uv_ready = init_uv_meter(g_uv_handle);
+    if (!g_uv_ready) ESP_LOGE(TAG, "UV Meter 初始化失败");
 
     ESP_LOGI(TAG, "传感器就绪状态: INA231=%d SGP30=%d VEML7700=%d "
              "PMS9103M=%d Sound=%d UV=%d",
-             g_ina231_ready, sgp30_ready, veml7700_ready,
-             pms_ready, sound_ready, uv_ready);
+             g_ina231_ready, g_sgp30_ready, g_veml7700_ready,
+             g_pms_ready, g_sound_ready, g_uv_ready);
 
     /* ── 主循环：每分钟采集一次 ── */
     TickType_t last_wake = xTaskGetTickCount();
@@ -589,8 +602,8 @@ void task_sensor_collect(void *pvParameter)
         }
 
         /* ── 2. SGP30 ── */
-        if (sgp30_ready) {
-            ok = (read_sgp30(sgp30, sensor_json, sizeof(sensor_json)) == ESP_OK);
+        if (g_sgp30_ready && g_sgp30) {
+            ok = (read_sgp30(*g_sgp30, sensor_json, sizeof(sensor_json)) == ESP_OK);
             if (ok) {
                 append_sensor("sgp30", sensor_json, true);
             } else {
@@ -599,8 +612,8 @@ void task_sensor_collect(void *pvParameter)
         }
 
         /* ── 3. VEML7700 ── */
-        if (veml7700_ready) {
-            ok = (read_veml7700(veml, sensor_json, sizeof(sensor_json)) == ESP_OK);
+        if (g_veml7700_ready && g_veml7700) {
+            ok = (read_veml7700(*g_veml7700, sensor_json, sizeof(sensor_json)) == ESP_OK);
             if (ok) {
                 append_sensor("veml7700", sensor_json, true);
             } else {
@@ -609,7 +622,7 @@ void task_sensor_collect(void *pvParameter)
         }
 
         /* ── 4. PMS9103M ── */
-        if (pms_ready) {
+        if (g_pms_ready) {
             ok = (read_pms9103m(sensor_json, sizeof(sensor_json)) == ESP_OK);
             if (ok) {
                 append_sensor("pms9103m", sensor_json, true);
@@ -619,8 +632,8 @@ void task_sensor_collect(void *pvParameter)
         }
 
         /* ── 5. Sound Meter ── */
-        if (sound_ready) {
-            ok = (read_sound_meter(sound_handle, sensor_json, sizeof(sensor_json)) == ESP_OK);
+        if (g_sound_ready) {
+            ok = (read_sound_meter(g_sound_handle, sensor_json, sizeof(sensor_json)) == ESP_OK);
             if (ok) {
                 append_sensor("sound_meter", sensor_json, true);
             } else {
@@ -629,8 +642,8 @@ void task_sensor_collect(void *pvParameter)
         }
 
         /* ── 6. UV Meter ── */
-        if (uv_ready) {
-            ok = (read_uv_meter(uv_handle, sensor_json, sizeof(sensor_json)) == ESP_OK);
+        if (g_uv_ready) {
+            ok = (read_uv_meter(g_uv_handle, sensor_json, sizeof(sensor_json)) == ESP_OK);
             if (ok) {
                 append_sensor("uv_meter", sensor_json, true);
             } else {
@@ -656,4 +669,52 @@ void task_sensor_collect(void *pvParameter)
 
         vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(SENSOR_COLLECT_INTERVAL_MS));
     }
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * 按传感器名称读取一次数据（供 WebSocket on-demand 查询）
+ *
+ * @param sensor_name  "ina231" / "sgp30" / "veml7700" /
+ *                     "pms9103m" / "sound_meter" / "uv_meter"
+ * @param json_out     输出缓冲区（不含外层花括号的 JSON 对象）
+ * @param json_size    缓冲区大小
+ * @return true 表示读取成功
+ * ═══════════════════════════════════════════════════════════ */
+
+extern "C" bool sensor_read_one(const char *sensor_name, char *json_out, size_t json_size)
+{
+    if (!sensor_name || !json_out || !json_size) return false;
+
+    if (strcasecmp(sensor_name, "ina231") == 0) {
+        if (!g_ina231_ready) return false;
+        return (read_ina231(json_out, json_size) == ESP_OK);
+    }
+
+    if (strcasecmp(sensor_name, "sgp30") == 0) {
+        if (!g_sgp30_ready || !g_sgp30) return false;
+        return (read_sgp30(*g_sgp30, json_out, json_size) == ESP_OK);
+    }
+
+    if (strcasecmp(sensor_name, "veml7700") == 0) {
+        if (!g_veml7700_ready || !g_veml7700) return false;
+        return (read_veml7700(*g_veml7700, json_out, json_size) == ESP_OK);
+    }
+
+    if (strcasecmp(sensor_name, "pms9103m") == 0) {
+        if (!g_pms_ready) return false;
+        return (read_pms9103m(json_out, json_size) == ESP_OK);
+    }
+
+    if (strcasecmp(sensor_name, "sound_meter") == 0) {
+        if (!g_sound_ready) return false;
+        return (read_sound_meter(g_sound_handle, json_out, json_size) == ESP_OK);
+    }
+
+    if (strcasecmp(sensor_name, "uv_meter") == 0) {
+        if (!g_uv_ready) return false;
+        return (read_uv_meter(g_uv_handle, json_out, json_size) == ESP_OK);
+    }
+
+    ESP_LOGW(TAG, "sensor_read_one: 未知传感器 '%s'", sensor_name);
+    return false;
 }
