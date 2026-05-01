@@ -1,0 +1,9 @@
+<!--pages/index/index.wxml-->
+<view class="container">
+  <view class="welcome">
+    <text>欢迎使用伴鸟小程序</text>
+  </view>
+  <view class="tips">
+    <text>这是一个引导页面，请点击底部TabBar切换到其他页面</text>
+  </view>
+</view>

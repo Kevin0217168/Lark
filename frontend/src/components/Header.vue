@@ -53,6 +53,20 @@
               雏鸟管理 
             </el-button>
           </router-link>
+          
+          <!-- ================= 新增的伴鸟 C 端入口 ================= -->
+          <router-link to="/cloud" custom v-slot="{ navigate }">
+            <el-button 
+              @click="navigate" 
+              :style="{ color: isActive('/cloud') ? '#8bad42' : '#000' }" 
+              :type="isActive('/cloud') ? 'primary' : 'default'"
+              text
+            > 
+              伴鸟 C 端 
+            </el-button>
+          </router-link>
+          <!-- ======================================================= -->
+
           <router-link v-if="userRole === 'root'" to="/UserManage" custom v-slot="{ navigate }">
             <el-button 
               @click="navigate" 

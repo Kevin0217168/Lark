@@ -1,0 +1,55 @@
+{
+  "pages": [
+    "pages/home/home",
+    "pages/ai/ai",
+    "pages/clinic/clinic",
+    "pages/profile/profile"
+  ],
+  "window": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "伴鸟",
+    "navigationBarBackgroundColor": "#ffffff",
+    "backgroundColor": "#f5f7fa"
+  },
+  "tabBar": {
+    "color": "#999999",
+    "selectedColor": "#2ecc71",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/home/home",
+        "text": "监测"
+      },
+      {
+        "pagePath": "pages/ai/ai",
+        "text": "AI自检"
+      },
+      {
+        "pagePath": "pages/clinic/clinic",
+        "text": "问诊"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "text": "我的"
+      }
+    ]
+  },
+  "permission": {
+    "scope.userLocation": {
+      "desc": "用于获取设备位置信息"
+    },
+    "scope.bluetooth": {
+      "desc": "用于连接智能设备"
+    },
+    "scope.wifi": {
+      "desc": "用于设备配网"
+    }
+  },
+  "requiredPrivateInfos": [
+    "getLocation" 
+  ],
+  "style": "v2",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents"
+}

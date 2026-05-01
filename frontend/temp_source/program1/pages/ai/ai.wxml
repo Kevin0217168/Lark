@@ -1,0 +1,237 @@
+<!--pages/ai/ai.wxml-->
+<view class="page-container">
+  <!-- 自定义导航栏 -->
+  <view class="custom-navbar">
+    <view class="navbar-content">
+      <text class="navbar-title">伴鸟 · AI自检</text>
+      <view class="ai-badge">
+        <text class="badge-icon">🤖</text>
+        <text class="badge-text">AI智能</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 功能切换Tab -->
+  <view class="function-tabs">
+    <view 
+      class="tab-item {{activeTab === 'image' ? 'active' : ''}}" 
+      bindtap="switchTab"
+      data-tab="image"
+    >
+      <text class="tab-icon">📸</text>
+      <text class="tab-text">图像识别</text>
+    </view>
+    <view 
+      class="tab-item {{activeTab === 'chat' ? 'active' : ''}}" 
+      bindtap="switchTab"
+      data-tab="chat"
+    >
+      <text class="tab-icon">💬</text>
+      <text class="tab-text">AI预诊</text>
+    </view>
+  </view>
+
+  <!-- 图像识别模块 -->
+  <view class="image-section" wx:if="{{activeTab === 'image'}}">
+    <view class="image-card">
+      <!-- 上传区域 -->
+      <view class="upload-area" bindtap="chooseImage" wx:if="{{!uploadedImage}}">
+        <view class="upload-placeholder">
+          <view class="upload-icon">📷</view>
+          <text class="upload-text">点击拍摄或上传粪便图像</text>
+          <text class="upload-tip">支持jpg/png格式,建议清晰拍摄</text>
+        </view>
+      </view>
+
+      <!-- 预览区域 -->
+      <view class="preview-area" wx:else>
+        <image class="preview-image" src="{{uploadedImage}}" mode="aspectFill"></image>
+        <view class="reupload-btn" bindtap="chooseImage">
+          <text>🔄 重新选择</text>
+        </view>
+      </view>
+
+      <!-- 分析按钮 -->
+      <button 
+        class="analyze-btn {{isAnalyzing ? 'analyzing' : ''}}" 
+        bindtap="analyzeImage"
+        disabled="{{isAnalyzing || !uploadedImage}}"
+      >
+        <text wx:if="{{!isAnalyzing}}">🔍 开始AI分析</text>
+        <text wx:else>🔄 分析中...</text>
+      </button>
+
+      <!-- 分析结果 -->
+      <view class="result-section" wx:if="{{analysisResult}}">
+        <view class="result-header">
+          <text class="result-title">AI分析报告</text>
+          <view class="result-time">{{analysisTime}}</view>
+        </view>
+
+        <view class="result-card result-{{analysisResult.status}}">
+          <view class="result-icon">
+            <text wx:if="{{analysisResult.status === 'normal'}}">✓</text>
+            <text wx:elif="{{analysisResult.status === 'warning'}}">⚠️</text>
+            <text wx:else>⛔</text>
+          </view>
+          <view class="result-content">
+            <text class="result-label">诊断结果</text>
+            <text class="result-value">{{analysisResult.diagnosis}}</text>
+          </view>
+          <view class="result-confidence">
+            <text class="confidence-label">置信度</text>
+            <text class="confidence-value">{{analysisResult.confidence}}%</text>
+          </view>
+        </view>
+
+        <view class="detail-section">
+          <view class="detail-title">详细分析</view>
+          <view class="detail-content">
+            <view class="detail-item">
+              <text class="detail-label">粪便形态</text>
+              <text class="detail-value">{{analysisResult.shape}}</text>
+            </view>
+            <view class="detail-item">
+              <text class="detail-label">颜色特征</text>
+              <text class="detail-value">{{analysisResult.color}}</text>
+            </view>
+            <view class="detail-item">
+              <text class="detail-label">异常指标</text>
+              <text class="detail-value">{{analysisResult.abnormal}}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="suggestion-section" wx:if="{{analysisResult.suggestion}}">
+          <view class="suggestion-title">💡 AI建议</view>
+          <text class="suggestion-text">{{analysisResult.suggestion}}</text>
+        </view>
+
+        <button class="consult-btn" bindtap="gotoConsult" wx:if="{{analysisResult.status !== 'normal'}}">
+          <text>👨‍⚕️ 立即咨询专业兽医</text>
+        </button>
+      </view>
+
+      <!-- 历史记录 -->
+      <view class="history-section" wx:if="{{analysisHistory.length > 0}}">
+        <view class="section-header">
+          <text class="section-title">历史记录</text>
+          <text class="section-more" bindtap="showAllHistory">查看全部 ></text>
+        </view>
+        <view class="history-list">
+          <view 
+            class="history-item" 
+            wx:for="{{analysisHistory}}" 
+            wx:key="id"
+            bindtap="viewHistory"
+            data-id="{{item.id}}"
+          >
+            <view class="history-icon history-{{item.status}}">
+              <text wx:if="{{item.status === 'normal'}}">✓</text>
+              <text wx:elif="{{item.status === 'warning'}}">⚠️</text>
+              <text wx:else>⛔</text>
+            </view>
+            <view class="history-content">
+              <text class="history-diagnosis">{{item.diagnosis}}</text>
+              <text class="history-time">{{item.time}}</text>
+            </view>
+            <view class="history-arrow">></view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- AI预诊模块 -->
+  <view class="chat-section" wx:if="{{activeTab === 'chat'}}">
+    <view class="chat-container">
+      <!-- 欢迎消息 -->
+      <view class="chat-welcome" wx:if="{{messages.length === 0}}">
+        <view class="welcome-avatar">🤖</view>
+        <view class="welcome-title">伴鸟AI预诊助手</view>
+        <text class="welcome-desc">我是您的智能预诊助手,请描述您宠物鸟的症状,我会为您提供初步诊断建议</text>
+        
+        <view class="quick-questions">
+          <view class="question-title">常见问题</view>
+          <view class="question-list">
+            <view 
+              class="question-item" 
+              wx:for="{{quickQuestions}}" 
+              wx:key="index"
+              bindtap="sendQuickQuestion"
+              data-question="{{item}}"
+            >
+              <text>{{item}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <!-- 对话消息列表 -->
+      <scroll-view 
+        class="chat-messages" 
+        scroll-y 
+        scroll-into-view="{{toView}}"
+        scroll-with-animation
+      >
+        <view 
+          class="message-wrapper message-{{item.role}}" 
+          wx:for="{{messages}}" 
+          wx:key="id"
+          id="msg-{{item.id}}"
+        >
+          <view class="message-avatar" wx:if="{{item.role === 'ai'}}">
+            <text>🤖</text>
+          </view>
+          <view class="message-content-wrapper">
+            <view class="message-bubble message-{{item.role}}-bubble">
+              <text class="message-text">{{item.content}}</text>
+            </view>
+            <text class="message-time">{{item.time}}</text>
+          </view>
+          <view class="message-avatar" wx:if="{{item.role === 'user'}}">
+            <text>🐦</text>
+          </view>
+        </view>
+        
+        <!-- AI正在输入 -->
+        <view class="message-wrapper message-ai" wx:if="{{isTyping}}">
+          <view class="message-avatar">
+            <text>🤖</text>
+          </view>
+          <view class="message-content-wrapper">
+            <view class="message-bubble message-ai-bubble typing">
+              <view class="typing-dots">
+                <view class="dot"></view>
+                <view class="dot"></view>
+                <view class="dot"></view>
+              </view>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+
+      <!-- 输入区域 -->
+      <view class="chat-input-area">
+        <input 
+          class="chat-input" 
+          placeholder="描述宠物鸟的症状..."
+          value="{{inputMessage}}"
+          bindinput="onInput"
+          bindconfirm="sendMessage"
+          confirm-type="send"
+        />
+        <view 
+          class="send-btn {{inputMessage.trim() ? 'active' : ''}}" 
+          bindtap="sendMessage"
+        >
+          <text>发送</text>
+        </view>
+      </view>
+    </view>
+  </view>
+  <view class="capture-fab" bindtap="triggerCageCapture">
+    <view class="capture-icon">📸</view>
+    <text class="capture-text">鸟笼抓拍</text>
+  </view>
+</view>
