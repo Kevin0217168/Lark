@@ -217,6 +217,7 @@ const handleWindowResize = () => {
 onMounted(() => {
   window.addEventListener('resize', handleWindowResize);
   fetchBirds();
+  fetchBirdcageGroups();
 });
 
 // 类型定义
@@ -371,7 +372,8 @@ const handleEditBird = (bird: Bird) => {
     area: bird.area || '',
     number: bird.number ?? undefined,
   });
-  birdCageKey.value = bird.area ? `${bird.area}|${bird.number}` : '';
+  // 只有 area 和 number 同时有效时才设置 birdCageKey
+  birdCageKey.value = bird.area && bird.number != null ? `${bird.area}|${bird.number}` : '';
   fetchBirdcageGroups();
   dialogVisible.value = true;
 };
