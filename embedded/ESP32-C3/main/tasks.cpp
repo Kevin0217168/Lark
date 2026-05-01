@@ -262,23 +262,43 @@ void sensor_upload_aggregated(const char *aggregated_json)
         return;
     }
 
+    ESP_LOGI(TAG, "聚合上报开始: body_len=%d, url=%s", len, UPLOAD_URL);
+
     esp_http_client_config_t cfg = {};
     cfg.url = UPLOAD_URL;
     cfg.method = HTTP_METHOD_POST;
     cfg.timeout_ms = 5000;
+    cfg.buffer_size = 512;
+    cfg.buffer_size_tx = 512;
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     if (!client) {
+        ESP_LOGE(TAG, "聚合上报: esp_http_client_init 失败");
         xSemaphoreGive(s_upload_mutex);
         return;
     }
     esp_http_client_set_header(client, "Content-Type", "application/json");
     esp_http_client_set_post_field(client, body, len);
+
     esp_err_t err = esp_http_client_perform(client);
     if (err == ESP_OK) {
-        ESP_LOGI(TAG, "聚合上报成功 HTTP %d", esp_http_client_get_status_code(client));
+        int status = esp_http_client_get_status_code(client);
+        int64_t content_len = esp_http_client_get_content_length(client);
+        ESP_LOGI(TAG, "聚合上报成功 HTTP %d, content_len=%lld", status, content_len);
+
+        /* 读取并打印响应体（调试用） */
+        char resp_buf[256];
+        int read_len = esp_http_client_read(client, resp_buf, sizeof(resp_buf) - 1);
+        if (read_len > 0) {
+            resp_buf[read_len] = '\0';
+            ESP_LOGI(TAG, "聚合上报响应: %s", resp_buf);
+        }
+
         cb_record_success();
     } else {
-        ESP_LOGE(TAG, "聚合上报失败: %s", esp_err_to_name(err));
+        int transport_type = -1;
+        ESP_LOGE(TAG, "聚合上报失败: %s (errno=%d, transport_type=%d)",
+                 esp_err_to_name(err), err,
+                 esp_http_client_get_transport_type(client));
         cb_record_failure();
     }
     esp_http_client_cleanup(client);
@@ -292,16 +312,20 @@ void sensor_upload_aggregated(const char *aggregated_json)
 static bool init_ina231(void)
 {
     for (int attempt = 1; attempt <= INA231_INIT_MAX_RETRIES; ++attempt) {
-        esp_err_t err = ina231_write_calibration(I2C_MASTER_PORT, INA231_ADDR,
-                                                  INA231_MAX_CURR_A, INA231_SHUNT_UOHM);
-        if (err == ESP_OK)
-            err = ina231_set_bus_conversion(I2C_MASTER_PORT, INA231_ADDR, 3320);
-        if (err == ESP_OK)
-            err = ina231_set_shunt_conversion(I2C_MASTER_PORT, INA231_ADDR, 3320);
-        if (err == ESP_OK)
-            err = ina231_set_mode(I2C_MASTER_PORT, INA231_ADDR, INA231_MODE_CONTINUOUS_BOTH);
-        if (err == ESP_OK)
-            err = ina231_enable_alert_on_conversion(I2C_MASTER_PORT, INA231_ADDR, true);
+        esp_err_t err = ESP_ERR_INVALID_STATE;
+        if (xSemaphoreTake(s_i2c_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+            err = ina231_write_calibration(I2C_MASTER_PORT, INA231_ADDR,
+                                            INA231_MAX_CURR_A, INA231_SHUNT_UOHM);
+            if (err == ESP_OK)
+                err = ina231_set_bus_conversion(I2C_MASTER_PORT, INA231_ADDR, 3320);
+            if (err == ESP_OK)
+                err = ina231_set_shunt_conversion(I2C_MASTER_PORT, INA231_ADDR, 3320);
+            if (err == ESP_OK)
+                err = ina231_set_mode(I2C_MASTER_PORT, INA231_ADDR, INA231_MODE_CONTINUOUS_BOTH);
+            if (err == ESP_OK)
+                err = ina231_enable_alert_on_conversion(I2C_MASTER_PORT, INA231_ADDR, true);
+            xSemaphoreGive(s_i2c_mutex);
+        }
 
         if (err == ESP_OK) {
             if (attempt > 1) ESP_LOGI(TAG, "INA231 重试成功 (attempt=%d)", attempt);
@@ -320,13 +344,19 @@ static bool init_ina231(void)
 static esp_err_t read_ina231(char *json_out, size_t json_size)
 {
     float bus_v = 0, shunt_v = 0, current_ma = 0, power_mw = 0;
-    esp_err_t ok =
-        ina231_read_bus_voltage_v  (I2C_MASTER_PORT, INA231_ADDR, &bus_v)     |
-        ina231_read_shunt_voltage_v(I2C_MASTER_PORT, INA231_ADDR, &shunt_v)   |
-        ina231_read_current_ma     (I2C_MASTER_PORT, INA231_ADDR,
-                                    g_ina231_current_lsb_nA, &current_ma)     |
-        ina231_read_power_mw       (I2C_MASTER_PORT, INA231_ADDR,
-                                    g_ina231_current_lsb_nA, &power_mw);
+
+    /* INA231 库不使用互斥锁，在此统一保护 */
+    esp_err_t ok = ESP_ERR_INVALID_STATE;
+    if (xSemaphoreTake(s_i2c_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+        ok =
+            ina231_read_bus_voltage_v  (I2C_MASTER_PORT, INA231_ADDR, &bus_v)     |
+            ina231_read_shunt_voltage_v(I2C_MASTER_PORT, INA231_ADDR, &shunt_v)   |
+            ina231_read_current_ma     (I2C_MASTER_PORT, INA231_ADDR,
+                                        g_ina231_current_lsb_nA, &current_ma)     |
+            ina231_read_power_mw       (I2C_MASTER_PORT, INA231_ADDR,
+                                        g_ina231_current_lsb_nA, &power_mw);
+        xSemaphoreGive(s_i2c_mutex);
+    }
     if (ok != ESP_OK) return ok;
 
     float bus_v_cal = ina231_bus_voltage_calibrate(bus_v, &g_bus_cal);
@@ -525,7 +555,7 @@ void task_sensor_collect(void *pvParameter)
 
     /* ── 阶段 2: 初始化 SGP30 ── */
     SemaphoreHandle_t i2c_mutex = sensor_get_i2c_mutex();
-    g_sgp30 = new SGP30(I2C_MASTER_PORT, GPIO_NUM_21, GPIO_NUM_20, 100000);
+    g_sgp30 = new SGP30(I2C_MASTER_PORT, GPIO_NUM_21, GPIO_NUM_20, 100000, i2c_mutex);
     if (g_sgp30) {
         g_sgp30_ready = init_sgp30(*g_sgp30);
         if (!g_sgp30_ready) ESP_LOGE(TAG, "SGP30 初始化失败");
@@ -602,12 +632,32 @@ void task_sensor_collect(void *pvParameter)
         }
 
         /* ── 2. SGP30 ── */
+        if (!g_sgp30_ready && g_sgp30) {
+            ESP_LOGI(TAG, "SGP30 未就绪，尝试重新初始化");
+            g_sgp30_ready = init_sgp30(*g_sgp30);
+        }
         if (g_sgp30_ready && g_sgp30) {
             ok = (read_sgp30(*g_sgp30, sensor_json, sizeof(sensor_json)) == ESP_OK);
             if (ok) {
                 append_sensor("sgp30", sensor_json, true);
             } else {
-                ESP_LOGW(TAG, "SGP30 读取失败");
+                ESP_LOGW(TAG, "SGP30 读取失败，尝试软复位+重新初始化");
+                /* 尝试恢复: 软复位 → init → 再读一次 */
+                g_sgp30->soft_reset();
+                vTaskDelay(pdMS_TO_TICKS(50));
+                if (init_sgp30(*g_sgp30)) {
+                    ok = (read_sgp30(*g_sgp30, sensor_json, sizeof(sensor_json)) == ESP_OK);
+                    if (ok) {
+                        ESP_LOGI(TAG, "SGP30 恢复成功");
+                        append_sensor("sgp30", sensor_json, true);
+                    } else {
+                        ESP_LOGE(TAG, "SGP30 恢复后读取仍然失败");
+                        g_sgp30_ready = false;
+                    }
+                } else {
+                    ESP_LOGE(TAG, "SGP30 恢复: 重新初始化失败");
+                    g_sgp30_ready = false;
+                }
             }
         }
 
@@ -659,6 +709,7 @@ void task_sensor_collect(void *pvParameter)
 
         /* ── 上报 ── */
         if (any_success) {
+            ESP_LOGI(TAG, "聚合数据 (len=%zu): %s", agg_len, aggregated);
             sensor_upload_aggregated(aggregated);
         } else {
             ESP_LOGW(TAG, "本轮采集无有效数据");

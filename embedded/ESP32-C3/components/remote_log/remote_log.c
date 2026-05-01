@@ -69,6 +69,9 @@ static volatile uint32_t s_total_bytes_send_fail = 0;
 static volatile uint32_t s_drop_count = 0;
 static volatile uint32_t s_consecutive_fail = 0;  // 连续发送失败计数
 
+/* 持久化 HTTP client（保持 TLS keep-alive） */
+static esp_http_client_handle_t s_http_client = NULL;
+
 #define RLOG_MAX_BACKOFF_MS   30000  // 最大退避 30 秒
 
 /* 用于防止钩子内递归 */
@@ -113,50 +116,41 @@ static int remote_log_vprintf(const char *fmt, va_list args)
     return ret;
 }
 
-/* ======================== HTTP POST 发送 ======================== */
+/* ======================== HTTP POST 发送（持久化 client） ======================== */
 /**
- * @brief 使用独立的 esp_http_client 发送日志文本
+ * @brief 使用持久化的 esp_http_client 发送日志文本
  *
- * 每次 flush 创建 → 请求 → 关闭，线程安全，不与全局 WifiSecurityClient 冲突。
- * keep-alive 由 esp_http_client 内部处理。
+ * client 在 remote_log_start 时创建，remote_log_deinit 时销毁。
+ * 借助 keep_alive_enable + 复用 client handle，TLS 连接保持存活，
+ * 避免每次请求都做证书验证和 TLS 握手。
  *
  * @return ESP_OK 成功，其它失败
  */
 static esp_err_t remote_log_http_post(const char *data, int len)
 {
-    esp_http_client_config_t cfg = {
-        .url = s_upload_url,
-        .method = HTTP_METHOD_POST,
-        .timeout_ms = RLOG_HTTP_TIMEOUT_MS,
-        .crt_bundle_attach = esp_crt_bundle_attach,
-        .buffer_size = 1024,
-        .keep_alive_enable = true,
-    };
-
-    esp_http_client_handle_t client = esp_http_client_init(&cfg);
-    if (client == NULL) {
+    if (s_http_client == NULL) {
         return ESP_FAIL;
     }
 
-    /* 设置 header: 认证 + content type */
-    esp_http_client_set_header(client, "Content-Type", "text/plain");
-    esp_http_client_set_header(client, "Authorization", s_secret);
-
-    /* 设置 body */
-    esp_http_client_set_post_field(client, data, len);
+    /* 设置 body（每次请求内容不同） */
+    esp_http_client_set_post_field(s_http_client, data, len);
 
     /* 执行请求 */
-    esp_err_t err = esp_http_client_perform(client);
+    esp_err_t err = esp_http_client_perform(s_http_client);
 
     if (err == ESP_OK) {
-        int status = esp_http_client_get_status_code(client);
+        int status = esp_http_client_get_status_code(s_http_client);
         if (status != 200 && status != 201 && status != 204) {
             err = ESP_FAIL;
         }
+    } else {
+        ESP_LOGW(TAG, "HTTP POST 失败: %s, 尝试重建 client", esp_err_to_name(err));
+        /* 连接断开（服务器超时关闭 / 网络抖动），重建 client */
+        esp_http_client_cleanup(s_http_client);
+        s_http_client = NULL;
+        /* 不补发，等待下一次 flush 重试 */
     }
 
-    esp_http_client_close(client);
-    esp_http_client_cleanup(client);
     return err;
 }
 
@@ -172,13 +166,30 @@ static void remote_log_flush_task(void *pvParameters)
     int stats_counter = 0;
 
     while (s_upload_started) {
-        // 动态退避：连续失败时逐渐增大间隔，避免网络故障时heap_caps_malloc狂刷 HTTP
+        // 动态退避：连续失败时逐渐增大间隔，避免网络故障时狂刷 HTTP
         uint32_t delay_ms = RLOG_FLUSH_INTERVAL_MS;
         if (s_consecutive_fail > 0) {
             delay_ms = RLOG_FLUSH_INTERVAL_MS * (1u << (s_consecutive_fail > 4 ? 4 : s_consecutive_fail));
             if (delay_ms > RLOG_MAX_BACKOFF_MS) delay_ms = RLOG_MAX_BACKOFF_MS;
         }
         vTaskDelay(pdMS_TO_TICKS(delay_ms));
+
+        /* 如果 client 因故障被销毁，尝试重建 */
+        if (s_http_client == NULL) {
+            esp_http_client_config_t cfg = {
+                .url = s_upload_url,
+                .method = HTTP_METHOD_POST,
+                .timeout_ms = RLOG_HTTP_TIMEOUT_MS,
+                .crt_bundle_attach = esp_crt_bundle_attach,
+                .buffer_size = 1024,
+                .keep_alive_enable = true,
+            };
+            s_http_client = esp_http_client_init(&cfg);
+            if (s_http_client) {
+                esp_http_client_set_header(s_http_client, "Content-Type", "text/plain");
+                esp_http_client_set_header(s_http_client, "Authorization", s_secret);
+            }
+        }
 
         if (s_ringbuf == NULL) {
             continue;
@@ -280,7 +291,26 @@ esp_err_t remote_log_start(const char *base_url, const char *path,
 
     ESP_LOGI(TAG, "日志上传地址: %s", s_upload_url);
 
-    /* 2. 启动 flush 任务 */
+    /* 2. 创建持久化 HTTP client（TLS keep-alive 不复销毁） */
+    esp_http_client_config_t cfg = {
+        .url = s_upload_url,
+        .method = HTTP_METHOD_POST,
+        .timeout_ms = RLOG_HTTP_TIMEOUT_MS,
+        .crt_bundle_attach = esp_crt_bundle_attach,
+        .buffer_size = 1024,
+        .keep_alive_enable = true,
+    };
+    s_http_client = esp_http_client_init(&cfg);
+    if (s_http_client == NULL) {
+        ESP_LOGE(TAG, "无法创建 HTTP client");
+        s_upload_started = false;
+        return ESP_ERR_NO_MEM;
+    }
+    /* header 只需设置一次（body 每次请求前更新） */
+    esp_http_client_set_header(s_http_client, "Content-Type", "text/plain");
+    esp_http_client_set_header(s_http_client, "Authorization", s_secret);
+
+    /* 3. 启动 flush 任务 */
     s_upload_started = true;
     BaseType_t ret = xTaskCreate(
         remote_log_flush_task, "rlog_flush",
@@ -317,7 +347,14 @@ void remote_log_deinit(void)
         s_flush_task_handle = NULL;
     }
 
-    /* 3. 释放缓冲区 */
+    /* 3. 持久化 HTTP client */
+    if (s_http_client) {
+        esp_http_client_close(s_http_client);
+        esp_http_client_cleanup(s_http_client);
+        s_http_client = NULL;
+    }
+
+    /* 4. 释放缓冲区 */
     if (s_ringbuf) {
         vRingbufferDelete(s_ringbuf);
         s_ringbuf = NULL;
