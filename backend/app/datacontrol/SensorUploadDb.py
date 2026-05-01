@@ -1,8 +1,9 @@
 from pydantic import BaseModel, Field
 from sqlalchemy import Column, Integer, String, DateTime, Index
 from datetime import datetime, timezone, timedelta
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session, declarative_base
+import json
 
 SensorUploadBase = declarative_base()
 
@@ -39,6 +40,12 @@ class SensorUploadCreate(BaseModel):
     sensor_type: str = Field(..., min_length=1, max_length=50, title="传感器类型", description="传感器类型，如temperature、humidity、pressure等")
     data_type: str = Field(..., min_length=1, max_length=20, title="数据类型", description="数据单位或格式，如°C、%、hPa等")
     data: str = Field(..., min_length=1, title="传感器数据", description="传感器采集的实际数据值")
+    timestamp: Optional[datetime] = Field(None, title="数据时间", description="数据采集时间，若不填则使用服务器当前时间(UTC+8)")
+
+
+class SensorUploadBatchCreate(BaseModel):
+    secret: str = Field(..., min_length=1, max_length=50, title="设备密钥", description="传感器所属设备的唯一密钥(secret)")
+    data: Dict[str, Dict[str, Any]] = Field(..., title="批量传感器数据", description="多个传感器的数据，key为传感器类型名，value为该传感器的键值对数据")
     timestamp: Optional[datetime] = Field(None, title="数据时间", description="数据采集时间，若不填则使用服务器当前时间(UTC+8)")
 
 
@@ -109,6 +116,62 @@ def AddSensorUpload(db: Session, item: SensorUploadCreate, device_db: Session) -
         return SensorUploadResult(
             success=False,
             message=f"Failed to create sensor upload record: {str(e)}",
+            rows_affected=0,
+        )
+
+
+def BatchUploadSensorData(db: Session, item: SensorUploadBatchCreate, device_db: Session) -> SensorUploadResult:
+    """
+    批量上传多个传感器的数据。
+    硬件一次性发送多个传感器的信息，后端将其按传感器类型拆分，每种传感器存一条记录。
+    data 字段存储该传感器完整数据的 JSON 字符串，便于前端按 sensor_type 查询并解析。
+    例: { "sgp30": { "co2_ppm": 400, "tvoc_ppb": 0 } } 会以 JSON 形式整体存入一条记录。
+    """
+    try:
+        from datacontrol.DeviceDb import M_Devices
+        device = device_db.query(M_Devices).filter(M_Devices.secret == item.secret).first()
+        if not device:
+            return SensorUploadResult(
+                success=False,
+                message="Invalid secret: device not found",
+                rows_affected=0,
+            )
+
+        timestamp = item.timestamp if item.timestamp else datetime.now(UTC8)
+        device_id_str = str(device.id)
+        records: list[M_SensorUpload] = []
+
+        for sensor_name, sensor_data in item.data.items():
+            if not isinstance(sensor_data, dict):
+                continue
+            record = M_SensorUpload(
+                device_id=device_id_str,
+                sensor_type=sensor_name,
+                data_type=sensor_name,
+                data=json.dumps(sensor_data, ensure_ascii=False),
+                timestamp=timestamp,
+            )
+            records.append(record)
+
+        if not records:
+            return SensorUploadResult(
+                success=False,
+                message="No valid sensor data to upload",
+                rows_affected=0,
+            )
+
+        db.add_all(records)
+        db.commit()
+        return SensorUploadResult(
+            success=True,
+            message=f"Batch sensor upload completed: {len(records)} records created",
+            rows_affected=len(records),
+        )
+    except Exception as e:
+        db.rollback()
+        return SensorUploadResult(
+            success=False,
+            message=f"Failed to batch upload sensor data: {str(e)}",
             rows_affected=0,
         )
 

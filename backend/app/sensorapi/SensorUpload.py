@@ -9,11 +9,13 @@ import Db
 import Security
 from datacontrol.SensorUploadDb import (
     SensorUploadCreate,
+    SensorUploadBatchCreate,
     SensorUploadUpdate,
     SensorUploadFilter,
     SensorUploadResult,
     SensorUploadItem,
     AddSensorUpload,
+    BatchUploadSensorData,
     GetSensorUpload,
     UpdateSensorUpload,
     DeleteSensorUpload,
@@ -35,6 +37,26 @@ async def create_sensor_upload(
     device_db: Db.Session = Depends(Db.GetDb("create_sensor_upload_device_check")),
 ):
     result = AddSensorUpload(db, body, device_db)
+    if result.success:
+        return CommonOut(data=result)
+    return JSONResponse(
+        status_code=400,
+        content=CommonOut(code=400, msg=result.message, data=result).model_dump(),
+    )
+
+
+@router.post(
+    "/batch",
+    response_model=CommonOut[SensorUploadResult],
+    summary="批量上传多个传感器数据",
+    description="硬件一次性上传多个传感器的数据，后端将其拆分后逐条存入 sensor_upload 表。\n\n- 使用设备密钥(secret)进行身份验证\n- data 字段为字典，key 为传感器类型名(sgp30/pms9103m等)，value 为该传感器的键值对数据\n- 每条传感器数据项(key-value pair)将被拆分为一条独立记录\n- 返回操作结果及影响的记录数",
+)
+async def batch_upload_sensor_data(
+    body: Annotated[SensorUploadBatchCreate, Body(description="批量传感器数据，包含设备密钥、传感器数据字典及可选时间戳")],
+    db: Db.Session = Depends(Db.GetDb("batch_upload_sensor_data")),
+    device_db: Db.Session = Depends(Db.GetDb("batch_upload_sensor_data_device_check")),
+):
+    result = BatchUploadSensorData(db, body, device_db)
     if result.success:
         return CommonOut(data=result)
     return JSONResponse(

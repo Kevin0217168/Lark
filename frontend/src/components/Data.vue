@@ -66,14 +66,18 @@
             <!-- 温度湿度数据卡片 -->
             <div class="temp-humid-cards">
               <div class="th-card temp-card">
-                <div class="th-card-icon">🌡️</div>
+                <div class="th-card-icon">
+                  <TemperatureIcon />
+                </div>
                 <div class="th-card-body">
                   <span class="th-card-label">温度</span>
                   <span class="th-card-value">{{ selectedDevice.temperature ?? '--' }}<small>°C</small></span>
                 </div>
               </div>
               <div class="th-card humid-card">
-                <div class="th-card-icon">💧</div>
+                <div class="th-card-icon">
+                  <HumidityIcon />
+                </div>
                 <div class="th-card-body">
                   <span class="th-card-label">湿度</span>
                   <span class="th-card-value">{{ selectedDevice.humidity ?? '--' }}<small>%</small></span>
@@ -422,14 +426,18 @@
         <!-- 温度湿度 -->
         <div class="mobile-th-row" v-if="selectedDevice">
           <div class="mobile-th-item temp">
-            <span class="mobile-th-icon">🌡️</span>
+            <span class="mobile-th-icon">
+              <TemperatureIcon />
+            </span>
             <div class="mobile-th-body">
               <span class="mobile-th-label">温度</span>
               <span class="mobile-th-value">{{ selectedDevice.temperature ?? '--' }}°C</span>
             </div>
           </div>
           <div class="mobile-th-item humid">
-            <span class="mobile-th-icon">💧</span>
+            <span class="mobile-th-icon">
+              <HumidityIcon />
+            </span>
             <div class="mobile-th-body">
               <span class="mobile-th-label">湿度</span>
               <span class="mobile-th-value">{{ selectedDevice.humidity ?? '--' }}%</span>
@@ -671,32 +679,32 @@
               </div>
               <div class="sensor-grid">
                 <div class="sensor-cell temp">
-                  <span class="sensor-icon">🌡️</span>
+                  <span class="sensor-icon"><TemperatureIcon /></span>
                   <span class="sensor-value">{{ item.temperature !== null ? item.temperature.toFixed(1) : '-' }}</span>
                   <span class="sensor-unit">°C</span>
                 </div>
                 <div class="sensor-cell humidity">
-                  <span class="sensor-icon">💧</span>
+                  <span class="sensor-icon"><HumidityIcon /></span>
                   <span class="sensor-value">{{ item.humidity !== null ? item.humidity.toFixed(1) : '-' }}</span>
                   <span class="sensor-unit">%</span>
                 </div>
                 <div class="sensor-cell aqi">
-                  <span class="sensor-icon">🌫️</span>
+                  <span class="sensor-icon"><Pm25Icon /></span>
                   <span class="sensor-value">{{ item.pm25 !== null ? item.pm25.toFixed(1) : '-' }}</span>
                   <span class="sensor-unit">PM2.5</span>
                 </div>
                 <div class="sensor-cell sound">
-                  <span class="sensor-icon">🔊</span>
+                  <span class="sensor-icon"><SoundIcon /></span>
                   <span class="sensor-value">{{ item.db !== null ? item.db.toFixed(1) : '-' }}</span>
                   <span class="sensor-unit">dB</span>
                 </div>
                 <div class="sensor-cell lux">
-                  <span class="sensor-icon">☀️</span>
+                  <span class="sensor-icon"><LightIcon /></span>
                   <span class="sensor-value">{{ item.lux !== null ? item.lux.toFixed(1) : '-' }}</span>
                   <span class="sensor-unit">Lux</span>
                 </div>
                 <div class="sensor-cell uv">
-                  <span class="sensor-icon">🔆</span>
+                  <span class="sensor-icon"><UvIcon /></span>
                   <span class="sensor-value">{{ item.uv !== null ? item.uv.toFixed(1) : '-' }}</span>
                   <span class="sensor-unit">UV</span>
                 </div>
@@ -735,6 +743,12 @@ import { Warning, Switch, Sort, Refresh } from '@element-plus/icons-vue';
 import { api } from '../utils/api';
 import * as echarts from 'echarts';
 import { shouldUseMobilePage } from '../utils/mobileAdapter';
+import TemperatureIcon from './icons/TemperatureIcon.vue';
+import HumidityIcon from './icons/HumidityIcon.vue';
+import Pm25Icon from './icons/Pm25Icon.vue';
+import SoundIcon from './icons/SoundIcon.vue';
+import LightIcon from './icons/LightIcon.vue';
+import UvIcon from './icons/UvIcon.vue';
 
 // 获取登录token
 const getToken = () => {
@@ -3810,38 +3824,69 @@ const goToFullscreen = () => {
 }
 
 .mobile-data .sensor-cell.temp {
-  background: linear-gradient(135deg, rgba(255, 120, 117, 0.08) 0%, rgba(255, 120, 117, 0.03) 100%);
-  border-color: rgba(255, 120, 117, 0.15);
+  background: #fee2e2;
+  border-color: transparent;
 }
 
 .mobile-data .sensor-cell.humidity {
-  background: linear-gradient(135deg, rgba(105, 192, 255, 0.08) 0%, rgba(105, 192, 255, 0.03) 100%);
-  border-color: rgba(105, 192, 255, 0.15);
+  background: #dbeafe;
+  border-color: transparent;
 }
 
 .mobile-data .sensor-cell.aqi {
-  background: linear-gradient(135deg, rgba(230, 162, 60, 0.08) 0%, rgba(230, 162, 60, 0.03) 100%);
-  border-color: rgba(230, 162, 60, 0.15);
+  background: #fef3c7;
+  border-color: transparent;
 }
 
 .mobile-data .sensor-cell.sound {
-  background: linear-gradient(135deg, rgba(144, 147, 153, 0.08) 0%, rgba(144, 147, 153, 0.03) 100%);
-  border-color: rgba(144, 147, 153, 0.15);
+  background: #f3f4f6;
+  border-color: transparent;
 }
 
 .mobile-data .sensor-cell.lux {
-  background: linear-gradient(135deg, rgba(103, 194, 58, 0.08) 0%, rgba(103, 194, 58, 0.03) 100%);
-  border-color: rgba(103, 194, 58, 0.15);
+  background: #ecfdf5;
+  border-color: transparent;
 }
 
 .mobile-data .sensor-cell.uv {
-  background: linear-gradient(135deg, rgba(245, 108, 108, 0.08) 0%, rgba(245, 108, 108, 0.03) 100%);
-  border-color: rgba(245, 108, 108, 0.15);
+  background: #fee2e2;
+  border-color: transparent;
 }
 
 .mobile-data .sensor-cell .sensor-icon {
-  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   line-height: 1;
+}
+
+.mobile-data .sensor-cell .sensor-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.mobile-data .sensor-cell.temp .sensor-icon {
+  color: #ef4444;
+}
+
+.mobile-data .sensor-cell.humidity .sensor-icon {
+  color: #3b82f6;
+}
+
+.mobile-data .sensor-cell.aqi .sensor-icon {
+  color: #f59e0b;
+}
+
+.mobile-data .sensor-cell.sound .sensor-icon {
+  color: #6b7280;
+}
+
+.mobile-data .sensor-cell.lux .sensor-icon {
+  color: #10b981;
+}
+
+.mobile-data .sensor-cell.uv .sensor-icon {
+  color: #f97316;
 }
 
 .mobile-data .sensor-cell .sensor-value {
@@ -3971,7 +4016,7 @@ const goToFullscreen = () => {
   font-size: 13px;
 }
 
-/* 温度湿度卡片 */
+/* 温度湿度卡片 - 扁平化设计 */
 .temp-humid-cards {
   display: flex;
   gap: 12px;
@@ -3983,31 +4028,41 @@ const goToFullscreen = () => {
   align-items: center;
   gap: 14px;
   padding: 18px 20px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  border-radius: 8px;
+  border: none;
+  box-shadow: none;
+  transition: background-color 0.2s ease;
 }
 
 .th-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+  filter: brightness(0.95);
 }
 
 .th-card.temp-card {
-  background: linear-gradient(135deg, #fff5f5 0%, #ffe7e7 100%);
-  border-color: rgba(248, 113, 113, 0.2);
+  background: #fee2e2;
+  border-color: transparent;
 }
 
 .th-card.humid-card {
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-  border-color: rgba(59, 130, 246, 0.2);
+  background: #dbeafe;
+  border-color: transparent;
 }
 
 .th-card-icon {
-  font-size: 32px;
-  line-height: 1;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ef4444;
+}
+
+.th-card.humid-card .th-card-icon {
+  color: #3b82f6;
+}
+
+.th-card-icon svg {
+  width: 32px;
+  height: 32px;
 }
 
 .th-card-body {
@@ -4018,7 +4073,7 @@ const goToFullscreen = () => {
 
 .th-card-label {
   font-size: 13px;
-  color: #909399;
+  color: #606266;
   font-weight: 500;
 }
 
@@ -4032,16 +4087,16 @@ const goToFullscreen = () => {
 .th-card-value small {
   font-size: 16px;
   font-weight: 500;
-  color: #909399;
+  color: #606266;
   margin-left: 2px;
 }
 
 .th-card.temp-card .th-card-value {
-  color: #e53e3e;
+  color: #ef4444;
 }
 
 .th-card.humid-card .th-card-value {
-  color: #2563eb;
+  color: #3b82f6;
 }
 
 /* 移动端鸟笼设备行 */
@@ -4067,7 +4122,7 @@ const goToFullscreen = () => {
   white-space: nowrap;
 }
 
-/* 移动端温度湿度行 */
+/* 移动端温度湿度行 - 扁平化设计 */
 .mobile-th-row {
   display: flex;
   gap: 12px;
@@ -4080,24 +4135,35 @@ const goToFullscreen = () => {
   align-items: center;
   gap: 10px;
   padding: 14px 16px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 8px;
+  border: none;
 }
 
 .mobile-th-item.temp {
-  background: linear-gradient(135deg, #fff5f5 0%, #ffe7e7 100%);
-  border-color: rgba(248, 113, 113, 0.2);
+  background: #fee2e2;
+  border-color: transparent;
 }
 
 .mobile-th-item.humid {
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-  border-color: rgba(59, 130, 246, 0.2);
+  background: #dbeafe;
+  border-color: transparent;
 }
 
 .mobile-th-icon {
-  font-size: 28px;
-  line-height: 1;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ef4444;
+}
+
+.mobile-th-item.humid .mobile-th-icon {
+  color: #3b82f6;
+}
+
+.mobile-th-icon svg {
+  width: 28px;
+  height: 28px;
 }
 
 .mobile-th-body {
@@ -4108,7 +4174,7 @@ const goToFullscreen = () => {
 
 .mobile-th-label {
   font-size: 12px;
-  color: #909399;
+  color: #606266;
   font-weight: 500;
 }
 
@@ -4119,10 +4185,10 @@ const goToFullscreen = () => {
 }
 
 .mobile-th-item.temp .mobile-th-value {
-  color: #e53e3e;
+  color: #ef4444;
 }
 
 .mobile-th-item.humid .mobile-th-value {
-  color: #2563eb;
+  color: #3b82f6;
 }
 </style>
