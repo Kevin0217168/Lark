@@ -19,14 +19,26 @@ static int g_light_brightness = 100;
 
 /* ──────────────── 通用工具函数 ──────────────── */
 
-/** 统一构造 JSON 响应并通过 WebSocket 发送 */
+/** 统一构造 JSON 响应并通过 WebSocket 发送（使用 cJSON 自动转义 values 中的特殊字符） */
 static void ws_reply(int ok, const char *msg, const char *key, const char *values)
 {
-    char buf[256];
-    snprintf(buf, sizeof(buf),
-             "{\"code\":%d,\"msg\":\"%s\",\"key\":\"%s\",\"values\":\"%s\"}",
-             ok ? 1 : 0, msg, key ? key : "", values ? values : "");
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddNumberToObject(root, "code", ok ? 1 : 0);
+    cJSON_AddStringToObject(root, "msg",  msg ? msg : "");
+    cJSON_AddStringToObject(root, "key",  key ? key : "");
+    cJSON_AddStringToObject(root, "values", values ? values : "");
+
+    char *buf = cJSON_PrintUnformatted(root);
+    if (!buf) {
+        ESP_LOGE(TAG, "ws_reply: cJSON_PrintUnformatted 失败");
+        cJSON_Delete(root);
+        return;
+    }
+
+    ESP_LOGI(TAG, "ws_reply: %s", buf);
     WebsocketSendText((uint8_t *)buf, strlen(buf));
+    cJSON_free(buf);
+    cJSON_Delete(root);
 }
 
 /** 从 cJSON values 项提取字符串（数字会转为字符串），返回 NULL 表示无效 */
@@ -101,9 +113,12 @@ static void query_sensor(const char *key, cJSON *values_item)
 {
     /* key 即传感器名称: ina231 / sgp30 / veml7700 / pms9103m / sound_meter / uv_meter */
     char json_buf[256];
+    ESP_LOGI(TAG, "query_sensor: 开始查询传感器 '%s'", key);
     if (sensor_read_one(key, json_buf, sizeof(json_buf))) {
+        ESP_LOGI(TAG, "query_sensor: '%s' 读取成功, data=%s", key, json_buf);
         ws_reply(1, "OK.", key, json_buf);
     } else {
+        ESP_LOGW(TAG, "query_sensor: '%s' 读取失败（未就绪或名称未知）", key);
         ws_reply(0, "传感器未就绪或名称未知", key, "");
     }
 }
@@ -200,7 +215,7 @@ void ws_text_handler(void *handler_args, int len, const char *data_ptr)
     }
 
     char *dbg = cJSON_Print(json);
-    ESP_LOGD(TAG, "收到: %s", dbg);
+    ESP_LOGI(TAG, "收到: %s", dbg);
     cJSON_free(dbg);
 
     cJSON *code_item   = cJSON_GetObjectItemCaseSensitive(json, "code");
@@ -240,7 +255,9 @@ void ws_text_handler(void *handler_args, int len, const char *data_ptr)
 
     if (code == 0) {
         /* 查询 */
+        ESP_LOGI(TAG, "分发查询: item=%s, key=%s", item, key);
         entry->query(key, values_item);
+        ESP_LOGI(TAG, "查询返回: item=%s, key=%s", item, key);
     } else if (code == 1) {
         /* 设定 —— device 模块需要传入 json 指针以支持重启 */
         if (strcasecmp(item, "device") == 0) {

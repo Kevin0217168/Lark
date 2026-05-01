@@ -29,7 +29,14 @@ esp_err_t SGP30::init()
         return err;
     }
 
+    /* SGP30 的 IAQ init 命令会返回 3 字节数据（2 数据 + 1 CRC），
+       必须读取以保持传感器状态机正常，否则后续 measure 将永远失败 */
     vTaskDelay(pdMS_TO_TICKS(10));
+    uint8_t init_resp[3];
+    err = read_raw(init_resp, sizeof(init_resp));
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "SGP30 init response read failed (ignored): %s", esp_err_to_name(err));
+    }
     ESP_LOGI(TAG, "SGP30 initialized");
     return ESP_OK;
 }
@@ -99,12 +106,19 @@ esp_err_t SGP30::measure(uint16_t *co2_ppm, uint16_t *tvoc_ppb)
         return err;
     }
 
-    vTaskDelay(pdMS_TO_TICKS(15));
+    /* SGP30 测量最大耗时 12ms，等待 20ms 确保完成 */
+    vTaskDelay(pdMS_TO_TICKS(20));
 
     uint8_t data[6];
-    err = read_raw(data, sizeof(data));
+    /* 读取失败时重试一次（传感器可能偶尔 NACK） */
+    for (int retry = 0; retry < 2; retry++) {
+        err = read_raw(data, sizeof(data));
+        if (err == ESP_OK) break;
+        ESP_LOGW(TAG, "SGP30 read attempt %d failed: %s", retry + 1, esp_err_to_name(err));
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "SGP30 read failed: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "SGP30 read failed after retries: %s", esp_err_to_name(err));
         return err;
     }
 

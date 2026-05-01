@@ -8,6 +8,7 @@
 #include "freertos/semphr.h"
 #include "esp_log.h"
 #include "esp_http_client.h"
+#include "esp_crt_bundle.h"
 
 #include "ina231.h"
 #include "pms9103m.h"
@@ -18,6 +19,7 @@
 
 #include "tasks.h"
 #include "device_secret.h"
+#include "Wifista.h"
 
 static const char *TAG = "sensor_task";
 
@@ -28,7 +30,7 @@ static const char *TAG = "sensor_task";
 #define INA231_SHUNT_UOHM  100000UL
 
 /* ────────── 上报配置 ────────── */
-#define UPLOAD_URL   "http://172.20.10.3:8080/api/sensor-upload"
+#define UPLOAD_URL   "https://lark.mintlab.top/api/sensor-upload"
 
 /* ────────── 熔断器 ────────── */
 #define CB_FAIL_THRESHOLD  3
@@ -61,6 +63,10 @@ static bool g_veml7700_ready = false;
 static bool g_pms_ready      = false;
 static bool g_sound_ready    = false;
 static bool g_uv_ready       = false;
+
+/* ────────── VEML7700 缓存参数（避免 on-demand 查询时阻塞 I2C） ────────── */
+static uint8_t  g_veml7700_cached_gain = VEML7700_GAIN_1_8;
+static uint8_t  g_veml7700_cached_it   = VEML7700_IT_100MS;
 
 /* ────────── device_secret 由 device_secret.c 提供（4MB 分区表需要） ────────── */
 
@@ -218,6 +224,7 @@ void sensor_upload(const char *sensor_type, const char *data_type, const char *d
     cfg.url = UPLOAD_URL;
     cfg.method = HTTP_METHOD_POST;
     cfg.timeout_ms = 3000;
+    cfg.crt_bundle_attach = esp_crt_bundle_attach;
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     if (!client) {
         xSemaphoreGive(s_upload_mutex);
@@ -246,23 +253,43 @@ void sensor_upload_aggregated(const char *aggregated_json)
 
     if (xSemaphoreTake(s_upload_mutex, pdMS_TO_TICKS(15000)) != pdTRUE) return;
 
-    char timestamp[40];
-    if (make_timestamp(timestamp, sizeof(timestamp)) <= 0) {
-        xSemaphoreGive(s_upload_mutex);
-        return;
+    /* ── 时间戳（仅在 SNTP 已同步时附带） ── */
+    char timestamp[48] = "";
+    bool have_ts = false;
+    if (is_time_synced()) {
+        if (make_timestamp(timestamp, sizeof(timestamp)) > 0) {
+            have_ts = true;
+        }
     }
 
-    char body[2048];
-    int len = snprintf(body, sizeof(body),
-        "{\"secret\":\"%s\",\"timestamp\":\"%s\",\"sensors\":%s}",
-        secret, timestamp, aggregated_json);
+    /* ── 将 aggregated_json 转义为 JSON 字符串值 ── */
+    char data_escaped[2048];
+    size_t di = 0, si = 0;
+    while (aggregated_json[si] && di + 2 < sizeof(data_escaped)) {
+        char ch = aggregated_json[si++];
+        if (ch == '"' || ch == '\\') data_escaped[di++] = '\\';
+        data_escaped[di++] = ch;
+    }
+    data_escaped[di] = '\0';
+
+    char body[2500];
+    int len;
+    if (have_ts) {
+        len = snprintf(body, sizeof(body),
+            "{\"secret\":\"%s\",\"data\":\"%s\",\"timestamp\":\"%s\"}",
+            secret, data_escaped, timestamp);
+    } else {
+        len = snprintf(body, sizeof(body),
+            "{\"secret\":\"%s\",\"data\":\"%s\"}",
+            secret, data_escaped);
+    }
     if (len <= 0 || len >= (int)sizeof(body)) {
         ESP_LOGE(TAG, "聚合报文过长 (%d), 跳过上报", len);
         xSemaphoreGive(s_upload_mutex);
         return;
     }
 
-    ESP_LOGI(TAG, "聚合上报开始: body_len=%d, url=%s", len, UPLOAD_URL);
+    ESP_LOGI(TAG, "聚合上报开始: body_len=%d, url=%s, have_ts=%d", len, UPLOAD_URL, have_ts);
 
     esp_http_client_config_t cfg = {};
     cfg.url = UPLOAD_URL;
@@ -270,6 +297,7 @@ void sensor_upload_aggregated(const char *aggregated_json)
     cfg.timeout_ms = 5000;
     cfg.buffer_size = 512;
     cfg.buffer_size_tx = 512;
+    cfg.crt_bundle_attach = esp_crt_bundle_attach;
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     if (!client) {
         ESP_LOGE(TAG, "聚合上报: esp_http_client_init 失败");
@@ -375,6 +403,11 @@ static esp_err_t read_ina231(char *json_out, size_t json_size)
 static bool init_sgp30(SGP30 &sgp30)
 {
     for (int attempt = 1; attempt <= SGP30_INIT_MAX_RETRIES; ++attempt) {
+        /* 非首次尝试时先软复位，确保传感器状态机干净 */
+        if (attempt > 1) {
+            sgp30.soft_reset();
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
         if (sgp30.init() == ESP_OK) {
             if (attempt > 1) ESP_LOGI(TAG, "SGP30 重试成功 (attempt=%d)", attempt);
             return true;
@@ -408,6 +441,9 @@ static bool init_veml7700(Adafruit_VEML7700 &veml)
     for (int attempt = 1; attempt <= VEML7700_INIT_MAX_RETRIES; ++attempt) {
         if (veml.begin(100000)) {
             if (attempt > 1) ESP_LOGI(TAG, "VEML7700 重试成功 (attempt=%d)", attempt);
+            /* 缓存初始化参数，避免后续 on-demand 查询时阻塞 I2C */
+            g_veml7700_cached_gain     = veml.getGain();
+            g_veml7700_cached_it       = veml.getIntegrationTime();
             return true;
         }
         ESP_LOGW(TAG, "VEML7700 初始化失败 attempt=%d", attempt);
@@ -422,11 +458,15 @@ static bool init_veml7700(Adafruit_VEML7700 &veml)
 
 static esp_err_t read_veml7700(Adafruit_VEML7700 &veml, char *json_out, size_t json_size)
 {
-    float lux = veml.readLux(VEML_LUX_AUTO);
-    uint8_t gain = veml.getGain();
-    uint8_t it = veml.getIntegrationTime();
+    /* 使用 NOWAIT 模式避免 readWait() 阻塞 + 避免 autoLux() 的长时间重试循环 */
+    ESP_LOGI(TAG, "read_veml7700: 开始读取 (NOWAIT模式)...");
+    float lux = veml.readLux(VEML_LUX_NORMAL_NOWAIT);
+    ESP_LOGI(TAG, "read_veml7700: readLux 返回 lux=%.2f", lux);
+    /* 使用缓存值，避免 on-demand 查询时额外 I2C 读取导致阻塞 */
     snprintf(json_out, json_size,
-        "{\"lux\":%.2f,\"gain\":%u,\"integration_time\":%u}", lux, gain, it);
+        "{\"lux\":%.2f,\"gain\":%u,\"integration_time\":%u}",
+        lux, g_veml7700_cached_gain, g_veml7700_cached_it);
+    ESP_LOGI(TAG, "read_veml7700: 完成, output=%s", json_out);
     return ESP_OK;
 }
 
@@ -641,23 +681,8 @@ void task_sensor_collect(void *pvParameter)
             if (ok) {
                 append_sensor("sgp30", sensor_json, true);
             } else {
-                ESP_LOGW(TAG, "SGP30 读取失败，尝试软复位+重新初始化");
-                /* 尝试恢复: 软复位 → init → 再读一次 */
-                g_sgp30->soft_reset();
-                vTaskDelay(pdMS_TO_TICKS(50));
-                if (init_sgp30(*g_sgp30)) {
-                    ok = (read_sgp30(*g_sgp30, sensor_json, sizeof(sensor_json)) == ESP_OK);
-                    if (ok) {
-                        ESP_LOGI(TAG, "SGP30 恢复成功");
-                        append_sensor("sgp30", sensor_json, true);
-                    } else {
-                        ESP_LOGE(TAG, "SGP30 恢复后读取仍然失败");
-                        g_sgp30_ready = false;
-                    }
-                } else {
-                    ESP_LOGE(TAG, "SGP30 恢复: 重新初始化失败");
-                    g_sgp30_ready = false;
-                }
+                ESP_LOGW(TAG, "SGP30 读取失败，下次采集周期重试");
+                /* 不重置 ready 标志，避免 on-demand 查询也失败 */
             }
         }
 
@@ -734,21 +759,44 @@ void task_sensor_collect(void *pvParameter)
 
 extern "C" bool sensor_read_one(const char *sensor_name, char *json_out, size_t json_size)
 {
-    if (!sensor_name || !json_out || !json_size) return false;
+    if (!sensor_name || !json_out || !json_size) {
+        ESP_LOGE(TAG, "sensor_read_one: 参数无效");
+        return false;
+    }
+
+    ESP_LOGI(TAG, "sensor_read_one: 请求传感器 '%s', ready: INA=%d SGP=%d VEML=%d PMS=%d SND=%d UV=%d",
+             sensor_name, g_ina231_ready, g_sgp30_ready, g_veml7700_ready,
+             g_pms_ready, g_sound_ready, g_uv_ready);
 
     if (strcasecmp(sensor_name, "ina231") == 0) {
+        if (!g_ina231_ready) {
+            /* 现场重新初始化（INA231 reinit 很快） */
+            ESP_LOGI(TAG, "sensor_read_one: INA231 未就绪，尝试现场重新初始化");
+            g_ina231_ready = init_ina231();
+        }
         if (!g_ina231_ready) return false;
         return (read_ina231(json_out, json_size) == ESP_OK);
     }
 
     if (strcasecmp(sensor_name, "sgp30") == 0) {
+        /* 如果未就绪且对象存在，尝试现场重新初始化 */
+        if ((!g_sgp30_ready || !g_sgp30) && g_sgp30) {
+            ESP_LOGI(TAG, "sensor_read_one: SGP30 未就绪，尝试现场重新初始化");
+            g_sgp30_ready = init_sgp30(*g_sgp30);
+        }
         if (!g_sgp30_ready || !g_sgp30) return false;
         return (read_sgp30(*g_sgp30, json_out, json_size) == ESP_OK);
     }
 
     if (strcasecmp(sensor_name, "veml7700") == 0) {
-        if (!g_veml7700_ready || !g_veml7700) return false;
-        return (read_veml7700(*g_veml7700, json_out, json_size) == ESP_OK);
+        if (!g_veml7700_ready || !g_veml7700) {
+            ESP_LOGW(TAG, "sensor_read_one: VEML7700 未就绪 (ready=%d, obj=%p)",
+                     g_veml7700_ready, (void*)g_veml7700);
+            return false;
+        }
+        bool ok = (read_veml7700(*g_veml7700, json_out, json_size) == ESP_OK);
+        ESP_LOGI(TAG, "sensor_read_one: VEML7700 读取%s, data=%s", ok ? "成功" : "失败", json_out);
+        return ok;
     }
 
     if (strcasecmp(sensor_name, "pms9103m") == 0) {
