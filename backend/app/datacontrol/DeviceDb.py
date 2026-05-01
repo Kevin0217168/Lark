@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from sqlalchemy import Column, Integer, String, Boolean
-from typing import Optional, Literal, List, Dict
+from typing import Optional, Literal, List
 from sqlalchemy.orm import sessionmaker, Session, declarative_base
 
 DeviceBase = declarative_base()
@@ -27,10 +27,22 @@ class DeviceOut(BaseModel):
     id: int
     name: str
     device_type: Optional[str]
-    area: str
-    number: int
+    area: Optional[str]
+    number: Optional[int]
     isOnline: bool
     status: Literal["stream", "standby", "error", "warning", "none"]
+
+    class Config:
+        from_attributes = True
+
+
+class BirdcageGroupItem(BaseModel):
+    area: str
+    number: int
+    label: str
+    devices: List[DeviceOut]
+    cam_device: Optional[DeviceOut] = None
+    c3_device: Optional[DeviceOut] = None
 
     class Config:
         from_attributes = True
@@ -173,23 +185,28 @@ def GetDevicesByAreaNumber(db: Session, area: str, number: int) -> List[M_Device
     ).all()
 
 
-def GetBirdcageGroups(db: Session) -> List[Dict]:
-    rows = db.query(M_Devices.area, M_Devices.number).distinct().order_by(
+def GetBirdcageGroups(db: Session) -> List[BirdcageGroupItem]:
+    rows = db.query(M_Devices.area, M_Devices.number).filter(
+        M_Devices.area.isnot(None),
+        M_Devices.number.isnot(None)
+    ).distinct().order_by(
         M_Devices.area, M_Devices.number
     ).all()
     groups = []
     for area, number in rows:
+        if area is None or number is None:
+            continue
         devices = GetDevicesByAreaNumber(db, area, number)
         cam = next((d for d in devices if d.device_type == "ESP32-CAM"), None)
         c3 = next((d for d in devices if d.device_type == "ESP32-C3"), None)
-        groups.append({
-            "area": area,
-            "number": number,
-            "label": f"{area} #{number}",
-            "devices": [DeviceOut.from_orm(d) for d in devices],
-            "cam_device": DeviceOut.from_orm(cam) if cam else None,
-            "c3_device": DeviceOut.from_orm(c3) if c3 else None,
-        })
+        groups.append(BirdcageGroupItem(
+            area=area,
+            number=number,
+            label=f"{area} #{number}",
+            devices=[DeviceOut.model_validate(d) for d in devices],
+            cam_device=DeviceOut.model_validate(cam) if cam else None,
+            c3_device=DeviceOut.model_validate(c3) if c3 else None,
+        ))
     return groups
 
 

@@ -109,6 +109,19 @@ async def get_devices(
 
 
 @router.get(
+    "/birdcage-groups",
+    response_model=CommonOut[List[Db.BirdcageGroupItem]],
+    summary="获取鸟笼设备分组",
+)
+async def get_birdcage_groups(
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
+    db: Db.Session = Depends(Db.GetDb("GetBirdcageGroups")),
+):
+    groups = Db.GetBirdcageGroups(db)
+    return CommonOut(data=groups)
+
+
+@router.get(
     "/{id}",
     response_model=CommonOut[List[Db.DeviceOut]],
     responses=R404_DEVICE_NOT_FOUND,
@@ -277,20 +290,6 @@ async def delete_device(
             content=CommonOut(code=404, msg="Device not found", data=None).model_dump(),
         )
     return CommonOut(data=None)
-
-
-@router.get(
-    "/birdcage-groups",
-    response_model=CommonOut[List[dict]],
-    summary="获取鸟笼设备分组",
-)
-async def get_birdcage_groups(
-    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
-    db: Db.Session = Depends(Db.GetDb("GetBirdcageGroups")),
-):
-    groups = Db.GetBirdcageGroups(db)
-    return CommonOut(data=groups)
-
 
 # ──────────────────── 设备 WebSocket 指令工具 ────────────────────
 
