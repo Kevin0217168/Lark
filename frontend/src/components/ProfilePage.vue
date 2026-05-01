@@ -692,10 +692,15 @@ const saveChanges = async () => {
 /* 桌面端样式 */
 .profile-card {
   z-index: 1;
-  padding: 20px;
+  padding: 24px;
   width: 600px;
   margin: 5% auto;
-  border-radius: 15px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.6);
 }
 
 .profile-card .title {

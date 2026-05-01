@@ -2585,8 +2585,12 @@ const goToFullscreen = () => {
   z-index: 1;
   width: 75%;
   margin: 1% auto;
-  border-radius: 15px;
-  background-color: #fff;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.6);
   padding: 30px;
   min-height: auto;
 }

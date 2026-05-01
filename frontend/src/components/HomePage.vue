@@ -1,897 +1,880 @@
 <template>
   <div class="home-container" :class="{ 'mobile': isMobile }">
-    <!-- 统计卡片 -->
-    <div v-if="isMobile" class="mobile-stats-cards">
-      <!-- 设备状态 -->
-      <div class="mobile-stats-card purple" @click="goToDeviceManagement">
-        <div class="stats-header">
-          <h3 class="stats-title">设备状态</h3>
-          <el-icon><Monitor /></el-icon>
-        </div>
-        <p class="stats-value">{{ deviceStats.online }}/{{ deviceStats.total }}</p>
-        <div class="device-progress-wrapper">
-          <div class="dual-progress-bar">
-            <div class="online-section" :style="{ width: onlinePercentage + '%' }">
-              <span class="section-label">在线</span>
-            </div>
-            <div class="offline-section" :style="{ width: (100 - onlinePercentage) + '%' }">
-              <span class="section-label">离线</span>
-            </div>
+    <div v-if="loading" class="loading-overlay">
+      <el-icon class="loading-icon"><Loading /></el-icon>
+      <p>加载鸟场概览...</p>
+    </div>
+
+    <template v-else>
+      <div class="home-card">
+      <!-- KPI 指标行 -->
+      <div class="kpi-row">
+        <div class="kpi-card purple" @click="goToDeviceManagement">
+          <div class="kpi-icon"><el-icon><Monitor /></el-icon></div>
+          <div class="kpi-body">
+            <p class="kpi-value">{{ deviceStats.online }}/{{ deviceStats.total }}</p>
+            <p class="kpi-label">设备在线</p>
           </div>
-          <p class="stats-percentage">{{ onlinePercentage }}% 在线</p>
         </div>
-        <div class="card-action">
-          <span class="action-text">设备管理</span>
-          <el-icon><ArrowRight /></el-icon>
+        <div class="kpi-card" :class="alertTotal === 0 ? 'green' : 'red'" @click="goToDeviceLogs">
+          <div class="kpi-icon"><el-icon><Warning /></el-icon></div>
+          <div class="kpi-body">
+            <p class="kpi-value">{{ alertTotal }}</p>
+            <p class="kpi-label">24h 告警</p>
+          </div>
+        </div>
+        <div class="kpi-card orange" @click="goToBirdsPage">
+          <div class="kpi-icon"><span class="bird-emoji">🐤</span></div>
+          <div class="kpi-body">
+            <p class="kpi-value">{{ birdsTotal }}</p>
+            <p class="kpi-label">在养雏鸟</p>
+          </div>
+        </div>
+        <div class="kpi-card aqi" :class="aqiLevelClass">
+          <div class="kpi-icon"><span class="aqi-icon-text">AQI</span></div>
+          <div class="kpi-body">
+            <p class="kpi-value">{{ todayAQI }}</p>
+            <p class="kpi-label">今日 AQI</p>
+          </div>
+        </div>
+        <div class="kpi-card temp-card">
+          <div class="kpi-icon"><span class="env-emoji">🌡</span></div>
+          <div class="kpi-body">
+            <p class="kpi-value">{{ avgTemp }}°C</p>
+            <p class="kpi-label">平均温度</p>
+          </div>
+        </div>
+        <div class="kpi-card humid-card">
+          <div class="kpi-icon"><span class="env-emoji">💧</span></div>
+          <div class="kpi-body">
+            <p class="kpi-value">{{ avgHumidity }}%</p>
+            <p class="kpi-label">平均湿度</p>
+          </div>
         </div>
       </div>
 
-      <!-- 环境数据 -->
-      <div class="mobile-stats-card blue" @click="goToDataAnalysis">
-        <div class="stats-header">
-          <h3 class="stats-title">环境数据</h3>
-          <el-icon><DataAnalysis /></el-icon>
-        </div>
-        <div class="env-data">
-          <div class="env-item">
-            <span class="env-label">温度</span>
-            <div class="env-values">
-              <span class="env-max">最高 {{ extremaEnvironmentData.temperature.max }}°C</span>
-              <span class="env-min">最低 {{ extremaEnvironmentData.temperature.min }}°C</span>
+      <!-- 鸟笼快照网格 -->
+      <div class="section-header">
+        <h3 class="section-title">鸟笼实时快照</h3>
+        <span class="section-subtitle">点击卡片查看详细趋势</span>
+      </div>
+      <div class="cage-grid">
+        <div
+          v-for="cage in cageSnapshots"
+          :key="cage.label"
+          class="cage-card"
+          :class="{ selected: selectedCage?.label === cage.label, warning: cage.hasWarning }"
+          @click="selectCage(cage)"
+        >
+          <div class="cage-card-header">
+            <span class="cage-label">{{ cage.label }}</span>
+            <span class="cage-birds">{{ cage.birdCount }} 只</span>
+          </div>
+          <div class="cage-sensors">
+            <div class="cage-sensor-item temp">
+              <span class="sensor-icon">🌡</span>
+              <span class="sensor-value">{{ cage.temperature !== null ? cage.temperature + '°C' : '--' }}</span>
+            </div>
+            <div class="cage-sensor-item humid">
+              <span class="sensor-icon">💧</span>
+              <span class="sensor-value">{{ cage.humidity !== null ? cage.humidity + '%' : '--' }}</span>
+            </div>
+            <div class="cage-sensor-item pm25">
+              <span class="sensor-label">PM2.5</span>
+              <span class="sensor-value">{{ cage.pm25 !== null ? cage.pm25 : '--' }}</span>
+            </div>
+            <div class="cage-sensor-item db">
+              <span class="sensor-label">dB</span>
+              <span class="sensor-value">{{ cage.db !== null ? cage.db : '--' }}</span>
+            </div>
+            <div class="cage-sensor-item lux">
+              <span class="sensor-label">Lux</span>
+              <span class="sensor-value">{{ cage.lux !== null ? cage.lux : '--' }}</span>
+            </div>
+            <div class="cage-sensor-item uv">
+              <span class="sensor-label">UV</span>
+              <span class="sensor-value">{{ cage.uv !== null ? cage.uv : '--' }}</span>
             </div>
           </div>
-          <div class="env-item">
-            <span class="env-label">湿度</span>
-            <div class="env-values">
-              <span class="env-max">最高 {{ extremaEnvironmentData.humidity.max }}%</span>
-              <span class="env-min">最低 {{ extremaEnvironmentData.humidity.min }}%</span>
-            </div>
-          </div>
         </div>
-        <div class="card-action">
-          <span class="action-text">数据分析</span>
-          <el-icon><ArrowRight /></el-icon>
+        <div v-if="cageSnapshots.length === 0" class="no-cages">
+          <p>暂无鸟笼数据，请先配置设备和鸟笼</p>
         </div>
       </div>
 
-      <!-- 错误数量 -->
-      <div class="mobile-stats-card" :class="errorCount === 0 ? 'green-purple' : 'red'" @click="goToDeviceLogs">
-        <div class="stats-header">
-          <h3 class="stats-title">错误数量</h3>
-          <el-icon><Warning /></el-icon>
-        </div>
-        <p class="stats-value">{{ errorCount }}</p>
-        <div class="error-logs-preview">
-          <div v-for="(log, index) in recentErrorLogs" :key="index" class="error-log-item">
-            <span class="log-device">{{ log.deviceName }}</span>
-            <span class="log-message" :title="log.message">{{ log.message }}</span>
+      <!-- 趋势图表 -->
+      <div v-if="selectedCage" class="section-header chart-section-header">
+        <h3 class="section-title">{{ selectedCage.label }} 趋势</h3>
+      </div>
+      <div v-if="selectedCage" class="chart-section">
+        <div class="chart-card">
+          <div class="chart-header">
+            <h4 class="chart-title">温度 / 湿度 <span class="time-range">(最近24小时)</span></h4>
           </div>
-          <div v-if="recentErrorLogs.length === 0" class="no-logs">暂无错误日志</div>
+          <div ref="tempHumidityChartRef" class="chart"></div>
         </div>
-        <div class="card-action">
-          <span class="action-text">查看日志</span>
-          <el-icon><ArrowRight /></el-icon>
+        <div class="chart-card">
+          <div class="chart-header">
+            <h4 class="chart-title">空气质量 / 声音 / 光照 / 紫外线 <span class="time-range">(最近24小时)</span></h4>
+          </div>
+          <div ref="envChartRef" class="chart"></div>
         </div>
       </div>
-    </div>
-
-    <div v-else class="stats-cards">
-      <div class="stats-card purple">
-        <div class="stats-content">
-          <h3 class="stats-title">设备状态</h3>
-          <p class="stats-value">{{ deviceStats.online }}/{{ deviceStats.total }}</p>
-          <div class="device-progress-wrapper">
-            <div class="dual-progress-bar">
-              <div class="online-section" :style="{ width: onlinePercentage + '%' }">
-                <span class="section-label">在线</span>
-              </div>
-              <div class="offline-section" :style="{ width: (100 - onlinePercentage) + '%' }">
-                <span class="section-label">离线</span>
-              </div>
-            </div>
-            <p class="stats-percentage">{{ onlinePercentage }}% 在线</p>
-          </div>
-          <div class="card-action">
-            <el-button class="device-btn" size="small" @click="goToDeviceManagement">
-              <el-icon><Monitor /></el-icon>
-              设备管理
-            </el-button>
-          </div>
-        </div>
       </div>
-      
-      <div class="stats-card blue">
-        <div class="stats-content">
-          <h3 class="stats-title">环境数据</h3>
-          <div class="env-data">
-            <div class="env-item">
-              <span class="env-label">温度</span>
-              <div class="env-values">
-                <span class="env-max">最高 {{ extremaEnvironmentData.temperature.max }}°C</span>
-                <span class="env-min">最低 {{ extremaEnvironmentData.temperature.min }}°C</span>
-              </div>
-            </div>
-            <div class="env-item">
-              <span class="env-label">湿度</span>
-              <div class="env-values">
-                <span class="env-max">最高 {{ extremaEnvironmentData.humidity.max }}%</span>
-                <span class="env-min">最低 {{ extremaEnvironmentData.humidity.min }}%</span>
-              </div>
-            </div>
-          </div>
-          <div class="card-action">
-            <el-button class="env-btn" size="small" @click="goToDataAnalysis">
-              <el-icon><DataAnalysis /></el-icon>
-              数据分析
-            </el-button>
-          </div>
-        </div>
-      </div>
-      
-      <div class="stats-card" :class="errorCount === 0 ? 'green-purple' : 'red'">
-        <div class="stats-content">
-          <h3 class="stats-title">错误数量</h3>
-          <p class="stats-value">{{ errorCount }}</p>
-          <div class="error-logs-preview">
-            <div v-for="(log, index) in recentErrorLogs" :key="index" class="error-log-item">
-              <span class="log-device">{{ log.deviceName }}</span>
-              <span class="log-message" :title="log.message">{{ log.message }}</span>
-            </div>
-            <div v-if="recentErrorLogs.length === 0" class="no-logs">暂无错误日志</div>
-          </div>
-          <div class="card-action">
-            <el-button class="error-btn" size="small" @click="goToDeviceLogs">
-              <el-icon><Warning /></el-icon>
-              查看日志
-            </el-button>
-          </div>
-        </div>
-      </div>
-    </div>
-    
-    <!-- 图表区域 -->
-    <div class="chart-section">
-      <div class="chart-card">
-        <div class="chart-header">
-          <h3 class="chart-title">所有设备平均值 <span class="time-range">(最近{{ isMobile ? 6 : 24 }}小时)</span></h3>
-        </div>
-        <div ref="averageChartRef" class="chart"></div>
-      </div>
-    </div>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useDeviceStore } from '../stores/deviceStore';
-import { ElMessage, ElIcon } from 'element-plus';
-import { Monitor, DataAnalysis, Warning, ArrowRight } from '@element-plus/icons-vue';
+import { ElIcon } from 'element-plus';
+import { Monitor, Warning, Loading } from '@element-plus/icons-vue';
 import * as echarts from 'echarts';
+import { api } from '../utils/api';
 
 const router = useRouter();
-const { 
-  devices, 
+const {
+  devices,
   deviceHistoryData,
-  getDeviceLogs, 
-  getDeviceAverageData,
-  getDeviceExtremaData,
-  fetchDevices,
+  getDeviceLogs,
   getOrUpdateDevices,
   fetchDeviceHistoryData,
-  getOrUpdateDeviceHistoryData,
-  fetchDeviceLogs
+  fetchDeviceLogs,
+  fetchSensorData,
 } = useDeviceStore();
 
-// 检测是否为移动设备
 const isMobile = ref(window.innerWidth < 768);
+const loading = ref(true);
 
-// 监听窗口大小变化
-const handleWindowResize = () => {
-  isMobile.value = window.innerWidth < 768;
-  averageChart?.resize();
-};
+interface Bird {
+  id: number;
+  name: string;
+  species: string;
+  birth_date: string;
+  status: string;
+  area?: string;
+  number?: number;
+}
 
-// 计算设备统计信息
+interface BirdcageGroup {
+  area: string;
+  number: number;
+  label: string;
+  devices: DeviceItem[];
+  cam_device: DeviceItem | null;
+  c3_device: DeviceItem | null;
+}
+
+interface DeviceItem {
+  id: number;
+  name: string;
+  device_type: string;
+  area: string;
+  number: number;
+  isOnline: boolean;
+  status: string;
+}
+
+interface CageSnapshot {
+  area: string;
+  number: number;
+  label: string;
+  birdCount: number;
+  camDeviceId: number | null;
+  c3DeviceId: number | null;
+  temperature: number | null;
+  humidity: number | null;
+  pm25: number | null;
+  db: number | null;
+  lux: number | null;
+  uv: number | null;
+  hasWarning: boolean;
+}
+
+const birdcageGroups = ref<BirdcageGroup[]>([]);
+const birds = ref<Bird[]>([]);
+const selectedCage = ref<CageSnapshot | null>(null);
+
+const tempHumidityChartRef = ref<HTMLElement | null>(null);
+const envChartRef = ref<HTMLElement | null>(null);
+let tempHumidityChart: echarts.ECharts | null = null;
+let envChart: echarts.ECharts | null = null;
+
 const deviceStats = computed(() => {
-  const total = devices.value.length;
-  const online = devices.value.filter(d => d.isOnline).length;
   return {
-    total,
-    online
+    total: devices.value.length,
+    online: devices.value.filter(d => d.isOnline).length,
   };
 });
 
-// 计算错误数量
-const errorCount = computed(() => {
+const alertTotal = computed(() => {
   const allLogs = getDeviceLogs();
   return allLogs.filter(log => log.level === 'WARNING' || log.level === 'ERROR').length;
 });
 
-// 获取最近两条错误日志
-const recentErrorLogs = computed(() => {
-  const allLogs = getDeviceLogs();
-  const errorLogs = allLogs.filter(log => log.level === 'WARNING' || log.level === 'ERROR');
-  return errorLogs.slice(0, 2).map(log => ({
-    deviceName: `设备${log.device_id}`,
-    message: log.content
-  }));
+const birdsTotal = computed(() => birds.value.length);
+
+const avgTemp = computed(() => {
+  const cages = cageSnapshots.value.filter(c => c.temperature !== null);
+  if (cages.length === 0) return '--';
+  const avg = cages.reduce((s, c) => s + c.temperature!, 0) / cages.length;
+  return avg.toFixed(1);
 });
 
-// 计算在线率
-const onlinePercentage = computed(() => {
-  if (deviceStats.value.total === 0) return 0;
-  return Math.round((deviceStats.value.online / deviceStats.value.total) * 100);
+const avgHumidity = computed(() => {
+  const cages = cageSnapshots.value.filter(c => c.humidity !== null);
+  if (cages.length === 0) return '--';
+  const avg = cages.reduce((s, c) => s + c.humidity!, 0) / cages.length;
+  return avg.toFixed(1);
 });
 
-// 计算24小时内所有设备的温度湿度的最高最低值
-const extremaEnvironmentData = computed(() => {
-  return getDeviceExtremaData();
+const todayAQI = computed(() => {
+  const pm25Values = cageSnapshots.value
+    .filter(c => c.pm25 !== null)
+    .map(c => c.pm25!);
+  if (pm25Values.length === 0) return '--';
+  const avg = pm25Values.reduce((s, v) => s + v, 0) / pm25Values.length;
+  return calculateAQI(avg, 0, 0, 0);
 });
 
-// 图表容器引用
-const averageChartRef = ref<HTMLElement | null>(null);
-let averageChart: echarts.ECharts | null = null;
+const aqiLevelClass = computed(() => {
+  const val = todayAQI.value;
+  if (val === '--') return '';
+  const n = Number(val);
+  if (n > 150) return 'aqi-bad';
+  if (n > 100) return 'aqi-moderate';
+  return 'aqi-good';
+});
 
-// 初始化图表
-const initChart = () => {
-  if (averageChartRef.value) {
-    if (averageChart) {
-      averageChart.dispose();
+const calculateAQI = (pm25: number, pm10: number, _co2: number, _tvoc: number): number => {
+  if (pm25 <= 0 && pm10 <= 0) return 0;
+  const calc = (c: number, bp: number[], ip: number[]) => {
+    if (c < 0) return -1;
+    const idx = bp.findIndex(b => c <= b);
+    if (idx < 0) return ip[ip.length - 1]!;
+    if (idx === 0) return Math.round((ip[0]! / bp[0]!) * c);
+    return Math.round(((ip[idx]! - ip[idx - 1]!) / (bp[idx]! - bp[idx - 1]!)) * (c - bp[idx - 1]!) + ip[idx - 1]!);
+  };
+  const pm25AQI = calc(pm25, [12, 35.4, 55.4, 150.4, 250.4, 350.4, 500.4], [50, 100, 150, 200, 300, 400, 500]);
+  const pm10AQI = calc(pm10, [54, 154, 254, 354, 424, 504, 604], [50, 100, 150, 200, 300, 400, 500]);
+  const values = [pm25AQI, pm10AQI].filter(v => v >= 0);
+  if (values.length === 0) return 0;
+  return Math.max(...values);
+};
+
+const cageSnapshots = computed<CageSnapshot[]>(() => {
+  return birdcageGroups.value.map(group => {
+    const cageBirds = birds.value.filter(b => b.area === group.area && b.number === group.number);
+    const camId = group.cam_device?.id ?? null;
+    const c3Id = group.c3_device?.id ?? null;
+
+    let temperature: number | null = null;
+    let humidity: number | null = null;
+    if (camId !== null) {
+      const camData = deviceHistoryData.value
+        .filter(d => d.deviceId === camId)
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      if (camData.length > 0) {
+        temperature = camData[0]!.temperature;
+        humidity = camData[0]!.humidity;
+      }
     }
-    averageChart = echarts.init(averageChartRef.value);
-    
-    const avgData = getDeviceAverageData(isMobile.value ? 6 : 24); // 移动端6小时，桌面端24小时
-    
-    averageChart.setOption({
-      tooltip: {
-        trigger: 'axis'
-      },
-      legend: {
-        data: ['平均温度', '平均湿度'],
-        top: isMobile.value ? 10 : 30,
-        textStyle: {
-          fontSize: isMobile.value ? 12 : 14
-        },
-        itemGap: isMobile.value ? 15 : 20,
-        backgroundColor: 'transparent'
-      },
-      xAxis: {
-        type: 'category',
-        data: isMobile.value ? avgData.times.slice(-12) : avgData.times,
-        axisLabel: {
-          fontSize: isMobile.value ? 10 : 12,
-          rotate: isMobile.value ? 45 : 0
+
+    const hasWarning = camId !== null
+      ? devices.value.find(d => d.id === camId)?.status === 'warning' || devices.value.find(d => d.id === camId)?.status === 'error'
+      : false;
+
+    return {
+      area: group.area,
+      number: group.number,
+      label: group.label,
+      birdCount: cageBirds.length,
+      camDeviceId: camId,
+      c3DeviceId: c3Id,
+      temperature,
+      humidity,
+      pm25: null,
+      db: null,
+      lux: null,
+      uv: null,
+      hasWarning: !!hasWarning,
+    };
+  });
+});
+
+const selectCage = async (cage: CageSnapshot) => {
+  selectedCage.value = cage;
+  await initChartsForCage(cage);
+};
+
+const fetchBirdcageGroups = async () => {
+  try {
+    const response = await api.get('/api/devices/birdcage-groups');
+    if (response.code === 200) {
+      birdcageGroups.value = response.data || [];
+    }
+  } catch (error) {
+    console.error('获取鸟笼分组失败:', error);
+  }
+};
+
+const fetchBirds = async () => {
+  try {
+    const response = await api.get('/api/birds');
+    if (response.code === 200) {
+      birds.value = response.data || [];
+    }
+  } catch (error) {
+    console.error('获取雏鸟列表失败:', error);
+  }
+};
+
+const fetchC3SensorData = async () => {
+  const snapshots = [...cageSnapshots.value];
+  for (let i = 0; i < snapshots.length; i++) {
+    const cage = snapshots[i]!;
+    if (!cage.c3DeviceId) continue;
+    try {
+      const results = await Promise.allSettled([
+        api.get('/api/sensor-upload', { device_id: cage.c3DeviceId, sensor_type: 'pms9103m', limit: 1 }),
+        api.get('/api/sensor-upload', { device_id: cage.c3DeviceId, sensor_type: 'sound_meter', limit: 1 }),
+        api.get('/api/sensor-upload', { device_id: cage.c3DeviceId, sensor_type: 'veml7700', limit: 1 }),
+        api.get('/api/sensor-upload', { device_id: cage.c3DeviceId, sensor_type: 'uv_meter', limit: 1 }),
+      ]);
+      const extractValue = (result: PromiseSettledResult<any>, key: string): number | null => {
+        if (result.status !== 'fulfilled') return null;
+        const r = result.value;
+        if (r?.code === 200 && r.data && r.data.length > 0) {
+          const parsed = typeof r.data[0].data === 'string' ? JSON.parse(r.data[0].data) : r.data[0].data;
+          const val = Number(parsed[key]);
+          return isNaN(val) ? null : val;
         }
-      },
-      yAxis: {
-        type: 'value',
-        name: '数值', 
-        axisLabel: {
-          fontSize: isMobile.value ? 10 : 12
+        return null;
+      };
+      snapshots[i] = {
+        ...cage,
+        pm25: extractValue(results[0]!, 'pm2_5_cf1'),
+        db: extractValue(results[1]!, 'db'),
+        lux: extractValue(results[2]!, 'lux'),
+        uv: extractValue(results[3]!, 'uv_index'),
+      };
+    } catch (error) {
+      console.error(`获取 ${cage.label} C3 传感器数据失败:`, error);
+    }
+  }
+  const refArray = cageSnapshots.value;
+  for (let i = 0; i < snapshots.length; i++) {
+    refArray[i] = snapshots[i]!;
+  }
+};
+
+const formatLocalISO = (date: Date): string => {
+  const parts = [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+    String(date.getHours()).padStart(2, '0'),
+    String(date.getMinutes()).padStart(2, '0'),
+    String(date.getSeconds()).padStart(2, '0'),
+    String(date.getMilliseconds()).padStart(3, '0'),
+  ];
+  return `${parts[0]}-${parts[1]}-${parts[2]}T${parts[3]}:${parts[4]}:${parts[5]}.${parts[6]}`;
+};
+
+const initChartsForCage = async (cage: CageSnapshot) => {
+  if (!cage.camDeviceId && !cage.c3DeviceId) return;
+
+  if (cage.camDeviceId) {
+    const data = await fetchSensorData(cage.camDeviceId, 'today');
+    initTempHumidityChart(data.times, data.temperatureValues, data.humidityValues);
+  }
+
+  if (cage.c3DeviceId) {
+    const results = await Promise.allSettled([
+      fetchSensorTimeSeries(cage.c3DeviceId, 'pms9103m', 'pm2_5_cf1'),
+      fetchSensorTimeSeries(cage.c3DeviceId, 'sound_meter', 'db'),
+      fetchSensorTimeSeries(cage.c3DeviceId, 'veml7700', 'lux'),
+      fetchSensorTimeSeries(cage.c3DeviceId, 'uv_meter', 'uv_index'),
+    ]);
+    const extract = (r: PromiseSettledResult<{ times: string[]; values: number[] }>) =>
+      r.status === 'fulfilled' ? r.value : { times: [] as string[], values: [] as number[] };
+    const aqi = extract(results[0]!);
+    const sound = extract(results[1]!);
+    const lux = extract(results[2]!);
+    const uv = extract(results[3]!);
+    initEnvChart(aqi.times, aqi.values, sound.values, lux.values, uv.values);
+  }
+};
+
+const fetchSensorTimeSeries = async (deviceId: number, sensorType: string, valueKey: string): Promise<{ times: string[]; values: number[] }> => {
+  try {
+    const response = await api.get('/api/sensor-upload', {
+      device_id: deviceId,
+      sensor_type: sensorType,
+      limit: 200,
+    });
+    if (response.code === 200 && response.data && Array.isArray(response.data)) {
+      const pairs: { time: string; value: number }[] = [];
+      const cutoff = new Date();
+      cutoff.setSeconds(cutoff.getSeconds() - 86400);
+      for (const item of response.data) {
+        const ts = new Date(item.timestamp + '+00:00');
+        if (ts < cutoff || isNaN(ts.getTime())) continue;
+        const msUTC8 = ts.getTime() + 8 * 3600 * 1000;
+        const ts8 = new Date(msUTC8);
+        let parsed: any;
+        try {
+          parsed = typeof item.data === 'string' ? JSON.parse(item.data) : item.data;
+        } catch { continue; }
+        if (parsed[valueKey] !== undefined && parsed[valueKey] !== null) {
+          const hh = ts8.getUTCHours().toString().padStart(2, '0');
+          const mm = ts8.getUTCMinutes().toString().padStart(2, '0');
+          pairs.push({ time: `${hh}:${mm}`, value: Number(parsed[valueKey]) });
         }
-      },
+      }
+      pairs.reverse();
+      return { times: pairs.map(p => p.time), values: pairs.map(p => p.value) };
+    }
+  } catch (error) {
+    console.error(`获取${sensorType}时间序列失败:`, error);
+  }
+  return { times: [], values: [] };
+};
+
+const initTempHumidityChart = (times: string[], tempValues: number[], humidValues: number[]) => {
+  if (tempHumidityChartRef.value) {
+    if (tempHumidityChart) tempHumidityChart.dispose();
+    tempHumidityChart = echarts.init(tempHumidityChartRef.value);
+    tempHumidityChart.setOption({
+      tooltip: { trigger: 'axis' },
+      legend: { data: ['温度', '湿度'], top: 10 },
+      xAxis: { type: 'category', data: times },
+      yAxis: { type: 'value', name: '数值' },
       series: [
-        {
-          name: '平均温度',
-          data: isMobile.value ? avgData.temperatureValues.slice(-12) : avgData.temperatureValues,
-          type: 'line',
-          smooth: true,
-          itemStyle: {
-            color: '#ff7875'
-          }
-        },
-        {
-          name: '平均湿度',
-          data: isMobile.value ? avgData.humidityValues.slice(-12) : avgData.humidityValues,
-          type: 'line',
-          smooth: true,
-          itemStyle: {
-            color: '#69c0ff'
-          }
-        }
-      ]
+        { name: '温度', data: tempValues, type: 'line', smooth: true, itemStyle: { color: '#ff7875' } },
+        { name: '湿度', data: humidValues, type: 'line', smooth: true, itemStyle: { color: '#69c0ff' } },
+      ],
     });
   }
 };
 
-// 窗口大小变化时调整图表
+const initEnvChart = (times: string[], pm25Values: number[], dbValues: number[], luxValues: number[], uvValues: number[]) => {
+  if (envChartRef.value) {
+    if (envChart) envChart.dispose();
+    envChart = echarts.init(envChartRef.value);
+    envChart.setOption({
+      tooltip: { trigger: 'axis' },
+      legend: { data: ['PM2.5', 'dB', 'Lux', 'UV'], top: 10, type: 'scroll' },
+      xAxis: { type: 'category', data: times },
+      yAxis: [
+        { type: 'value', name: 'PM2.5 / dB' },
+        { type: 'value', name: 'Lux / UV' },
+      ],
+      series: [
+        { name: 'PM2.5', data: pm25Values, type: 'line', smooth: true, itemStyle: { color: '#ff7875' } },
+        { name: 'dB', data: dbValues, type: 'line', smooth: true, itemStyle: { color: '#69c0ff' } },
+        { name: 'Lux', data: luxValues, type: 'line', smooth: true, yAxisIndex: 1, itemStyle: { color: '#ffc53d' } },
+        { name: 'UV', data: uvValues, type: 'line', smooth: true, yAxisIndex: 1, itemStyle: { color: '#b37feb' } },
+      ],
+    });
+  }
+};
+
+const goToDeviceManagement = () => router.push({ path: '/Device', query: { tab: 'management' } });
+const goToDeviceLogs = () => router.push({ path: '/Device', query: { tab: 'logs' } });
+const goToBirdsPage = () => router.push({ path: '/birds' });
+const goToDataAnalysis = (cage?: CageSnapshot) => {
+  router.push({ path: '/Data', query: { activeTab: 'analysis' } });
+};
+
 const handleResize = () => {
-  averageChart?.resize();
-};
-
-// 跳转到设备管理
-const goToDeviceManagement = () => {
-  router.push({
-    path: '/Device',
-    query: { tab: 'management' }
-  });
-};
-
-// 跳转到数据分析
-const goToDataAnalysis = () => {
-  router.push({
-    path: '/Data',
-    query: { activeTab: 'analysis' }
-  });
-};
-
-// 跳转到设备日志
-const goToDeviceLogs = () => {
-  router.push({
-    path: '/Device',
-    query: { tab: 'logs' }
-  });
+  isMobile.value = window.innerWidth < 768;
+  tempHumidityChart?.resize();
+  envChart?.resize();
 };
 
 onMounted(async () => {
-  window.addEventListener('resize', handleWindowResize);
   window.addEventListener('resize', handleResize);
+  loading.value = true;
 
-  // 获取设备数据
   await getOrUpdateDevices();
+  await Promise.all([
+    fetchBirdcageGroups(),
+    fetchBirds(),
+    fetchDeviceHistoryData(),
+  ]);
 
-  // 获取所有设备的历史数据
-  if (devices.value.length > 0) {
-    if (isMobile.value) {
-      // 移动端：逐个获取设备历史数据
-      for (const device of devices.value) {
-        await getOrUpdateDeviceHistoryData(device.id);
-      }
-    } else {
-      // 桌面端：一次性获取所有设备历史数据
-      await fetchDeviceHistoryData();
+  await fetchC3SensorData();
+
+  const now = new Date();
+  const startTime = formatLocalISO(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+  const endTime = formatLocalISO(now);
+  const deviceIds = devices.value.map(d => d.id);
+  if (deviceIds.length > 0) {
+    try {
+      await fetchDeviceLogs(deviceIds, 0, 100, ['WARNING', 'ERROR'], startTime, endTime);
+    } catch (error) {
+      console.error('获取告警日志失败:', error);
     }
   }
 
-  // 初始化图表
-  initChart();
+  if (cageSnapshots.value.length > 0) {
+    await selectCage(cageSnapshots.value[0]!);
+  }
 
-  // 自动查询24小时内所有设备的WARNING、ERROR等级日志
-  await fetchRecentWarningErrorLogs();
+  loading.value = false;
 });
 
-// 格式化日期为与deviceStore一致的格式
-const formatLocalISO = (date: Date): string => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  const seconds = String(date.getSeconds()).padStart(2, '0');
-  const ms = String(date.getMilliseconds()).padStart(3, '0');
-  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${ms}`;
-};
-
-// 查询24小时内WARNING、ERROR等级日志
-const fetchRecentWarningErrorLogs = async () => {
-  if (devices.value.length === 0) {
-    console.log('没有设备，跳过查询日志');
-    return;
-  }
-
-  const now = new Date();
-  const startTimeDate = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 24小时前
-  const startTime = formatLocalISO(startTimeDate);
-  const endTime = formatLocalISO(now); // 当前时间
-
-  const deviceIds = devices.value.map(d => d.id);
-
-  console.log('========== 总览页面自动查询日志 ==========');
-  console.log('设备数量:', devices.value.length);
-  console.log('设备ID列表:', deviceIds);
-  console.log('查询等级:', ['WARNING', 'ERROR']);
-  console.log('时间范围:', startTime, '至', endTime);
-  console.log('开始查询...');
-
-  try {
-    const result = await fetchDeviceLogs(
-      deviceIds, // 所有设备ID
-      0, // skip
-      100, // limit
-      ['WARNING', 'ERROR'], // 只查询WARNING和ERROR等级
-      startTime,
-      endTime
-    );
-
-    console.log('查询完成');
-    console.log('获取到的日志总数:', result.total);
-    console.log('当前错误数量:', errorCount.value);
-    console.log('==========================================');
-  } catch (error) {
-    console.error('获取24小时内警告和错误日志失败:', error);
-  }
-};
-
-// 监听设备数据变化
-watch(devices, () => {
-  // 设备数据变化时重新初始化图表
-  initChart();
-}, { deep: true });
-
-// 监听历史数据变化
-watch(deviceHistoryData, () => {
-  // 历史数据变化时重新初始化图表
-  initChart();
-}, { deep: true });
-
 onUnmounted(() => {
-  window.removeEventListener('resize', handleWindowResize);
   window.removeEventListener('resize', handleResize);
-  averageChart?.dispose();
+  tempHumidityChart?.dispose();
+  envChart?.dispose();
 });
 </script>
 
 <style scss scoped>
 .home-container {
+  position: relative;
+  z-index: 1;
   width: 90%;
   max-width: 1200px;
   margin: 2% auto;
   padding: 20px;
-  position: relative;
-  z-index: 1;
 
   &.mobile {
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    min-height: calc(100vh - 180px);
+    padding: 12px;
     width: 100%;
     max-width: 100%;
     margin: 0;
-    overflow-x: hidden;
     box-sizing: border-box;
   }
 }
 
-/* 移动端统计卡片 */
-.mobile-stats-cards {
+.home-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.mobile .home-card {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+  border: none;
+}
+
+.loading-overlay {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-
-.mobile-stats-card {
-  border-radius: 16px;
-  padding: 16px;
-  color: white;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-  cursor: pointer;
-  position: relative;
-  overflow: hidden;
-
-  &:active {
-    transform: scale(0.98);
-  }
-
-  &.purple {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  }
-
-  &.blue {
-    background: linear-gradient(135deg, #4a8fe7 0%, #0099ff 100%);
-  }
-
-  &.red {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  }
-
-  &.green-purple {
-    background: linear-gradient(135deg, #5a9a9a 0%, #7fb3b3 100%);
-  }
-}
-
-/* 桌面端统计卡片 */
-.stats-cards {
-  display: flex;
-  gap: 15px;
-  margin-bottom: 30px;
-  flex-wrap: nowrap;
+  align-items: center;
   justify-content: center;
+  height: 60vh;
+  color: #909399;
+
+  .loading-icon {
+    font-size: 40px;
+    animation: spin 1s linear infinite;
+    margin-bottom: 16px;
+  }
 }
 
-.stats-card {
-  flex: 1;
-  max-width: 300px;
-  min-width: 280px;
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* KPI 行 */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+
+  .mobile & {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+}
+
+.kpi-card {
   border-radius: 12px;
-  padding: 18px;
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  padding: 14px 16px;
   color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 
   &:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   }
 
-  &.purple {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  }
+  &.purple { background: linear-gradient(135deg, #667eea, #764ba2); }
+  &.orange { background: linear-gradient(135deg, #f09433, #e6683c); }
+  &.red { background: linear-gradient(135deg, #f093fb, #f5576c); }
+  &.green { background: linear-gradient(135deg, #43e97b, #38f9d7); color: #1a3c34; }
+  &.aqi-good { background: linear-gradient(135deg, #43e97b, #38f9d7); color: #1a3c34; }
+  &.aqi-moderate { background: linear-gradient(135deg, #f6d365, #fda085); }
+  &.aqi-bad { background: linear-gradient(135deg, #f093fb, #f5576c); }
+  &.temp-card { background: linear-gradient(135deg, #ff9a9e, #fecfef); color: #5c1a1a; }
+  &.humid-card { background: linear-gradient(135deg, #a1c4fd, #c2e9fb); color: #1a3a5c; }
 
-  &.blue {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  }
-
-  &.red {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  }
-
-  &.green-purple {
-    background: linear-gradient(135deg, #5a9a9a 0%, #7fb3b3 100%);
+  .mobile & {
+    padding: 10px 12px;
+    gap: 8px;
   }
 }
 
-/* 公共样式 */
-.stats-header {
+.kpi-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.2);
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+
+  .mobile & {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+  }
+}
+
+.bird-emoji, .env-emoji {
+  font-size: 20px;
+  line-height: 1;
+
+  .mobile & { font-size: 16px; }
+}
+
+.aqi-icon-text {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+
+  .mobile & { font-size: 11px; }
+}
+
+.kpi-body {
+  min-width: 0;
+}
+
+.kpi-value {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1.2;
+  white-space: nowrap;
+
+  .mobile & { font-size: 16px; }
+}
+
+.kpi-label {
+  font-size: 12px;
+  opacity: 0.85;
+  margin: 2px 0 0;
+  white-space: nowrap;
+
+  .mobile & { font-size: 10px; }
+}
+
+/* 区域标题 */
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
   margin-bottom: 12px;
 }
 
-.stats-content {
-  position: relative;
-  z-index: 2;
-  color: white;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.stats-title {
-  font-size: 14px;
-  font-weight: 500;
-  margin: 0 0 10px 0;
-  opacity: 0.9;
-}
-
-.stats-value {
-  font-size: 28px;
-  font-weight: 600;
-  margin: 0 0 12px 0;
-}
-
-/* 设备状态进度条 */
-.device-progress-wrapper {
-  margin: 12px 0;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.dual-progress-bar {
-  display: flex;
-  width: 100%;
-  height: 28px;
-  border-radius: 14px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.1);
-  margin-bottom: 8px;
-}
-
-.online-section {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #7fcdbb 0%, #41b6c4 100%);
-  transition: width 0.3s ease;
-  min-width: 0;
-}
-
-.online-section .section-label {
-  color: white;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding: 0 8px;
-}
-
-.offline-section {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  transition: width 0.3s ease;
-  min-width: 0;
-}
-
-.offline-section .section-label {
-  color: white;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding: 0 8px;
-}
-
-.stats-percentage {
-  font-size: 12px;
-  opacity: 0.8;
-  margin: 0;
-  text-align: right;
-}
-
-/* 环境数据 */
-.mobile-stats-card .env-data {
-  margin: 12px 0;
-}
-
-.mobile-stats-card .env-item {
-  margin-bottom: 10px;
-
-  &:last-child {
-    margin-bottom: 0;
-  }
-}
-
-.mobile-stats-card .env-label {
-  font-size: 14px;
-  opacity: 0.9;
-  display: block;
-  margin-bottom: 4px;
-}
-
-.mobile-stats-card .env-values {
-  display: flex;
-  gap: 12px;
-}
-
-.mobile-stats-card .env-max, .mobile-stats-card .env-min {
-  font-size: 13px;
-  font-weight: 500;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.15);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-}
-
-.mobile-stats-card .env-max {
-  color: #ffffff;
-  background: rgba(255, 107, 107, 0.15);
-}
-
-.mobile-stats-card .env-min {
-  color: #ffffff;
-  background: rgba(77, 171, 247, 0.15);
-}
-
-.stats-card .env-data {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-evenly;
-  margin: 10px 0;
-}
-
-.stats-card .env-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.stats-card .env-label {
-  font-size: 14px;
-  opacity: 0.9;
-}
-
-.stats-card .env-values {
-  display: flex;
-  gap: 10px;
-  width: 230px;
-  justify-content: space-between;
-}
-
-.stats-card .env-max {
-  font-size: 16px;
-  font-weight: 600;
-  color: #ffffff;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-}
-
-.stats-card .env-min {
-  font-size: 16px;
-  font-weight: 600;
-  color: #ffffff;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-}
-
-/* 错误日志 */
-.error-logs-preview {
-  margin: 12px 0;
-  min-height: 50px;
-}
-
-.error-log-item {
-  display: flex;
-  align-items: center;
-  padding: 6px 10px;
-  margin-bottom: 6px;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 6px;
-  font-size: 12px;
-  line-height: 1.4;
-
-  &:last-child {
-    margin-bottom: 0;
-  }
-}
-
-.log-device {
-  flex-shrink: 0;
-  font-weight: 600;
-  color: #fff;
-  margin-right: 8px;
-  padding: 2px 6px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
-  white-space: nowrap;
-  font-size: 10px;
-}
-
-.log-message {
-  color: rgba(255, 255, 255, 0.9);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-  font-size: 11px;
-}
-
-.no-logs {
-  text-align: center;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 12px;
-  padding: 12px 0;
-}
-
-/* 卡片底部操作 */
-.card-action {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.action-text {
-  font-size: 14px;
-  font-weight: 500;
-  opacity: 0.9;
-}
-
-.card-action .el-icon {
-  font-size: 16px;
-  opacity: 0.8;
-}
-
-/* 桌面端按钮样式 */
-.card-action .el-button {
-  width: 100%;
-  justify-content: center;
-  border: none;
-  font-weight: 500;
-}
-
-.device-btn {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-
-  &:hover {
-    background: rgba(255, 255, 255, 0.3);
-    color: white;
-  }
-}
-
-.env-btn {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-
-  &:hover {
-    background: rgba(255, 255, 255, 0.3);
-    color: white;
-  }
-}
-
-.error-btn {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-
-  &:hover {
-    background: rgba(255, 255, 255, 0.3);
-    color: white;
-  }
-}
-
-/* 图表区域 */
-.mobile-chart-section {
-  margin-bottom: 24px;
-}
-
-.chart-section {
-  margin-bottom: 30px;
-}
-
-.chart-card {
-  background: #fff;
-  border-radius: 15px;
-  padding: 20px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  box-sizing: border-box;
-  width: 100%;
-}
-
-.chart-header {
-  margin-bottom: 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.chart-title {
+.section-title {
   font-size: 16px;
   font-weight: 600;
   color: #303133;
   margin: 0;
 }
 
-.chart-title .time-range {
+.section-subtitle {
   font-size: 12px;
-  font-weight: normal;
   color: #909399;
-  margin-left: 8px;
+}
+
+.chart-section-header {
+  margin-top: 24px;
+}
+
+/* 鸟笼快照网格 */
+.cage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+
+  .mobile & {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+}
+
+.cage-card {
+  border: 2px solid #ebeef5;
+  border-radius: 12px;
+  padding: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: white;
+
+  &:hover {
+    border-color: #667eea;
+    box-shadow: 0 2px 12px rgba(102, 126, 234, 0.15);
+  }
+
+  &.selected {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+  }
+
+  &.warning {
+    border-color: #f56c6c;
+    background: #fef0f0;
+  }
+
+  .mobile & {
+    padding: 10px;
+  }
+}
+
+.cage-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f2f3f5;
+}
+
+.cage-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.cage-birds {
+  font-size: 13px;
+  color: #606266;
+  background: #f5f7fa;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.cage-sensors {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.cage-sensor-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 7px 4px;
+  border-radius: 8px;
+  background: #f5f7fa;
+
+  &.temp { background: #fff1f0; }
+  &.humid { background: #e6f7ff; }
+  &.pm25 { background: #fff7e6; }
+  &.db { background: #f6ffed; }
+  &.lux { background: #f9f0ff; }
+  &.uv { background: #fff0f6; }
+
+  .mobile & { padding: 5px 2px; }
+}
+
+.sensor-icon {
+  font-size: 14px;
+  line-height: 1;
+
+  .mobile & { font-size: 12px; }
+}
+
+.sensor-label {
+  font-size: 10px;
+  color: #909399;
+  margin-bottom: 2px;
+}
+
+.sensor-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+
+  .mobile & { font-size: 11px; }
+}
+
+.no-cages {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 40px;
+  color: #909399;
+}
+
+/* 图表区域 */
+.chart-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+
+  .mobile & {
+    grid-template-columns: 1fr;
+  }
+}
+
+.chart-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.chart-header {
+  margin-bottom: 12px;
+}
+
+.chart-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  margin: 0;
+
+  .time-range {
+    font-size: 11px;
+    font-weight: 400;
+    color: #909399;
+    margin-left: 6px;
+  }
 }
 
 .chart {
   width: 100%;
-  height: 400px;
-  border-radius: 10px;
-  background-color: transparent;
-}
+  height: 340px;
 
-/* 响应式设计 */
-@media (max-width: 1024px) {
-  .stats-cards {
-    flex-wrap: wrap;
-  }
-  
-  .stats-card {
-    max-width: calc(50% - 10px);
-  }
-}
-
-@media (max-width: 768px) {
-  .home-container {
-    width: 95%;
-    padding: 10px;
-  }
-  
-  .stats-cards {
-    flex-direction: column;
-  }
-  
-  .stats-card {
-    max-width: 100%;
-    min-width: auto;
-  }
-  
-  .chart {
-    height: 250px;
-    background-color: #f9f9f9;
-  }
-  
-  .action-buttons {
-    flex-direction: column;
+  .mobile & {
+    height: 240px;
   }
 }
 </style>
