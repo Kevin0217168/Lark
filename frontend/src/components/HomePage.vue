@@ -126,7 +126,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useDeviceStore } from '../stores/deviceStore';
 import { ElIcon } from 'element-plus';
@@ -264,8 +264,15 @@ const calculateAQI = (pm25: number, pm10: number, _co2: number, _tvoc: number): 
   return Math.max(...values);
 };
 
-const cageSnapshots = computed<CageSnapshot[]>(() => {
-  return birdcageGroups.value.map(group => {
+const cageSnapshots = ref<CageSnapshot[]>([]);
+
+const buildCageSnapshots = () => {
+  const prev = new Map<string, CageSnapshot>();
+  for (const s of cageSnapshots.value) {
+    prev.set(`${s.area}-${s.number}`, s);
+  }
+
+  const result: CageSnapshot[] = birdcageGroups.value.map(group => {
     const cageBirds = birds.value.filter(b => b.area === group.area && b.number === group.number);
     const camId = group.cam_device?.id ?? null;
     const c3Id = group.c3_device?.id ?? null;
@@ -286,6 +293,9 @@ const cageSnapshots = computed<CageSnapshot[]>(() => {
       ? devices.value.find(d => d.id === camId)?.status === 'warning' || devices.value.find(d => d.id === camId)?.status === 'error'
       : false;
 
+    const key = `${group.area}-${group.number}`;
+    const existing = prev.get(key);
+
     return {
       area: group.area,
       number: group.number,
@@ -295,14 +305,18 @@ const cageSnapshots = computed<CageSnapshot[]>(() => {
       c3DeviceId: c3Id,
       temperature,
       humidity,
-      pm25: null,
-      db: null,
-      lux: null,
-      uv: null,
+      pm25: existing?.pm25 ?? null,
+      db: existing?.db ?? null,
+      lux: existing?.lux ?? null,
+      uv: existing?.uv ?? null,
       hasWarning: !!hasWarning,
     };
   });
-});
+
+  cageSnapshots.value = result;
+};
+
+watch([devices, deviceHistoryData], () => buildCageSnapshots());
 
 const selectCage = async (cage: CageSnapshot) => {
   selectedCage.value = cage;
@@ -333,9 +347,8 @@ const fetchBirds = async () => {
 
 const fetchC3SensorData = async () => {
   const snapshots = [...cageSnapshots.value];
-  for (let i = 0; i < snapshots.length; i++) {
-    const cage = snapshots[i]!;
-    if (!cage.c3DeviceId) continue;
+  const cagePromises = snapshots.map(async (cage, i) => {
+    if (!cage.c3DeviceId) return { index: i, cage };
     try {
       const results = await Promise.allSettled([
         api.get('/api/sensor-upload', { device_id: cage.c3DeviceId, sensor_type: 'pms9103m', limit: 1 }),
@@ -353,17 +366,30 @@ const fetchC3SensorData = async () => {
         }
         return null;
       };
-      snapshots[i] = {
-        ...cage,
-        pm25: extractValue(results[0]!, 'pm2_5_cf1'),
-        db: extractValue(results[1]!, 'db'),
-        lux: extractValue(results[2]!, 'lux'),
-        uv: extractValue(results[3]!, 'uv_index'),
+      return {
+        index: i,
+        cage: {
+          ...cage,
+          pm25: extractValue(results[0]!, 'pm2_5_cf1'),
+          db: extractValue(results[1]!, 'db'),
+          lux: extractValue(results[2]!, 'lux'),
+          uv: extractValue(results[3]!, 'uv_index'),
+        },
       };
     } catch (error) {
       console.error(`获取 ${cage.label} C3 传感器数据失败:`, error);
+      return { index: i, cage };
+    }
+  });
+
+  const results = await Promise.allSettled(cagePromises);
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      const { index, cage: updatedCage } = result.value;
+      snapshots[index] = updatedCage;
     }
   }
+
   const refArray = cageSnapshots.value;
   for (let i = 0; i < snapshots.length; i++) {
     refArray[i] = snapshots[i]!;
@@ -495,36 +521,37 @@ const handleResize = () => {
   envChart?.resize();
 };
 
-onMounted(async () => {
+onMounted(() => {
   window.addEventListener('resize', handleResize);
   loading.value = true;
 
-  await getOrUpdateDevices();
-  await Promise.all([
-    fetchBirdcageGroups(),
-    fetchBirds(),
-    fetchDeviceHistoryData(),
-  ]);
+  const devicePromise = getOrUpdateDevices();
+  const groupsPromise = fetchBirdcageGroups();
+  const birdsPromise = fetchBirds();
+  const historyPromise = fetchDeviceHistoryData();
 
-  await fetchC3SensorData();
-
-  const now = new Date();
-  const startTime = formatLocalISO(new Date(now.getTime() - 24 * 60 * 60 * 1000));
-  const endTime = formatLocalISO(now);
-  const deviceIds = devices.value.map(d => d.id);
-  if (deviceIds.length > 0) {
-    try {
-      await fetchDeviceLogs(deviceIds, 0, 100, ['WARNING', 'ERROR'], startTime, endTime);
-    } catch (error) {
-      console.error('获取告警日志失败:', error);
+  devicePromise.then(async () => {
+    const now = new Date();
+    const startTime = formatLocalISO(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+    const endTime = formatLocalISO(now);
+    const deviceIds = devices.value.map(d => d.id);
+    if (deviceIds.length > 0) {
+      fetchDeviceLogs(deviceIds, 0, 100, ['WARNING', 'ERROR'], startTime, endTime)
+        .catch(err => console.error('获取告警日志失败:', err));
     }
-  }
+  });
 
-  if (cageSnapshots.value.length > 0) {
-    await selectCage(cageSnapshots.value[0]!);
-  }
-
-  loading.value = false;
+  Promise.all([groupsPromise, birdsPromise, historyPromise])
+    .then(() => {
+      buildCageSnapshots();
+      return fetchC3SensorData();
+    })
+    .then(() => {
+      loading.value = false;
+      if (cageSnapshots.value.length > 0) {
+        selectCage(cageSnapshots.value[0]!);
+      }
+    });
 });
 
 onUnmounted(() => {
