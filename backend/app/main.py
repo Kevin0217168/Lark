@@ -186,7 +186,7 @@ class RequestLimiter:
             if self._current > 0:
                 self._current -= 1
 
-request_limiter = RequestLimiter(5)
+request_limiter = RequestLimiter(20)
 
 # 请求日志中间件
 @app.middleware("http")

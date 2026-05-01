@@ -476,8 +476,8 @@ const fetchDeviceHistoryData = async (deviceId?: number) => {
     }
     
     const data = await api.get('/api/sensors/grouped', {
-      period: '172800',
-      group: '96',
+      period: '86400',
+      group: '2880',
       device_id: deviceId?.toString()
     });
     
