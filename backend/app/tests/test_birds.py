@@ -41,7 +41,8 @@ def create_mock_bird(bird_id=1, name="小白", species="鹦鹉", status="availab
     mock_bird.species = species
     mock_bird.birth_date = datetime(2025, 1, 1)
     mock_bird.status = status
-    mock_bird.device_id = 1
+    mock_bird.area = "雏鸟区"
+    mock_bird.number = 1
     mock_bird.description = "测试描述"
     mock_bird.avatar_url = None
     mock_bird.created_at = datetime(2025, 1, 1)
@@ -173,7 +174,8 @@ def test_create_bird_as_root(mock_create_bird, client, root_user):
             "name": "新雏鸟",
             "species": "鹦鹉",
             "birth_date": "2025-01-01",
-            "device_id": 1,
+            "area": "雏鸟区",
+            "number": 1,
             "description": "可爱的雏鸟"
         }
     )

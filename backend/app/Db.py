@@ -7,6 +7,8 @@ from datacontrol.SensorDb import *
 from datacontrol.FirmwareDb import *
 from datacontrol.DeviceLogDb import *
 from datacontrol.BirdDb import *
+from datacontrol.SensorUploadDb import *
+from datacontrol.FeedingDb import *
 
 from Logset import async_log, logger
 
@@ -41,6 +43,8 @@ SensorDataBase.metadata.create_all(bind=engine)
 FirmwareBase.metadata.create_all(bind=engine)
 DeviceLogBase.metadata.create_all(bind=engine)
 BirdBase.metadata.create_all(bind=engine)
+SensorUploadBase.metadata.create_all(bind=engine)
+FeedingBase.metadata.create_all(bind=engine)
 
 class OpenDb:
   def __init__(self, logtag):

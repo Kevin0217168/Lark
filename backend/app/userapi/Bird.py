@@ -22,7 +22,7 @@ Bird.py - 雏鸟管理 API 模块
 - 查询类接口面向已开放的调用方。
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Body, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, status as http_status, Body, Path, Query
 from typing import Annotated, List, Optional
 from fastapi.responses import JSONResponse
 from datetime import datetime
@@ -37,21 +37,21 @@ router = APIRouter(prefix="/birds", tags=["Birds"])
 
 # 响应定义
 R404_BIRD_NOT_FOUND = {
-    status.HTTP_404_NOT_FOUND: {
+    http_status.HTTP_404_NOT_FOUND: {
         "model": CommonOut,
         "description": "雏鸟不存在",
     }
 }
 
 R403_FORBIDDEN = {
-    status.HTTP_403_FORBIDDEN: {
+    http_status.HTTP_403_FORBIDDEN: {
         "model": CommonOut,
         "description": "权限不足，仅限 root 用户",
     }
 }
 
 R400_BAD_REQUEST = {
-    status.HTTP_400_BAD_REQUEST: {
+    http_status.HTTP_400_BAD_REQUEST: {
         "model": CommonOut,
         "description": "请求参数错误",
     }
@@ -76,7 +76,7 @@ def require_root_user(
     """
     if current_user.role != "root":
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=http_status.HTTP_403_FORBIDDEN,
             detail="权限不足，仅限 root 用户执行此操作",
         )
     return current_user
@@ -95,7 +95,8 @@ async def create_bird(
                 "name": "白面鸮",
                 "species": "白脸角鸮",
                 "birth_date": "2025-10-06",
-                "device_id": 1,
+                "area": "雏鸟区",
+                "number": 1,
                 "description": "干员白面鸮，前莱茵生命公司，数据维护专员。在医疗类源石技艺领域取得不菲成就，于医疗数据维护，常规医疗方案应用，多项目医疗行为等相关领域，拥有丰富经验。",
                 "avatar_url": "https://storage.moegirl.org.cn/moegirl/commons/a/a9/%E6%98%8E%E6%97%A5%E6%96%B9%E8%88%9F%E7%AB%8B%E7%BB%98_%E7%99%BD%E9%9D%A2%E9%B8%AE_1.png"
             }
@@ -113,7 +114,8 @@ async def create_bird(
     - **name**: 雏鸟名称，长度 1-50 字符
     - **species**: 品种，如"鹦鹉"、"鸽子"、"文鸟"
     - **birth_date**: 出生日期，ISO 格式（YYYY-MM-DD）
-    - **device_id**: 关联设备 ID，可选
+    - **area**: 绑定鸟笼区域，可选
+    - **number**: 绑定鸟笼编号，可选
     - **description**: 雏鸟描述，可选
     - **avatar_url**: 照片 URL，可选
     
@@ -123,7 +125,8 @@ async def create_bird(
         "name": "白面鸮",
         "species": "白脸角鸮",
         "birth_date": "2025-10-06",
-        "device_id": 1,
+        "area": "雏鸟区",
+        "number": 1,
         "description": "干员白面鸮，前莱茵生命公司，数据维护专员。在医疗类源石技艺领域取得不菲成就，于医疗数据维护，常规医疗方案应用，多项目医疗行为等相关领域，拥有丰富经验。",
         "avatar_url": "https://storage.moegirl.org.cn/moegirl/commons/a/a9/%E6%98%8E%E6%97%A5%E6%96%B9%E8%88%9F%E7%AB%8B%E7%BB%98_%E7%99%BD%E9%9D%A2%E9%B8%AE_1.png"
     }
@@ -140,7 +143,8 @@ async def create_bird(
             name=body.name,
             species=body.species,
             birth_date=body.birth_date,
-            device_id=body.device_id,
+            area=body.area,
+            number=body.number,
             description=body.description,
             avatar_url=body.avatar_url,
             status="available",  # 默认状态为可认领
@@ -160,9 +164,9 @@ async def create_bird(
         # 日期格式错误等
         await async_log(logger, "warning", f"创建雏鸟失败: 参数错误 - {str(e)}")
         return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             content=CommonOut(
-                code=status.HTTP_400_BAD_REQUEST,
+                code=http_status.HTTP_400_BAD_REQUEST,
                 msg=f"参数错误: {str(e)}",
                 data=None,
             ).model_dump(),
@@ -170,9 +174,9 @@ async def create_bird(
     except Exception as e:
         await async_log(logger, "error", f"创建雏鸟失败: {str(e)}")
         return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=CommonOut(
-                code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
                 msg="服务器内部错误",
                 data=None,
             ).model_dump(),
@@ -188,7 +192,8 @@ async def get_birds(
     name: Optional[str] = Query(None, description="按名称模糊查询"),
     species: Optional[str] = Query(None, description="按品种查询"),
     status: Optional[str] = Query(None, description="按状态查询：available/adopted/grown"),
-    device_id: Optional[int] = Query(None, description="按设备ID查询"),
+    area: Optional[str] = Query(None, description="按鸟笼区域查询"),
+    number: Optional[int] = Query(None, description="按鸟笼编号查询"),
     current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)] = None,
     db: Db.Session = Depends(Db.GetDb("GetBirds")),
 ):
@@ -201,7 +206,8 @@ async def get_birds(
     - **name**: 按名称模糊匹配
     - **species**: 按品种精确匹配
     - **status**: 按状态精确匹配（available/adopted/grown）
-    - **device_id**: 按关联设备ID精确匹配
+    - **area**: 按鸟笼区域查询
+    - **number**: 按鸟笼编号查询
     
     ## 响应
     - 成功：返回 200 和雏鸟列表（可能为空列表）
@@ -212,7 +218,8 @@ async def get_birds(
             name=name,
             species=species,
             status=status,
-            device_id=device_id,
+            area=area,
+            number=number,
         )
         
         # 转换为输出模型列表
@@ -222,9 +229,9 @@ async def get_birds(
     except Exception as e:
         await async_log(logger, "error", f"查询雏鸟列表失败: {str(e)}")
         return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=CommonOut(
-                code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
                 msg="服务器内部错误",
                 data=None,
             ).model_dump(),
@@ -256,9 +263,9 @@ async def get_bird_by_id(
     
     if not bird:
         return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             content=CommonOut(
-                code=status.HTTP_404_NOT_FOUND,
+                code=http_status.HTTP_404_NOT_FOUND,
                 msg="雏鸟不存在",
                 data=None,
             ).model_dump(),
@@ -293,7 +300,8 @@ async def update_bird(
     - **name**: 雏鸟名称
     - **species**: 品种
     - **birth_date**: 出生日期（YYYY-MM-DD）
-    - **device_id**: 关联设备ID
+    - **area**: 绑定的鸟笼区域
+    - **number**: 绑定的鸟笼编号
     - **status**: 状态（available/adopted/grown）
     - **description**: 描述
     - **avatar_url**: 照片URL
@@ -307,9 +315,9 @@ async def update_bird(
         existing_bird = Db.GetBirdById(db, bird_id)
         if not existing_bird:
             return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 content=CommonOut(
-                    code=status.HTTP_404_NOT_FOUND,
+                    code=http_status.HTTP_404_NOT_FOUND,
                     msg="雏鸟不存在",
                     data=None,
                 ).model_dump(),
@@ -322,7 +330,8 @@ async def update_bird(
             name=body.name,
             species=body.species,
             birth_date=body.birth_date,
-            device_id=body.device_id,
+            area=body.area,
+            number=body.number,
             status=body.status,
             description=body.description,
             avatar_url=body.avatar_url,
@@ -340,9 +349,9 @@ async def update_bird(
     except ValueError as e:
         await async_log(logger, "warning", f"更新雏鸟失败: 参数错误 - {str(e)}")
         return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             content=CommonOut(
-                code=status.HTTP_400_BAD_REQUEST,
+                code=http_status.HTTP_400_BAD_REQUEST,
                 msg=f"参数错误: {str(e)}",
                 data=None,
             ).model_dump(),
@@ -350,9 +359,9 @@ async def update_bird(
     except Exception as e:
         await async_log(logger, "error", f"更新雏鸟失败: {str(e)}")
         return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=CommonOut(
-                code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
                 msg="服务器内部错误",
                 data=None,
             ).model_dump(),
@@ -388,9 +397,9 @@ async def delete_bird(
         existing_bird = Db.GetBirdById(db, bird_id)
         if not existing_bird:
             return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 content=CommonOut(
-                    code=status.HTTP_404_NOT_FOUND,
+                    code=http_status.HTTP_404_NOT_FOUND,
                     msg="雏鸟不存在",
                     data=None,
                 ).model_dump(),
@@ -408,9 +417,9 @@ async def delete_bird(
             return CommonOut(data=None)
         else:
             return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 content=CommonOut(
-                    code=status.HTTP_404_NOT_FOUND,
+                    code=http_status.HTTP_404_NOT_FOUND,
                     msg="雏鸟不存在",
                     data=None,
                 ).model_dump(),
@@ -419,9 +428,9 @@ async def delete_bird(
     except Exception as e:
         await async_log(logger, "error", f"删除雏鸟失败: {str(e)}")
         return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=CommonOut(
-                code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
                 msg="服务器内部错误",
                 data=None,
             ).model_dump(),
@@ -460,9 +469,9 @@ async def update_bird_status(
     valid_statuses = ["available", "adopted", "grown"]
     if new_status not in valid_statuses:
         return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             content=CommonOut(
-                code=status.HTTP_400_BAD_REQUEST,
+                code=http_status.HTTP_400_BAD_REQUEST,
                 msg=f"无效的状态值，必须是: {', '.join(valid_statuses)}",
                 data=None,
             ).model_dump(),
@@ -473,9 +482,9 @@ async def update_bird_status(
 
         if not updated_bird:
             return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 content=CommonOut(
-                    code=status.HTTP_404_NOT_FOUND,
+                    code=http_status.HTTP_404_NOT_FOUND,
                     msg="雏鸟不存在",
                     data=None,
                 ).model_dump(),
@@ -493,9 +502,9 @@ async def update_bird_status(
     except Exception as e:
         await async_log(logger, "error", f"更新雏鸟状态失败: {str(e)}")
         return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=CommonOut(
-                code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
                 msg="服务器内部错误",
                 data=None,
             ).model_dump(),
@@ -532,9 +541,9 @@ async def adopt_bird(
         
         if not result["success"]:
             return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=http_status.HTTP_400_BAD_REQUEST,
                 content=CommonOut(
-                    code=status.HTTP_400_BAD_REQUEST,
+                    code=http_status.HTTP_400_BAD_REQUEST,
                     msg=result["message"],
                     data=None,
                 ).model_dump(),
@@ -556,9 +565,9 @@ async def adopt_bird(
     except Exception as e:
         await async_log(logger, "error", f"认领雏鸟失败: {str(e)}")
         return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=CommonOut(
-                code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
                 msg="服务器内部错误",
                 data=None,
             ).model_dump(),
@@ -590,9 +599,9 @@ async def release_bird(
         
         if not result["success"]:
             return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=http_status.HTTP_400_BAD_REQUEST,
                 content=CommonOut(
-                    code=status.HTTP_400_BAD_REQUEST,
+                    code=http_status.HTTP_400_BAD_REQUEST,
                     msg=result["message"],
                     data=None,
                 ).model_dump(),
@@ -614,9 +623,9 @@ async def release_bird(
     except Exception as e:
         await async_log(logger, "error", f"释放雏鸟失败: {str(e)}")
         return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=CommonOut(
-                code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
                 msg="服务器内部错误",
                 data=None,
             ).model_dump(),
@@ -644,7 +653,13 @@ async def get_my_adopted_bird(
     try:
         # 获取用户已认领的雏鸟信息
         adopted_bird = Db.GetUserAdoptedBird(db, current_user.id)
-        
+
+        # 附加鸟笼设备ID
+        if adopted_bird and adopted_bird.get("area"):
+            birdcage = Db.GetBirdcageForBird(db, adopted_bird.get("bird_id"))
+            if birdcage:
+                adopted_bird["birdcage"] = birdcage
+
         return CommonOut(
             data={
                 "adopted_bird": adopted_bird
@@ -654,9 +669,9 @@ async def get_my_adopted_bird(
     except Exception as e:
         await async_log(logger, "error", f"获取已认领雏鸟信息失败: {str(e)}")
         return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=CommonOut(
-                code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
                 msg="服务器内部错误",
                 data=None,
             ).model_dump(),

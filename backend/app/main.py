@@ -6,29 +6,65 @@ import http
 import time
 import traceback
 import json
+import asyncio
 from stream import Stream
 from userapi import User, Login
 from userapi import Bird as BirdApi
 from deviceapi import Device
 from sensorapi import SensorData
+from sensorapi import SensorUpload
 from invitationapi import router as invitation_router
 from firmwareapi import Firmware
 from logapi import DeviceLog
+from feedingapi import Feeding
 
 import os
 from Logset import async_log, logger, request_logger, log_executor
 from contextlib import asynccontextmanager
+import datacontrol.DeviceLogDb as DeviceLogDb
+import datacontrol.SensorUploadDb as SensorUploadDb
+import datacontrol.SensorDb as SensorDb
+
+
+_cleanup_task = None
+
+
+async def cleanup_old_logs_job():
+    while True:
+        try:
+            await asyncio.sleep(86400)  # 每24小时执行一次
+            try:
+                from Db import OpenDb
+                with OpenDb("cleanup_old_data") as db:
+                    log_count = DeviceLogDb.CleanupOldDeviceLogs(db, days=7)
+                    upload_count = SensorUploadDb.CleanupOldSensorUploads(db, days=7)
+                    sensor_count = SensorDb.CleanupOldSensorData(db, days=7)
+                    await async_log(logger, "info", f"定期清理过期数据完成: 设备日志 {log_count} 条, 传感器上传 {upload_count} 条, 传感器数据 {sensor_count} 条")
+            except Exception as e:
+                await async_log(logger, "error", f"定期清理过期数据数据库操作出错: {str(e)}")
+        except Exception as e:
+            await async_log(logger, "error", f"定期清理过期数据任务出错: {str(e)}")
 import asyncio
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 启动逻辑（原 on_event("startup") 可以写在这里）
+    global _cleanup_task
     print("应用启动，资源初始化...")
-    yield
-    # 关闭逻辑（原 on_event("shutdown") 写在这里）
-    log_executor.shutdown(wait=True)
-    print("应用关闭，资源已清理...")
+    
+    _cleanup_task = asyncio.create_task(cleanup_old_logs_job())
+    
+    try:
+        yield
+    finally:
+        if _cleanup_task is not None:
+            _cleanup_task.cancel()
+            try:
+                await _cleanup_task
+            except asyncio.CancelledError:
+                pass
+        log_executor.shutdown(wait=True)
+        print("应用关闭，资源已清理...")
 
 
 isDeploy = os.environ.get("FASTAPI_DEPLOY", None)
@@ -60,9 +96,11 @@ app.include_router(Login.router)
 app.include_router(BirdApi.router)
 app.include_router(Device.router)
 app.include_router(SensorData.router)
+app.include_router(SensorUpload.router)
 app.include_router(invitation_router)
 app.include_router(Firmware.router)
 app.include_router(DeviceLog.router)
+app.include_router(Feeding.router)
 
 # 挂载静态文件
 from fastapi.staticfiles import StaticFiles

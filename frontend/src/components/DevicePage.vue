@@ -5,27 +5,65 @@
       <h3 class="title">设备管理</h3>
       
       <!-- 总览视图 -->
-      <div v-if="activeTab === 'overview'">
-        <h4>设备总览</h4>
+      <div v-if="activeTab === 'overview'" class="overview-desktop">
+        <h4 class="overview-title">鸟笼总览</h4>
         <el-row :gutter="20">
-          <el-col :span="8" v-for="device in devices" :key="device.id">
-            <el-card :class="device.isOnline ? 'device-online' : 'device-offline'">
-              <h5>{{ device.name }}</h5>
-              <p>区域: {{ device.area || '未设置' }}</p>
-              <p>编号: {{ device.number || '-' }}</p>
-              <p>类型: {{ device.device_type || '未设置' }}</p>
-              <p>固件版本: {{ deviceVersions[device.id] || '加载中...' }}</p>
-              <p>
-                状态:
-                <el-tag :type="device.isOnline ? 'success' : 'danger'">
-                  {{ device.isOnline ? '在线' : '离线' }}
-                </el-tag>
-              </p>
-            </el-card>
+          <el-col :span="8" v-for="(group, gi) in birdcageGroups" :key="gi">
+            <div class="birdcage-card">
+              <div class="bc-card-header">
+                <span class="bc-icon">🏠</span>
+                <span class="bc-label">{{ group.label }}</span>
+              </div>
+              <div class="bc-devices">
+                <!-- CAM 设备行 -->
+                <div class="bc-device-row cam-row" v-if="group.cam">
+                  <span class="bc-device-tag cam-tag">CAM</span>
+                  <div class="bc-device-info">
+                    <span class="bc-device-name">{{ group.cam.name }}</span>
+                    <span class="bc-device-meta">ID: {{ group.cam.id }} | {{ group.cam.device_type }}</span>
+                  </div>
+                  <div class="bc-device-status">
+                    <el-tag :type="group.cam.isOnline ? 'success' : 'danger'" size="small">
+                      {{ group.cam.isOnline ? '在线' : '离线' }}
+                    </el-tag>
+                  </div>
+                </div>
+                <div class="bc-device-row cam-row" v-else>
+                  <span class="bc-device-tag cam-tag dimmed">CAM</span>
+                  <span class="bc-no-device">未配置</span>
+                </div>
+                <!-- C3 设备行 -->
+                <div class="bc-device-row c3-row" v-if="group.c3">
+                  <span class="bc-device-tag c3-tag">C3</span>
+                  <div class="bc-device-info">
+                    <span class="bc-device-name">{{ group.c3.name }}</span>
+                    <span class="bc-device-meta">ID: {{ group.c3.id }} | {{ group.c3.device_type }}</span>
+                  </div>
+                  <div class="bc-device-status">
+                    <el-tag :type="group.c3.isOnline ? 'success' : 'danger'" size="small">
+                      {{ group.c3.isOnline ? '在线' : '离线' }}
+                    </el-tag>
+                  </div>
+                </div>
+                <div class="bc-device-row c3-row" v-else>
+                  <span class="bc-device-tag c3-tag dimmed">C3</span>
+                  <span class="bc-no-device">未配置</span>
+                </div>
+              </div>
+              <!-- 固件版本 -->
+              <div class="bc-versions" v-if="group.cam || group.c3">
+                <div class="bc-ver-item" v-if="group.cam">
+                  固件: {{ deviceVersions[group.cam.id] || '加载中...' }}
+                </div>
+                <div class="bc-ver-item" v-if="group.c3">
+                  固件: {{ deviceVersions[group.c3.id] || '加载中...' }}
+                </div>
+              </div>
+            </div>
           </el-col>
         </el-row>
-        <div v-if="devices.length === 0" class="no-devices">
-          <p>暂无设备数据</p>
+        <div v-if="birdcageGroups.length === 0" class="no-devices">
+          <el-empty description="暂无鸟笼数据" />
         </div>
       </div>
       
@@ -50,19 +88,16 @@
             clearable
           />
           <el-select 
-            v-model="filterForm.area" 
-            placeholder="所属区域" 
+            v-model="filterForm.birdcage" 
+            placeholder="选择鸟笼" 
             style="width: 200px; margin-right: 10px;"
             clearable
-            multiple
-            collapse-tags
-            collapse-tags-tooltip
           >
             <el-option 
-              v-for="area in uniqueAreas" 
-              :key="area" 
-              :label="area" 
-              :value="area" 
+              v-for="group in birdcageGroups" 
+              :key="`${group.area}|${group.number}`"
+              :label="group.label" 
+              :value="`${group.area}|${group.number}`"
             />
           </el-select>
           <el-select 
@@ -129,6 +164,20 @@
         
         <!-- 设备选择和分页控制 -->
         <div class="filter-section">
+          <el-select 
+            v-model="logsBirdcageKey" 
+            placeholder="选择鸟笼" 
+            style="width: 200px; margin-right: 10px;"
+            clearable
+            @change="handleLogsBirdcageChange"
+          >
+            <el-option 
+              v-for="group in birdcageGroups" 
+              :key="`${group.area}|${group.number}`"
+              :label="group.label" 
+              :value="`${group.area}|${group.number}`"
+            />
+          </el-select>
           <el-select 
             v-model="selectedDeviceIds" 
             placeholder="选择设备" 
@@ -244,43 +293,61 @@
       <!-- 总览视图 -->
       <div v-if="activeTab === 'overview'" class="overview-container">
         <div class="overview-header">
-          <h3>设备总览</h3>
+          <h3>鸟笼总览</h3>
         </div>
         <div class="device-list">
           <div 
-            v-for="device in devices" 
-            :key="device.id" 
-            class="device-card"
-            :class="device.isOnline ? 'online' : 'offline'"
+            v-for="(group, gi) in birdcageGroups" 
+            :key="gi" 
+            class="birdcage-card-mobile"
           >
-            <div class="device-header">
-              <h4>{{ device.name }}</h4>
-              <el-tag :type="device.isOnline ? 'success' : 'danger'" size="small">
-                {{ device.isOnline ? '在线' : '离线' }}
+            <div class="bcm-header">
+              <span class="bcm-icon">🏠</span>
+              <span class="bcm-label">{{ group.label }}</span>
+            </div>
+            <!-- CAM 设备行 -->
+            <div class="bcm-device-row cam-row" v-if="group.cam">
+              <span class="bc-device-tag cam-tag">CAM</span>
+              <div class="bcm-device-info">
+                <span class="bcm-device-name">{{ group.cam.name }}</span>
+                <span class="bcm-device-meta">ID: {{ group.cam.id }} | {{ group.cam.device_type }}</span>
+              </div>
+              <el-tag :type="group.cam.isOnline ? 'success' : 'danger'" size="small">
+                {{ group.cam.isOnline ? '在线' : '离线' }}
               </el-tag>
             </div>
-            <div class="device-info">
-              <div class="info-row">
-                <span class="label">区域</span>
-                <span class="value">{{ device.area || '未设置' }}</span>
+            <div class="bcm-device-row cam-row missing" v-else>
+              <span class="bc-device-tag cam-tag dimmed">CAM</span>
+              <span class="bcm-missing">未配置</span>
+            </div>
+            <!-- C3 设备行 -->
+            <div class="bcm-device-row c3-row" v-if="group.c3">
+              <span class="bc-device-tag c3-tag">C3</span>
+              <div class="bcm-device-info">
+                <span class="bcm-device-name">{{ group.c3.name }}</span>
+                <span class="bcm-device-meta">ID: {{ group.c3.id }} | {{ group.c3.device_type }}</span>
               </div>
-              <div class="info-row">
-                <span class="label">编号</span>
-                <span class="value">{{ device.number || '-' }}</span>
+              <el-tag :type="group.c3.isOnline ? 'success' : 'danger'" size="small">
+                {{ group.c3.isOnline ? '在线' : '离线' }}
+              </el-tag>
+            </div>
+            <div class="bcm-device-row c3-row missing" v-else>
+              <span class="bc-device-tag c3-tag dimmed">C3</span>
+              <span class="bcm-missing">未配置</span>
+            </div>
+            <!-- 固件版本 -->
+            <div class="bcm-versions" v-if="group.cam || group.c3">
+              <div class="bcm-ver-item" v-if="group.cam">
+                固件: {{ deviceVersions[group.cam.id] || '加载中...' }}
               </div>
-              <div class="info-row">
-                <span class="label">类型</span>
-                <span class="value">{{ device.device_type || '未设置' }}</span>
-              </div>
-              <div class="info-row">
-                <span class="label">固件版本</span>
-                <span class="value">{{ deviceVersions[device.id] || '加载中...' }}</span>
+              <div class="bcm-ver-item" v-if="group.c3">
+                固件: {{ deviceVersions[group.c3.id] || '加载中...' }}
               </div>
             </div>
           </div>
         </div>
-        <div v-if="devices.length === 0" class="empty-state">
-          <el-empty description="暂无设备数据" />
+        <div v-if="birdcageGroups.length === 0" class="empty-state">
+          <el-empty description="暂无鸟笼数据" />
         </div>
       </div>
       
@@ -303,19 +370,16 @@
             class="filter-input"
           />
           <el-select 
-            v-model="filterForm.area" 
-            placeholder="所属区域" 
+            v-model="filterForm.birdcage" 
+            placeholder="选择鸟笼" 
             clearable
-            multiple
-            collapse-tags
-            collapse-tags-tooltip
             class="filter-select"
           >
             <el-option 
-              v-for="area in uniqueAreas" 
-              :key="area" 
-              :label="area" 
-              :value="area" 
+              v-for="group in birdcageGroups" 
+              :key="`${group.area}|${group.number}`"
+              :label="group.label" 
+              :value="`${group.area}|${group.number}`"
             />
           </el-select>
           <el-select 
@@ -395,6 +459,20 @@
         
         <!-- 设备选择和分页控制 -->
         <div class="filter-section">
+          <el-select 
+            v-model="logsBirdcageKey" 
+            placeholder="选择鸟笼" 
+            clearable
+            class="filter-select"
+            @change="handleLogsBirdcageChange"
+          >
+            <el-option 
+              v-for="group in birdcageGroups" 
+              :key="`${group.area}|${group.number}`"
+              :label="group.label" 
+              :value="`${group.area}|${group.number}`"
+            />
+          </el-select>
           <el-select 
             v-model="selectedDeviceIds" 
             placeholder="选择设备" 
@@ -569,6 +647,30 @@ const activeTab = computed(() => props.activeTab || 'overview');
 
 const { devices, fetchDevices: storeFetchDevices } = useDeviceStore();
 
+const birdcageGroups = computed(() => {
+  const groups: { area: string; number: number; label: string; cam: Device | null; c3: Device | null }[] = [];
+  const seen = new Map<string, number>();
+  for (const rd of devices.value as Device[]) {
+    const d: any = rd;
+    const key = `${d.area || ''}-${d.number ?? 0}`;
+    if (!seen.has(key)) {
+      seen.set(key, groups.length);
+      groups.push({
+        area: d.area || '',
+        number: d.number ?? 0,
+        label: d.area ? `${d.area} #${d.number}` : '未绑定',
+        cam: null,
+        c3: null,
+      });
+    }
+    const idx = seen.get(key) as number;
+    if (d.device_type === 'ESP32-CAM') groups[idx]!.cam = d;
+    else if (d.device_type === 'ESP32-C3') groups[idx]!.c3 = d;
+  }
+  groups.sort((a, b) => a.label.localeCompare(b.label));
+  return groups;
+});
+
 // 检查是否为 root 用户
 const isRootUser = computed(() => {
   const role = localStorage.getItem('role');
@@ -614,6 +716,19 @@ const fetchDeviceVersion = async (deviceId: number) => {
 const selectedDeviceIds = ref<number[]>([]);
 const selectedLogLevels = ref<('INFO' | 'WARNING' | 'ERROR' | 'DEBUG')[]>([]);
 const selectedEndTime = ref<string>('');
+const logsBirdcageKey = ref('');
+
+const handleLogsBirdcageChange = () => {
+  if (!logsBirdcageKey.value) return;
+  const [area, numStr] = logsBirdcageKey.value.split('|');
+  const number = parseInt(numStr || '0', 10);
+  const cageDevices = (devices.value as Device[]).filter((d: any) => d.area === area && d.number === number);
+  const currentIds = new Set(selectedDeviceIds.value);
+  for (const d of cageDevices) {
+    currentIds.add(d.id);
+  }
+  selectedDeviceIds.value = Array.from(currentIds);
+};
 
 // 日志相关状态
 const logsLoading = ref(false);
@@ -630,7 +745,8 @@ const wrapEnabled = ref(true);
 const filterForm = ref({
   name: '',
   area: [] as string[],
-  isOnline: null as boolean | null
+  isOnline: null as boolean | null,
+  birdcage: '' as string,
 });
 
 // 获取所有不重复的区域
@@ -647,7 +763,12 @@ const filteredDevices = computed(() => {
     const nameMatch = !filterForm.value.name || device.name.toLowerCase().includes(filterForm.value.name.toLowerCase());
     const areaMatch = filterForm.value.area.length === 0 || (device.area && filterForm.value.area.includes(device.area));
     const onlineMatch = filterForm.value.isOnline === null || device.isOnline === filterForm.value.isOnline;
-    return nameMatch && areaMatch && onlineMatch;
+    let birdcageMatch = true;
+    if (filterForm.value.birdcage) {
+      const [bcArea, bcNumStr] = filterForm.value.birdcage.split('|');
+      birdcageMatch = device.area === bcArea && device.number === parseInt(bcNumStr || '0', 10);
+    }
+    return nameMatch && areaMatch && onlineMatch && birdcageMatch;
   });
 });
 
@@ -656,7 +777,8 @@ const resetFilter = () => {
   filterForm.value = {
     name: '',
     area: [],
-    isOnline: null
+    isOnline: null,
+    birdcage: '',
   };
 };
 
@@ -868,16 +990,17 @@ const handleSave = async () => {
       return;
     }
 
-    // 检查编号是否与同区域的设备编号重复
+    // 检查鸟笼约束：同一区域+编号下，同类型设备只能有一台
     const deviceId = parseInt(deviceForm.value.id);
-    const duplicateDevice = devices.value.find(d => 
+    const sameTypeInCage = devices.value.find(d => 
       d.id !== deviceId && 
       d.area === deviceForm.value.area && 
-      d.number === deviceForm.value.number
+      d.number === deviceForm.value.number &&
+      d.device_type === deviceForm.value.device_type
     );
 
-    if (duplicateDevice) {
-      ElMessage.error(`编号 ${deviceForm.value.number} 在区域 "${deviceForm.value.area}" 中已被设备 "${duplicateDevice.name}" 使用`);
+    if (sameTypeInCage) {
+      ElMessage.error(`${deviceForm.value.device_type || '该类型'} 设备在区域 "${deviceForm.value.area}" #${deviceForm.value.number} 中已存在`);
       return;
     }
 
@@ -916,14 +1039,15 @@ const handleSave = async () => {
       return;
     }
 
-    // 检查编号是否与同区域的设备编号重复
-    const duplicateDevice = devices.value.find(d => 
+    // 检查鸟笼约束：同一区域+编号下，同类型设备只能有一台
+    const sameTypeInCage = devices.value.find(d => 
       d.area === deviceForm.value.area && 
-      d.number === deviceForm.value.number
+      d.number === deviceForm.value.number &&
+      d.device_type === deviceForm.value.device_type
     );
 
-    if (duplicateDevice) {
-      ElMessage.error(`编号 ${deviceForm.value.number} 在区域 "${deviceForm.value.area}" 中已被设备 "${duplicateDevice.name}" 使用`);
+    if (sameTypeInCage) {
+      ElMessage.error(`${deviceForm.value.device_type || '该类型'} 设备在区域 "${deviceForm.value.area}" #${deviceForm.value.number} 中已存在`);
       return;
     }
 
@@ -1176,13 +1300,15 @@ const handleRestart = (device: Device) => {
   padding: 20px;
 }
 
-.device-online {
-  border-left: 4px solid #67c23a;
-}
-
-.device-offline {
-  border-left: 4px solid #f56c6c;
-  opacity: 0.8;
+/* ==================== 鸟笼总览（桌面端） ==================== */
+.overview-desktop {
+  .overview-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #166534;
+    margin: 0 0 20px 0;
+    text-align: center;
+  }
 }
 
 .title {
@@ -1616,5 +1742,231 @@ const handleRestart = (device: Device) => {
 /* 空状态 */
 .empty-state {
   padding: 40px 0;
+}
+
+/* ==================== 鸟笼总览卡片（桌面端） ==================== */
+.birdcage-card {
+  background: #fff;
+  border: 1px solid rgba(139, 173, 66, 0.12);
+  border-radius: 14px;
+  padding: 0;
+  margin-bottom: 20px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  transition: all 0.3s ease;
+
+  &:hover {
+    box-shadow: 0 6px 24px rgba(139, 173, 66, 0.1);
+    transform: translateY(-2px);
+  }
+
+  .bc-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 18px;
+    background: linear-gradient(135deg, #f0fdf4 0%, #e8f5e9 100%);
+    border-bottom: 1px solid rgba(139, 173, 66, 0.1);
+
+    .bc-icon {
+      font-size: 22px;
+    }
+
+    .bc-label {
+      font-size: 16px;
+      font-weight: 700;
+      color: #166534;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+    }
+  }
+
+  .bc-devices {
+    padding: 12px 0;
+  }
+
+  .bc-device-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 18px;
+
+    & + .bc-device-row {
+      border-top: 1px solid #f5f5f5;
+    }
+  }
+
+  .bc-device-tag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 24px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+
+    &.cam-tag {
+      background: linear-gradient(135deg, #8BAD42 0%, #6A9A35 100%);
+    }
+
+    &.c3-tag {
+      background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+    }
+
+    &.dimmed {
+      opacity: 0.4;
+    }
+  }
+
+  .bc-device-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+
+    .bc-device-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: #303133;
+    }
+
+    .bc-device-meta {
+      font-size: 11px;
+      color: #909399;
+    }
+  }
+
+  .bc-device-status {
+    flex-shrink: 0;
+  }
+
+  .bc-no-device {
+    font-size: 13px;
+    color: #c0c4cc;
+    font-style: italic;
+  }
+
+  .bc-versions {
+    padding: 10px 18px 14px 18px;
+    border-top: 1px dashed #e8e8e8;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    .bc-ver-item {
+      font-size: 12px;
+      color: #909399;
+    }
+  }
+}
+
+/* ==================== 鸟笼总览卡片（移动端） ==================== */
+.birdcage-card-mobile {
+  background: #fff;
+  border: 1px solid rgba(139, 173, 66, 0.1);
+  border-radius: 12px;
+  margin-bottom: 14px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+
+  .bcm-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 16px;
+    background: linear-gradient(135deg, #f0fdf4 0%, #e8f5e9 100%);
+    border-bottom: 1px solid rgba(139, 173, 66, 0.08);
+
+    .bcm-icon {
+      font-size: 20px;
+    }
+
+    .bcm-label {
+      font-size: 15px;
+      font-weight: 700;
+      color: #166534;
+    }
+  }
+
+  .bcm-device-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+
+    & + .bcm-device-row {
+      border-top: 1px solid #f5f5f5;
+    }
+
+    &.missing {
+      opacity: 0.5;
+    }
+
+    .bcm-device-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+
+      .bcm-device-name {
+        font-size: 13px;
+        font-weight: 600;
+        color: #303133;
+      }
+
+      .bcm-device-meta {
+        font-size: 11px;
+        color: #909399;
+      }
+    }
+
+    .bc-device-tag {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 22px;
+      border-radius: 5px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #fff;
+      flex-shrink: 0;
+
+      &.cam-tag {
+        background: linear-gradient(135deg, #8BAD42 0%, #6A9A35 100%);
+      }
+
+      &.c3-tag {
+        background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+      }
+
+      &.dimmed {
+        opacity: 0.4;
+      }
+    }
+
+    .bcm-missing {
+      font-size: 12px;
+      color: #c0c4cc;
+      font-style: italic;
+    }
+  }
+
+  .bcm-versions {
+    padding: 10px 16px 12px 16px;
+    border-top: 1px dashed #e8e8e8;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+
+    .bcm-ver-item {
+      font-size: 11px;
+      color: #909399;
+    }
+  }
 }
 </style>

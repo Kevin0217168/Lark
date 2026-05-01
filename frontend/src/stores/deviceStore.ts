@@ -602,7 +602,16 @@ const fetchSensorData = async (deviceId: number, timeRange: 'today' | 'two_days'
     if (data.code === 200 && data.data && Array.isArray(data.data)) {
       data.data.forEach((item: any) => {
         const date = new Date(item.end_time);
-        times.push(`${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`);
+        // "今天"模式只显示时间，"两天"模式显示日期+时间避免重复
+        if (timeRange === 'two_days') {
+          const month = (date.getMonth() + 1).toString().padStart(2, '0');
+          const day = date.getDate().toString().padStart(2, '0');
+          const hh = date.getHours().toString().padStart(2, '0');
+          const mm = date.getMinutes().toString().padStart(2, '0');
+          times.push(`${month}/${day} ${hh}:${mm}`);
+        } else {
+          times.push(`${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`);
+        }
         temperatureValues.push(Number(item.avg_temperature.toFixed(2)));
         humidityValues.push(Number(item.avg_humidity.toFixed(2)));
       });
