@@ -1,0 +1,24 @@
+{
+  "C_Cpp.intelliSenseEngine": "default",
+  "idf.openOcdConfigs": [
+    "interface/ftdi/esp32_devkitj_v1.cfg",
+    "target/esp32.cfg"
+  ],
+  "idf.port": "/dev/ttyUSB0",
+  "idf.currentSetup": "/home/mint/.espressif/v5.5.3/esp-idf",
+  "idf.customExtraVars": {
+    "IDF_TARGET": "esp32"
+  },
+  "idf.flashType": "UART",
+  "explorer.excludeGitIgnore": false,
+  // "idf.preBuildTask": "source $IDF_PATH/export.sh"
+
+  // "VsCodeTaskButtons.tasks": [
+  //   {
+
+  //     "label": "$(run-all)Build",
+  //     "task": "esp-idf build",
+  //     "tooltip": "🛠️ Start the \"build\" task"
+  //   },
+  // ]
+}
