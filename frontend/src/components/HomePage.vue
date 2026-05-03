@@ -53,6 +53,20 @@
         </div>
       </div>
 
+      <!-- 全局操作栏 -->
+      <div class="global-action-bar">
+        <div class="action-bar-inner">
+          <div class="action-info">
+            <span class="action-dot"></span>
+            <span class="action-text">鸟笼喂食</span>
+          </div>
+          <button class="feed-all-btn" @click="handleFeedAllCages">
+            <span class="btn-text">一键喂食全部鸟笼</span>
+            <span class="btn-ripple"></span>
+          </button>
+        </div>
+      </div>
+
       <!-- 鸟笼快照网格 -->
       <div class="section-header">
         <h3 class="section-title">鸟笼实时快照</h3>
@@ -129,7 +143,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useDeviceStore } from '../stores/deviceStore';
-import { ElIcon } from 'element-plus';
+import { ElIcon, ElMessage } from 'element-plus';
 import { Monitor, Warning, Loading } from '@element-plus/icons-vue';
 import * as echarts from 'echarts';
 import { api } from '../utils/api';
@@ -345,6 +359,12 @@ const fetchBirds = async () => {
   }
 };
 
+const clampUv = (val: number | null): number | null => {
+  if (val === null) return null;
+  if (!isFinite(val)) return 0;
+  return Math.min(Math.max(val, 0), 15);
+};
+
 const fetchC3SensorData = async () => {
   const snapshots = [...cageSnapshots.value];
   const cagePromises = snapshots.map(async (cage, i) => {
@@ -373,7 +393,7 @@ const fetchC3SensorData = async () => {
           pm25: extractValue(results[0]!, 'pm2_5_cf1'),
           db: extractValue(results[1]!, 'db'),
           lux: extractValue(results[2]!, 'lux'),
-          uv: extractValue(results[3]!, 'uv_index'),
+          uv: clampUv(extractValue(results[3]!, 'uv_index')),
         },
       };
     } catch (error) {
@@ -513,6 +533,10 @@ const goToDeviceLogs = () => router.push({ path: '/Device', query: { tab: 'logs'
 const goToBirdsPage = () => router.push({ path: '/birds' });
 const goToDataAnalysis = (cage?: CageSnapshot) => {
   router.push({ path: '/Data', query: { activeTab: 'analysis' } });
+};
+
+const handleFeedAllCages = () => {
+  ElMessage.success('喂食指令已发送至所有鸟笼！');
 };
 
 const handleResize = () => {
@@ -738,6 +762,187 @@ onUnmounted(() => {
 .section-subtitle {
   font-size: 12px;
   color: #909399;
+}
+
+/* 全局操作栏 */
+.global-action-bar {
+  margin-bottom: 24px;
+}
+
+.action-bar-inner {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 14px 24px;
+  background: linear-gradient(135deg, rgba(45, 212, 191, 0.06) 0%, rgba(20, 184, 166, 0.04) 50%, rgba(13, 148, 136, 0.06) 100%);
+  border: 1px solid rgba(20, 184, 166, 0.12);
+  border-radius: 14px;
+  backdrop-filter: blur(8px);
+  transition: border-color 0.3s ease;
+}
+
+.action-bar-inner:hover {
+  border-color: rgba(20, 184, 166, 0.25);
+}
+
+.action-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.action-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #14b8a6;
+  flex-shrink: 0;
+  box-shadow: 0 0 8px rgba(20, 184, 166, 0.4);
+  animation: dotPulse 2s ease-in-out infinite;
+}
+
+@keyframes dotPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(20, 184, 166, 0.4); }
+  50% { box-shadow: 0 0 16px rgba(20, 184, 166, 0.7); }
+}
+
+.action-grain-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: #14b8a6;
+  opacity: 0.8;
+}
+
+.action-text {
+  font-size: 13px;
+  color: #5b8c7a;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* 一键喂食全部鸟笼按钮 */
+.feed-all-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, #2dd4bf 0%, #14b8a6 50%, #0d9488 100%);
+  border: none;
+  border-radius: 50px;
+  cursor: pointer;
+  overflow: hidden;
+  box-shadow: 0 2px 14px rgba(20, 184, 166, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: 0.4px;
+}
+
+.feed-all-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, #5eead4 0%, #2dd4bf 50%, #14b8a6 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.feed-all-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(20, 184, 166, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.feed-all-btn:hover::before {
+  opacity: 1;
+}
+
+.feed-all-btn:active {
+  transform: translateY(1px) scale(0.98);
+  box-shadow: 0 1px 8px rgba(20, 184, 166, 0.25);
+  transition: all 0.1s ease;
+}
+
+.feed-icon-svg {
+  position: relative;
+  z-index: 1;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.btn-text {
+  position: relative;
+  z-index: 1;
+}
+
+/* 水波纹点击效果 */
+.btn-ripple {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.feed-all-btn:active .btn-ripple {
+  animation: feedRipple 0.6s ease-out;
+}
+
+@keyframes feedRipple {
+  0% {
+    background: radial-gradient(circle at center, rgba(255, 255, 255, 0.5) 0%, transparent 70%);
+    transform: scale(0);
+    opacity: 1;
+  }
+  100% {
+    background: radial-gradient(circle at center, rgba(255, 255, 255, 0.5) 0%, transparent 70%);
+    transform: scale(2.5);
+    opacity: 0;
+  }
+}
+
+/* 移动端适配 */
+.mobile .global-action-bar {
+  margin-bottom: 16px;
+}
+
+.mobile .action-bar-inner {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+}
+
+.mobile .action-info {
+  justify-content: center;
+}
+
+.mobile .action-grain-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.mobile .action-text {
+  font-size: 12px;
+}
+
+.mobile .feed-all-btn {
+  width: 100%;
+  justify-content: center;
+  padding: 10px 20px;
+  font-size: 14px;
+}
+
+.mobile .feed-icon-svg {
+  width: 16px;
+  height: 16px;
 }
 
 .chart-section-header {

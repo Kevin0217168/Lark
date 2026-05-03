@@ -153,6 +153,7 @@
             format="YYYY-MM-DD"
             value-format="YYYY-MM-DD"
             style="width: 100%"
+            :disabled-date="disabledDate"
           />
         </el-form-item>
         <el-form-item label="鸟笼">
@@ -268,6 +269,12 @@ const birdFormRef = ref();
 const birdIdToDelete = ref(0);
 const birdCageKey = ref('');
 const birdcageGroups = ref<{ area: string; number: number; label: string; devices: any[] }[]>([]);
+
+const disabledDate = (time: Date) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return time.getTime() > today.getTime();
+};
 
 // 表单验证规则
 const rules = reactive({

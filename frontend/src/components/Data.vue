@@ -142,6 +142,13 @@
                 <el-icon><Sort /></el-icon>
                 上下翻转
               </el-button>
+              <el-button 
+                :type="lightOn ? 'warning' : 'default'"
+                size="small"
+                @click="toggleLight"
+              >
+                {{ lightOn ? '💡 关灯' : '🔌 开灯' }}
+              </el-button>
               <div class="quality-control">
                 <span class="quality-label">视频质量</span>
                 <el-slider v-model="imageQuality" :min="1" :max="63" :step="1" :show-tooltip="false" style="width: 120px" />
@@ -500,6 +507,13 @@
               >
                 <el-icon><Sort /></el-icon>
                 上下
+              </el-button>
+              <el-button 
+                :type="lightOn ? 'warning' : 'default'"
+                size="small"
+                @click="toggleLight"
+              >
+                {{ lightOn ? '💡' : '🔌' }}
               </el-button>
             </div>
           </div>
@@ -920,7 +934,8 @@ const fetchUVData = async () => {
       const record = response.data[0];
       const parsed = JSON.parse(record.data);
       if (parsed.uv_index !== undefined) {
-        uvValue.value = Number(parsed.uv_index) || 0;
+        const raw = Number(parsed.uv_index);
+        uvValue.value = isFinite(raw) ? Math.min(Math.max(raw, 0), 15) : 0;
       }
     }
   } catch (error) {
@@ -1627,7 +1642,9 @@ const formatLux = (v: number) => {
   return String(Math.round(v));
 };
 
-const getGaugeOption = (max: number, color: string, bgColor: string, value: number, name: string, formatter?: (v: number) => string) => ({
+const getGaugeOption = (max: number, color: string, bgColor: string, value: number, name: string, formatter?: (v: number) => string) => {
+  const safeValue = isFinite(value) ? Math.min(Math.max(value, 0), max) : 0;
+  return {
   series: [{
     type: 'gauge',
     radius: '95%',
@@ -1678,9 +1695,10 @@ const getGaugeOption = (max: number, color: string, bgColor: string, value: numb
       formatter: formatter ? formatter : '{value}',
       offsetCenter: [0, '0%']
     },
-    data: [{ value: Math.min(value, max), name }]
+    data: [{ value: safeValue, name }]
   }]
-});
+  };
+};
 
 const initGaugeChartOption = () => {
   const aqiColor = aqiValue.value > 150 ? '#f56c6c' : aqiValue.value > 100 ? '#e6a23c' : '#67c23a';
@@ -1800,6 +1818,12 @@ const toggleHorizontalFlip = () => {
 // 切换上下翻转
 const toggleVerticalFlip = () => {
   flipVertical.value = !flipVertical.value;
+};
+
+// 灯光开关（虚拟）
+const lightOn = ref(false);
+const toggleLight = () => {
+  lightOn.value = !lightOn.value;
 };
 
 // 处理接收到的图片帧数据
