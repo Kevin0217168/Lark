@@ -66,6 +66,14 @@
                 <span class="btn-icon">🔄</span>
                 <span class="btn-text">上下</span>
               </button>
+              <button 
+                class="control-btn" 
+                :class="{ 'active': lightOn }"
+                @click="toggleLight"
+              >
+                <span class="btn-icon">{{ lightOn ? '💡' : '🔌' }}</span>
+                <span class="btn-text">{{ lightOn ? '关灯' : '开灯' }}</span>
+              </button>
             </div>
             
             <!-- 视频质量和尺寸控制 -->
@@ -152,41 +160,6 @@
             </div>
           </div>
         </div>
-        
-        <!-- 喂食操作区域 -->
-        <div class="feeds-section" :class="{ 'fade-in': isLoaded }">
-          <div class="feed-card">
-            <div class="feed-card-visual">
-              <div class="feed-bird-icon">🐣</div>
-              <div class="feed-divider"></div>
-              <div class="feed-icon">🍞</div>
-            </div>
-            <h3 class="feed-title">每日喂食</h3>
-            <p class="feed-desc">每天可以喂食一次，帮助雏鸟健康成长</p>
-            <div class="feed-status-row">
-              <span v-if="feedingStatus?.completed" class="feed-status done">
-                <span class="status-dot done"></span>今日已完成
-              </span>
-              <span v-else class="feed-status pending">
-                <span class="status-dot pending"></span>剩余 {{ feedingStatus?.remaining ?? 1 }} / {{ feedingStatus?.daily_limit ?? 1 }} 次
-              </span>
-            </div>
-            <div v-if="feedingStatus?.last_action_time" class="feed-last-time">
-              上次喂食：{{ formatFeedTime(feedingStatus.last_action_time) }}
-            </div>
-            <button
-              class="feed-action-btn"
-              :class="{ 'disabled': feedingStatus?.completed || feedingLoading }"
-              :disabled="feedingStatus?.completed || feedingLoading"
-              @click="triggerFeeding"
-            >
-              <span class="btn-content">
-                <span class="btn-icon-inner">{{ feedingLoading ? '⏳' : '' }}</span>
-                <span class="btn-label">{{ feedingLoading ? '执行中...' : '立即喂食' }}</span>
-              </span>
-            </button>
-          </div>
-        </div>
 
         <!-- 环境数据环形进度条 -->
           <div class="env-gauges-section">
@@ -250,6 +223,35 @@
           </div>
         </div>
         
+        <!-- 食量统计表格 -->
+        <div class="feed-table-section" :class="{ 'fade-in': isLoaded }">
+          <div class="feed-table-card">
+            <h3 class="feed-table-title">每日食量</h3>
+            <p class="feed-table-desc">近5天食量记录</p>
+            <div class="feed-table">
+              <div class="feed-table-header">
+                <span class="th-date">日期</span>
+                <span class="th-grams">食量 (克)</span>
+              </div>
+              <div
+                v-for="(row, idx) in feedTableData"
+                :key="idx"
+                class="feed-table-row"
+                :style="{ animationDelay: `${idx * 0.1}s` }"
+              >
+                <span class="td-date">{{ row.date }}</span>
+                <span class="td-grams">{{ row.grams }} g</span>
+                <div class="td-bar-wrapper">
+                  <div
+                    class="td-bar-fill"
+                    :style="{ width: (row.grams / maxFeedGrams * 100) + '%' }"
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
         <!-- 操作区域 -->
         <div class="action-section" :class="{ 'fade-in': isLoaded }">
           <button class="release-btn" @click="releaseBird">
@@ -292,6 +294,37 @@ const isLoaded = ref(false);
 const camDeviceId = computed(() => adoptedBird.value?.birdcage?.cam_device_id ?? null);
 const c3DeviceId = computed(() => adoptedBird.value?.birdcage?.c3_device_id ?? null);
 
+// 模拟食量表格数据（近5天，每天15-30克）
+const seededRandom = (seed: number) => {
+  let s = seed;
+  return () => {
+    s = (s * 1664525 + 1013904223) & 0xffffffff;
+    return (s >>> 0) / 0xffffffff;
+  };
+};
+
+const feedTableData = computed(() => {
+  const today = new Date();
+  const rng = seededRandom(today.getDate() + today.getMonth() * 31);
+  const rows: Array<{ date: string; grams: number }> = [];
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - (4 - i));
+    const month = d.getMonth() + 1;
+    const day = d.getDate();
+    rows.push({
+      date: `${month}月${day}日`,
+      grams: Math.round((rng() * 16 + 15) * 10) / 10,
+    });
+  }
+  return rows;
+});
+
+const maxFeedGrams = computed(() => {
+  const max = Math.max(...feedTableData.value.map(r => r.grams), 15);
+  return Math.ceil(max / 5) * 5;
+});
+
 // WebSocket 相关状态
 const currentFrameImage = ref<string>('');
 const lastFrameTime = ref<string>('');
@@ -322,15 +355,11 @@ const flipVertical = ref(false);
 const imageQuality = ref(32); // 默认画质为32
 const frameSize = ref('FRAMESIZE_VGA'); // 默认视频尺寸
 
-// 喂食状态
-const feedingStatus = ref<{ completed: boolean; today_count: number; daily_limit: number; remaining: number; last_action_time: string | null } | null>(null);
-const feedingLoading = ref(false);
-let feedStatusTimer: number | null = null;
-
 // 计算属性：是否已认领雏鸟
 const hasAdoptedBird = computed(() => {
   return adoptedBird.value !== null;
 });
+
 
 // 计算WebSocket是否已连接
 const isWebSocketConnected = computed(() => {
@@ -407,6 +436,12 @@ const toggleVerticalFlip = () => {
   flipVertical.value = !flipVertical.value;
 };
 
+// 灯光开关（虚拟）
+const lightOn = ref(false);
+const toggleLight = () => {
+  lightOn.value = !lightOn.value;
+};
+
 // 计算日龄
 const calculateAge = (birthDate: string) => {
   if (!birthDate) return 0;
@@ -429,8 +464,6 @@ const releaseBird = async () => {
       adoptedBird.value = null;
       stopRealtimeMonitoring();
       stopEnvDataTimer();
-      stopFeedStatusTimer();
-      feedingStatus.value = null;
       aqiGaugeChart?.dispose();
       dbGaugeChart?.dispose();
       luxGaugeChart?.dispose();
@@ -761,15 +794,26 @@ const tvocHistory: number[] = [];
 const luxHistory: number[] = [];
 const uvHistory: number[] = [];
 
+const clampUvValue = (val: number): number => {
+  if (!isFinite(val)) return 0;
+  return Math.min(Math.max(val, 0), 15);
+};
+
+const pushUvHistory = (value: number) => {
+  uvHistory.push(clampUvValue(value));
+  if (uvHistory.length > MAX_HISTORY) uvHistory.shift();
+};
+
 const pushHistory = (arr: number[], value: number) => {
   arr.push(value);
   if (arr.length > MAX_HISTORY) arr.shift();
 };
 
 const slidingAvg = (arr: number[]): number => {
-  if (arr.length === 0) return 0;
-  const sum = arr.reduce((a, b) => a + b, 0);
-  return sum / arr.length;
+  const valid = arr.filter(v => isFinite(v) && !isNaN(v));
+  if (valid.length === 0) return 0;
+  const sum = valid.reduce((a, b) => a + b, 0);
+  return sum / valid.length;
 };
 
 // 环境数据值
@@ -901,12 +945,22 @@ const fetchUVData = async () => {
       const record = response.data[0];
       const parsed = JSON.parse(record.data);
       if (parsed.uv_index !== undefined) {
-        pushHistory(uvHistory, Number(parsed.uv_index) || 0);
+        pushUvHistory(Number(parsed.uv_index) || 0);
+        purgeUvHistory();
         updateUVGauge();
       }
     }
   } catch (error) {
     console.error('获取紫外线数据失败:', error);
+  }
+};
+
+const purgeUvHistory = () => {
+  for (let i = 0; i < uvHistory.length; i++) {
+    const v = uvHistory[i]!;
+    if (!isFinite(v) || v > 15 || v < 0) {
+      uvHistory[i] = 0;
+    }
   }
 };
 
@@ -992,7 +1046,9 @@ const formatLux = (v: number) => {
   return String(Math.round(v));
 };
 
-const getGaugeOption = (max: number, color: string, bgColor: string, value: number, name: string, formatter?: (v: number) => string) => ({
+const getGaugeOption = (max: number, color: string, bgColor: string, value: number, name: string, formatter?: (v: number) => string) => {
+  const safeValue = isFinite(value) ? Math.min(Math.max(value, 0), max) : 0;
+  return {
   series: [{
     type: 'gauge',
     radius: '95%',
@@ -1043,9 +1099,10 @@ const getGaugeOption = (max: number, color: string, bgColor: string, value: numb
       formatter: formatter ? formatter : '{value}',
       offsetCenter: [0, '0%']
     },
-    data: [{ value: Math.min(value, max), name }]
+    data: [{ value: safeValue, name }]
   }]
-});
+  };
+};
 
 const initGaugeCharts = () => {
   if (aqiGaugeRef.value) {
@@ -1084,7 +1141,7 @@ const initGaugeChartOption = () => {
   const luxVal = slidingAvg(luxHistory);
   const luxColorVal = getLuxColor(luxVal);
   const luxBgVal = getLuxBg(luxVal);
-  const uvVal = slidingAvg(uvHistory);
+  const uvVal = Math.min(Math.max(slidingAvg(uvHistory), 0), 12);
   const uvColorVal = getUVColor(uvVal);
   const uvBgVal = getUVBg(uvVal);
 
@@ -1116,7 +1173,7 @@ const updateGaugeCharts = () => {
   const luxVal = slidingAvg(luxHistory);
   const luxColorVal = getLuxColor(luxVal);
   const luxBgVal = getLuxBg(luxVal);
-  const uvVal = slidingAvg(uvHistory);
+  const uvVal = Math.min(Math.max(slidingAvg(uvHistory), 0), 12);
   const uvColorVal = getUVColor(uvVal);
   const uvBgVal = getUVBg(uvVal);
 
@@ -1150,77 +1207,11 @@ const updateLuxGauge = () => {
 };
 
 const updateUVGauge = () => {
-  const uvVal = slidingAvg(uvHistory);
+  const uvVal = Math.min(Math.max(slidingAvg(uvHistory), 0), 12);
   const uvColorVal = getUVColor(uvVal);
   const uvBgVal = getUVBg(uvVal);
   if (uvGaugeChart) {
     uvGaugeChart.setOption(getGaugeOption(12, uvColorVal, uvBgVal, uvVal, 'UV'));
-  }
-};
-
-// ─── 喂食功能 ───
-const formatFeedTime = (isoString: string) => {
-  const d = new Date(isoString);
-  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-};
-
-const fetchFeedStatus = async () => {
-  if (!camDeviceId.value) return;
-  const birdId = adoptedBird.value?.bird_id || adoptedBird.value?.id;
-  if (!birdId) return;
-  try {
-    const response = await api.get('/api/feeding/status', {
-      bird_id: birdId,
-    });
-    if (response.code === 200 && response.data) {
-      feedingStatus.value = response.data.feeding;
-    }
-  } catch (error) {
-    console.error('获取喂食状态失败:', error);
-  }
-};
-
-const startFeedStatusTimer = () => {
-  stopFeedStatusTimer();
-  fetchFeedStatus();
-  feedStatusTimer = window.setInterval(fetchFeedStatus, 30000);
-};
-
-const stopFeedStatusTimer = () => {
-  if (feedStatusTimer) {
-    clearInterval(feedStatusTimer);
-    feedStatusTimer = null;
-  }
-};
-
-const triggerFeeding = async () => {
-  if (feedingLoading.value || feedingStatus.value?.completed) return;
-  const birdId = adoptedBird.value?.bird_id || adoptedBird.value?.id;
-  if (!birdId) {
-    ElMessage.warning('未找到雏鸟信息，无法执行喂食');
-    return;
-  }
-  feedingLoading.value = true;
-  try {
-    const response = await api.post(`/api/feeding/trigger?bird_id=${birdId}`);
-    ElMessage.closeAll();
-    if (response.code === 200) {
-      ElMessage.success('喂食指令已发送！');
-      await fetchFeedStatus();
-    } else {
-      ElMessage.error(response.msg || '喂食失败');
-    }
-  } catch (error: any) {
-    ElMessage.closeAll();
-    if (error.data && error.data.msg) {
-      ElMessage.error(error.data.msg);
-    } else if (error.message) {
-      ElMessage.error(error.message);
-    } else {
-      ElMessage.error('网络错误，请检查网络连接');
-    }
-  } finally {
-    feedingLoading.value = false;
   }
 };
 
@@ -1259,13 +1250,12 @@ onMounted(() => {
 watch(adoptedBird, (newBird) => {
   if (newBird && camDeviceId.value) {
     nextTick(() => {
+      purgeUvHistory();
       initGaugeCharts();
       startEnvDataTimer();
-      startFeedStatusTimer();
     });
   } else {
     stopEnvDataTimer();
-    stopFeedStatusTimer();
   }
 });
 
@@ -1275,11 +1265,9 @@ watch(camDeviceId, (newId) => {
     nextTick(() => {
       initGaugeCharts();
       startEnvDataTimer();
-      startFeedStatusTimer();
     });
   } else {
     stopEnvDataTimer();
-    stopFeedStatusTimer();
   }
 });
 
@@ -1288,7 +1276,6 @@ onUnmounted(() => {
   stopRealtimeMonitoring();
   stopFpsUpdate();
   stopEnvDataTimer();
-  stopFeedStatusTimer();
   aqiGaugeChart?.dispose();
   dbGaugeChart?.dispose();
   luxGaugeChart?.dispose();
@@ -1389,6 +1376,130 @@ onUnmounted(() => {
 }
 
 /* 操作区域 */
+/* 食量统计表格 */
+.feed-table-section {
+  margin-bottom: 20px;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.6s ease-out 0.3s;
+}
+
+.feed-table-section.fade-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.feed-table-card {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(16px);
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(209, 213, 219, 0.3);
+}
+
+.feed-table-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #166534;
+  margin: 0 0 4px 0;
+}
+
+.feed-table-desc {
+  font-size: 12px;
+  color: #9ca3af;
+  margin: 0 0 16px 0;
+}
+
+.feed-table {
+  width: 100%;
+}
+
+.feed-table-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(22, 163, 74, 0.06);
+  border-radius: 10px;
+  margin-bottom: 6px;
+}
+
+.th-date {
+  width: 72px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.th-grams {
+  width: 72px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  text-align: center;
+}
+
+.th-bar {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  padding-left: 12px;
+}
+
+.feed-table-row {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 10px;
+  transition: background 0.2s ease;
+  animation: slideInRight 0.5s ease-out both;
+}
+
+.feed-table-row:hover {
+  background: rgba(22, 163, 74, 0.04);
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.td-date {
+  width: 72px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.td-grams {
+  width: 72px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #16a34a;
+  text-align: center;
+}
+
+.td-bar-wrapper {
+  flex: 1;
+  height: 22px;
+  background: #f3f4f6;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-left: 12px;
+}
+
+.td-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #86efac, #22c55e, #16a34a);
+  border-radius: 6px;
+  transition: width 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  min-width: 30px;
+  position: relative;
+}
+
+/* ============ */
+
 .action-section {
   margin-bottom: 20px;
   text-align: center;

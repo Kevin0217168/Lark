@@ -153,6 +153,7 @@
             format="YYYY-MM-DD"
             value-format="YYYY-MM-DD"
             style="width: 100%"
+            :disabled-date="disabledDate"
           />
         </el-form-item>
         <el-form-item label="鸟笼">
@@ -268,6 +269,12 @@ const birdFormRef = ref();
 const birdIdToDelete = ref(0);
 const birdCageKey = ref('');
 const birdcageGroups = ref<{ area: string; number: number; label: string; devices: any[] }[]>([]);
+
+const disabledDate = (time: Date) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return time.getTime() > today.getTime();
+};
 
 // 表单验证规则
 const rules = reactive({
@@ -506,9 +513,15 @@ onMounted(() => {
   width: 90%;
   max-width: 1200px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 24px;
   position: relative;
   z-index: 1;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.6);
 }
 
 /* 页面头部 */
@@ -902,6 +915,12 @@ onMounted(() => {
     margin: 0;
     padding: 12px;
     box-sizing: border-box;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-radius: 0;
+    box-shadow: none;
+    border: none;
   }
 
   .birds-header {
@@ -1106,6 +1125,12 @@ onMounted(() => {
 @media (max-width: 375px) {
   .birds-page {
     padding: 8px;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-radius: 0;
+    box-shadow: none;
+    border: none;
   }
 
   .birds-header h1 {
