@@ -100,6 +100,7 @@ const handleAuthFailure = () => {
 interface CustomRequestInit extends RequestInit {
   url?: string;
   _isRetry?: boolean;
+  _is503Retry?: boolean;
 }
 
 const responseInterceptor = async (response: Response, originalRequest?: CustomRequestInit) => {
@@ -184,6 +185,19 @@ const responseInterceptor = async (response: Response, originalRequest?: CustomR
     }
   }
 
+  // 503 服务不可用：等待1秒后自动重试一次
+  if (response.status === 503 && !originalRequest?._is503Retry) {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    if (originalRequest && originalRequest.url) {
+      const { _is503Retry, _isRetry, url, ...rest } = originalRequest;
+      const retryResponse = await fetch(url, rest);
+      return responseInterceptor(retryResponse, {
+        ...originalRequest,
+        _is503Retry: true,
+      });
+    }
+  }
+
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
     const message = error.detail || error.msg || '请求失败';
@@ -201,10 +215,17 @@ export const api = {
       const searchParams = new URLSearchParams();
       Object.entries(params).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
-          searchParams.append(key, String(value));
+          if (Array.isArray(value)) {
+            value.forEach((v) => searchParams.append(key, String(v)));
+          } else {
+            searchParams.append(key, String(value));
+          }
         }
       });
-      fullUrl += `?${searchParams.toString()}`;
+      const queryString = searchParams.toString();
+      if (queryString) {
+        fullUrl += `?${queryString}`;
+      }
     }
 
     const config = requestInterceptor({ method: 'GET' });

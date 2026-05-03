@@ -180,7 +180,7 @@ def GetSensorUpload(
     db: Session,
     id: Optional[int] = None,
     device_id: Optional[str] = None,
-    sensor_type: Optional[str] = None,
+    sensor_types: Optional[List[str]] = None,
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
     skip: int = 0,
@@ -193,8 +193,8 @@ def GetSensorUpload(
     else:
         if device_id is not None:
             query = query.filter(M_SensorUpload.device_id == device_id)
-        if sensor_type is not None:
-            query = query.filter(M_SensorUpload.sensor_type == sensor_type)
+        if sensor_types is not None and len(sensor_types) > 0:
+            query = query.filter(M_SensorUpload.sensor_type.in_(sensor_types))
         if start_time is not None:
             query = query.filter(M_SensorUpload.timestamp >= start_time)
         if end_time is not None:

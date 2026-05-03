@@ -902,47 +902,6 @@ const fetchRealtimeData = async () => {
   }
 };
 
-const fetchLuxData = async () => {
-  if (!c3DeviceId.value) return;
-  try {
-    const response = await api.get('/api/sensor-upload', {
-      device_id: c3DeviceId.value,
-      sensor_type: 'veml7700',
-      limit: 1,
-    });
-    if (response.code === 200 && response.data && response.data.length > 0) {
-      const record = response.data[0];
-      const parsed = JSON.parse(record.data);
-      if (parsed.lux !== undefined) {
-        luxValue.value = Number(parsed.lux) || 0;
-      }
-    }
-  } catch (error) {
-    console.error('获取光照数据失败:', error);
-  }
-};
-
-const fetchUVData = async () => {
-  if (!c3DeviceId.value) return;
-  try {
-    const response = await api.get('/api/sensor-upload', {
-      device_id: c3DeviceId.value,
-      sensor_type: 'uv_meter',
-      limit: 1,
-    });
-    if (response.code === 200 && response.data && response.data.length > 0) {
-      const record = response.data[0];
-      const parsed = JSON.parse(record.data);
-      if (parsed.uv_index !== undefined) {
-        const raw = Number(parsed.uv_index);
-        uvValue.value = isFinite(raw) ? Math.min(Math.max(raw, 0), 15) : 0;
-      }
-    }
-  } catch (error) {
-    console.error('获取紫外线数据失败:', error);
-  }
-};
-
 // 启动实时数据定时器
 const startRealtimeDataTimer = () => {
   // 先清除旧的定时器
@@ -1229,16 +1188,17 @@ const handleCurrentChange = (val: number) => {
 const fetchHistoryC3Data = async (c3DeviceId: number) => {
   historyC3Loading.value = true;
   try {
-    const [aqiData, soundData, luxData, uvData] = await Promise.allSettled([
-      fetchSensorTimeSeries(c3DeviceId, 'pms9103m', 'pm2_5_cf1'),
-      fetchSensorTimeSeries(c3DeviceId, 'sound_meter', 'db'),
-      fetchSensorTimeSeries(c3DeviceId, 'veml7700', 'lux'),
-      fetchSensorTimeSeries(c3DeviceId, 'uv_meter', 'uv_index')
-    ]);
-    const aqiResult = aqiData.status === 'fulfilled' ? aqiData.value : { times: [], values: [], rawTimestamps: [] };
-    const soundResult = soundData.status === 'fulfilled' ? soundData.value : { times: [], values: [], rawTimestamps: [] };
-    const luxResult = luxData.status === 'fulfilled' ? luxData.value : { times: [], values: [], rawTimestamps: [] };
-    const uvResult = uvData.status === 'fulfilled' ? uvData.value : { times: [], values: [], rawTimestamps: [] };
+    const sensorTypeMap = {
+      'pms9103m': 'pm2_5_cf1',
+      'sound_meter': 'db',
+      'veml7700': 'lux',
+      'uv_meter': 'uv_index'
+    };
+    const results = await fetchMultiSensorTimeSeries(c3DeviceId, sensorTypeMap);
+    const aqiResult = results['pms9103m']!;
+    const soundResult = results['sound_meter']!;
+    const luxResult = results['veml7700']!;
+    const uvResult = results['uv_meter']!;
     const soundMap = new Map<string, number>();
     soundResult.rawTimestamps.forEach((t: string, i: number) => soundMap.set(t, soundResult.values[i]!));
     const luxMap = new Map<string, number>();
@@ -1489,52 +1449,42 @@ const calculateAQI = (pm25: number, pm10: number, co2: number, tvoc: number): nu
   return validAqi.length > 0 ? Math.round(Math.max(...validAqi)) : 0;
 };
 
-const fetchAirQualityData = async () => {
+const fetchAllEnvData = async () => {
   if (!c3DeviceId.value) return;
   try {
     const response = await api.get('/api/sensor-upload', {
       device_id: c3DeviceId.value,
-      sensor_type: 'pms9103m',
-      limit: 1,
+      sensor_type: ['pms9103m', 'sound_meter', 'veml7700', 'uv_meter'],
+      limit: 4,
     });
-    if (response.code === 200 && response.data && response.data.length > 0) {
-      const record = response.data[0];
-      const parsed = JSON.parse(record.data);
-      const pm25 = Number(parsed.pm2_5_cf1) || 0;
-      const pm10 = Number(parsed.pm10_cf1) || 0;
-      aqiValue.value = calculateAQI(pm25, pm10, 0, 0);
-    }
-  } catch (error) {
-    console.error('获取空气质量数据失败:', error);
-  }
-};
-
-const fetchSoundData = async () => {
-  if (!c3DeviceId.value) return;
-  try {
-    const response = await api.get('/api/sensor-upload', {
-      device_id: c3DeviceId.value,
-      sensor_type: 'sound_meter',
-      limit: 1,
-    });
-    if (response.code === 200 && response.data && response.data.length > 0) {
-      const record = response.data[0];
-      const parsed = JSON.parse(record.data);
-      if (parsed.db !== undefined) {
-        dbValue.value = Math.round(parsed.db);
+    if (response.code === 200 && response.data && Array.isArray(response.data)) {
+      for (const record of response.data) {
+        const parsed = typeof record.data === 'string' ? JSON.parse(record.data) : record.data;
+        switch (record.sensor_type) {
+          case 'pms9103m': {
+            const pm25 = Number(parsed.pm2_5_cf1) || 0;
+            const pm10 = Number(parsed.pm10_cf1) || 0;
+            aqiValue.value = calculateAQI(pm25, pm10, 0, 0);
+            break;
+          }
+          case 'sound_meter':
+            if (parsed.db !== undefined) dbValue.value = Math.round(parsed.db);
+            break;
+          case 'veml7700':
+            if (parsed.lux !== undefined) luxValue.value = Number(parsed.lux) || 0;
+            break;
+          case 'uv_meter':
+            if (parsed.uv_index !== undefined) {
+              const raw = Number(parsed.uv_index);
+              uvValue.value = isFinite(raw) ? Math.min(Math.max(raw, 0), 15) : 0;
+            }
+            break;
+        }
       }
     }
   } catch (error) {
-    console.error('获取声音分贝数据失败:', error);
+    console.error('获取环境数据失败:', error);
   }
-};
-
-const fetchAllEnvData = async () => {
-  if (!c3DeviceId.value) return;
-  await fetchAirQualityData();
-  await fetchSoundData();
-  await fetchLuxData();
-  await fetchUVData();
   updateGaugeCharts();
 };
 
@@ -2156,6 +2106,77 @@ const fetchSensorTimeSeries = async (deviceId: number, sensorType: string, value
   return { times, values, rawTimestamps };
 };
 
+const fetchMultiSensorTimeSeries = async (
+  deviceId: number,
+  sensorTypeMap: Record<string, string>,
+): Promise<Record<string, { times: string[]; values: number[]; rawTimestamps: string[] }>> => {
+  const sensorTypeList = Object.keys(sensorTypeMap);
+  const result: Record<string, { times: string[]; values: number[]; rawTimestamps: string[] }> = {};
+  for (const st of sensorTypeList) {
+    result[st] = { times: [], values: [], rawTimestamps: [] };
+  }
+  try {
+    const response = await api.get('/api/sensor-upload', {
+      device_id: deviceId,
+      sensor_type: sensorTypeList,
+      limit: sensorTypeList.length * 200,
+    });
+    if (response.code === 200 && response.data && Array.isArray(response.data)) {
+      const rawData: any[] = response.data;
+      const cutoff = new Date();
+      const secondsAgo = timeRange.value === 'today' ? 86400 : 172800;
+      cutoff.setSeconds(cutoff.getSeconds() - secondsAgo);
+
+      const grouped: Record<string, { time: string; value: number; rawTime: string }[]> = {};
+      for (const st of sensorTypeList) {
+        grouped[st] = [];
+      }
+
+      for (const item of rawData) {
+        const st = item.sensor_type;
+        const valueKey = sensorTypeMap[st];
+        if (!valueKey || !grouped[st]) continue;
+
+        const ts = new Date(item.timestamp + '+00:00');
+        if (ts < cutoff) continue;
+        if (isNaN(ts.getTime())) continue;
+        const msUTC8 = ts.getTime() + 8 * 3600 * 1000;
+        const ts8 = new Date(msUTC8);
+        let parsed: any;
+        try {
+          parsed = typeof item.data === 'string' ? JSON.parse(item.data) : item.data;
+        } catch { continue; }
+        if (parsed[valueKey] !== undefined && parsed[valueKey] !== null) {
+          const rawTime = item.timestamp;
+          if (timeRange.value === 'two_days') {
+            const month = (ts8.getUTCMonth() + 1).toString().padStart(2, '0');
+            const day = ts8.getUTCDate().toString().padStart(2, '0');
+            const hh = ts8.getUTCHours().toString().padStart(2, '0');
+            const mm = ts8.getUTCMinutes().toString().padStart(2, '0');
+            grouped[st].push({ time: `${month}/${day} ${hh}:${mm}`, value: Number(parsed[valueKey]), rawTime });
+          } else {
+            const hh = ts8.getUTCHours().toString().padStart(2, '0');
+            const mm = ts8.getUTCMinutes().toString().padStart(2, '0');
+            grouped[st].push({ time: `${hh}:${mm}`, value: Number(parsed[valueKey]), rawTime });
+          }
+        }
+      }
+
+      for (const st of sensorTypeList) {
+        const pairs = grouped[st]!.reverse();
+        result[st] = {
+          times: pairs.map(p => p.time),
+          values: pairs.map(p => p.value),
+          rawTimestamps: pairs.map(p => p.rawTime),
+        };
+      }
+    }
+  } catch (error) {
+    console.error('获取多传感器时间序列数据失败:', error);
+  }
+  return result;
+};
+
 // 初始化图表
 const initCharts = async () => {
   if (!analysisCamDeviceId.value && !analysisC3DeviceId.value) return;
@@ -2252,40 +2273,40 @@ const initDesktopCharts = async () => {
   
   // 环境传感器 (C3)
   if (c3Id) {
-    // 并行获取所有C3传感器数据，单个传感器失败不影响其他
-    const [aqiData, soundData, luxData, uvData] = await Promise.allSettled([
-      fetchSensorTimeSeries(c3Id, 'pms9103m', 'pm2_5_cf1'),
-      fetchSensorTimeSeries(c3Id, 'sound_meter', 'db'),
-      fetchSensorTimeSeries(c3Id, 'veml7700', 'lux'),
-      fetchSensorTimeSeries(c3Id, 'uv_meter', 'uv_index')
-    ]);
+    const sensorTypeMap = {
+      'pms9103m': 'pm2_5_cf1',
+      'sound_meter': 'db',
+      'veml7700': 'lux',
+      'uv_meter': 'uv_index'
+    };
+    const results = await fetchMultiSensorTimeSeries(c3Id, sensorTypeMap);
 
     // 空气质量图表
     if (analysisAqiChartRef.value) {
       analysisAqiChart?.dispose();
       analysisAqiChart = echarts.init(analysisAqiChartRef.value);
-      const aqiResult = aqiData.status === 'fulfilled' ? aqiData.value : { times: [], values: [] };
+      const aqiResult = results['pms9103m']!;
       analysisAqiChart.setOption(makeLineChartOption(aqiResult.times, aqiResult.values, 'AQI', '#e6a23c', 'PM2.5 (μg/m³)'));
     }
     // 声音分贝图表
     if (analysisSoundChartRef.value) {
       analysisSoundChart?.dispose();
       analysisSoundChart = echarts.init(analysisSoundChartRef.value);
-      const soundResult = soundData.status === 'fulfilled' ? soundData.value : { times: [], values: [] };
+      const soundResult = results['sound_meter']!;
       analysisSoundChart.setOption(makeLineChartOption(soundResult.times, soundResult.values, 'dB', '#909399', '分贝 (dB)'));
     }
     // 光照强度图表
     if (analysisLuxChartRef.value) {
       analysisLuxChart?.dispose();
       analysisLuxChart = echarts.init(analysisLuxChartRef.value);
-      const luxResult = luxData.status === 'fulfilled' ? luxData.value : { times: [], values: [] };
+      const luxResult = results['veml7700']!;
       analysisLuxChart.setOption(makeLineChartOption(luxResult.times, luxResult.values, 'Lux', '#67c23a', '光照 (Lux)'));
     }
     // 紫外线图表
     if (analysisUvChartRef.value) {
       analysisUvChart?.dispose();
       analysisUvChart = echarts.init(analysisUvChartRef.value);
-      const uvResult = uvData.status === 'fulfilled' ? uvData.value : { times: [], values: [] };
+      const uvResult = results['uv_meter']!;
       analysisUvChart.setOption(makeLineChartOption(uvResult.times, uvResult.values, 'UV', '#f56c6c', 'UV指数'));
     }
   }
@@ -2333,18 +2354,18 @@ const initMobileCharts = async () => {
 
   // 环境传感器 (C3)
   if (c3Id) {
-    // 并行获取所有C3传感器数据，单个传感器失败不影响其他
-    const [aqiData, soundData, luxData, uvData] = await Promise.allSettled([
-      fetchSensorTimeSeries(c3Id, 'pms9103m', 'pm2_5_cf1'),
-      fetchSensorTimeSeries(c3Id, 'sound_meter', 'db'),
-      fetchSensorTimeSeries(c3Id, 'veml7700', 'lux'),
-      fetchSensorTimeSeries(c3Id, 'uv_meter', 'uv_index')
-    ]);
+    const sensorTypeMap = {
+      'pms9103m': 'pm2_5_cf1',
+      'sound_meter': 'db',
+      'veml7700': 'lux',
+      'uv_meter': 'uv_index'
+    };
+    const results = await fetchMultiSensorTimeSeries(c3Id, sensorTypeMap);
 
     // 空气质量图表
     if (analysisAqiChartRef.value) {
       analysisAqiChart = echarts.init(analysisAqiChartRef.value);
-      const aqiResult = aqiData.status === 'fulfilled' ? aqiData.value : { times: [], values: [] };
+      const aqiResult = results['pms9103m']!;
       const sAqi = aqiResult.times.length > 0 ? sampleData(aqiResult.times, 12) : [];
       const sAqiV = aqiResult.values.length > 0 ? sampleData(aqiResult.values, 12) : [];
       analysisAqiChart.setOption(makeMobileLineOption(sAqi, sAqiV, 'PM2.5 (μg/m³)', '#e6a23c'));
@@ -2352,7 +2373,7 @@ const initMobileCharts = async () => {
     // 声音分贝图表
     if (analysisSoundChartRef.value) {
       analysisSoundChart = echarts.init(analysisSoundChartRef.value);
-      const soundResult = soundData.status === 'fulfilled' ? soundData.value : { times: [], values: [] };
+      const soundResult = results['sound_meter']!;
       const sSound = soundResult.times.length > 0 ? sampleData(soundResult.times, 12) : [];
       const sSoundV = soundResult.values.length > 0 ? sampleData(soundResult.values, 12) : [];
       analysisSoundChart.setOption(makeMobileLineOption(sSound, sSoundV, '分贝 (dB)', '#909399'));
@@ -2360,7 +2381,7 @@ const initMobileCharts = async () => {
     // 光照强度图表
     if (analysisLuxChartRef.value) {
       analysisLuxChart = echarts.init(analysisLuxChartRef.value);
-      const luxResult = luxData.status === 'fulfilled' ? luxData.value : { times: [], values: [] };
+      const luxResult = results['veml7700']!;
       const sLux = luxResult.times.length > 0 ? sampleData(luxResult.times, 12) : [];
       const sLuxV = luxResult.values.length > 0 ? sampleData(luxResult.values, 12) : [];
       analysisLuxChart.setOption(makeMobileLineOption(sLux, sLuxV, '光照 (Lux)', '#67c23a'));
@@ -2368,7 +2389,7 @@ const initMobileCharts = async () => {
     // 紫外线图表
     if (analysisUvChartRef.value) {
       analysisUvChart = echarts.init(analysisUvChartRef.value);
-      const uvResult = uvData.status === 'fulfilled' ? uvData.value : { times: [], values: [] };
+      const uvResult = results['uv_meter']!;
       const sUv = uvResult.times.length > 0 ? sampleData(uvResult.times, 12) : [];
       const sUvV = uvResult.values.length > 0 ? sampleData(uvResult.values, 12) : [];
       analysisUvChart.setOption(makeMobileLineOption(sUv, sUvV, 'UV指数', '#f56c6c'));
