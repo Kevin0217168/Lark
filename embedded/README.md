@@ -1,7 +1,5 @@
 # Lark 嵌入式固件
 
-目前状态： ESP32-C3固件只预留了接口，硬件和具体功能还未实现， 接口内容可能随时发生变化， 请多加留意和沟通
-
 物联网环境监测与摄像设备嵌入式系统，基于 **ESP-IDF v5.x + FreeRTOS**，包含两个子项目：
 
 | 子项目 | 芯片 | 定位 | 固件版本 |
@@ -49,6 +47,7 @@ embedded/
     │   ├── sound_meter/           # 噪声传感器
     │   ├── uv_meter/              # 紫外线传感器
     │   ├── veml7700/              # VEML7700 环境光传感器
+    │   ├── hx711/                 # HX711 称重传感器（电子秤）
     │   └── esp_camera/            # 摄像头驱动（预留）
     └── docs/                      # 文档（见下方链接）
 ```
@@ -62,7 +61,7 @@ embedded/
 | 文档 | 说明 |
 |------|------|
 | [ESP32-CAM WebSocket 控制接口文档](ESP32-camera/docs/WS_CORESPONSE.md) | 摄像设备 WS 协议：`status` / `camera` / `device` 模块的查询与设定 |
-| [ESP32-C3 传感器集线器 WebSocket 控制接口文档](ESP32-C3/docs/WS_CORESPONSE.md) | 传感器集线器 WS 协议：`device` / `light` / `sensor` 模块的查询与设定 |
+| [ESP32-C3 传感器集线器 WebSocket 控制接口文档](ESP32-C3/docs/WS_CORESPONSE.md) | 传感器集线器 WS 协议：`device` / `light` / `sensor` / `scale` 模块的查询与设定 |
 
 ### 运维参考
 
@@ -76,6 +75,7 @@ embedded/
 |------|------|
 | [嵌入式 WebSocket 命令处理的扁平化设计](ESP32-camera/docs/ws_process_design.md) | 映射表 + 分发表替代嵌套 if-else 的设计实战 |
 | [ESP32 日志远程传输系统：从设计到实现](ESP32-camera/docs/remote-log-design.md) | vprintf 钩子 + 环形缓冲区 + HTTP POST 批量上传的完整设计演进 |
+| [ESP32 WebSocket secret 乱码排查记：从 C++ name mangling 到 Archive 链接陷阱](ESP32-C3/docs/secret-debug.md) | weak 符号阻断 Archive 强符号——nm / objdump / linker map 全链路排查实战 |
 
 ---
 
