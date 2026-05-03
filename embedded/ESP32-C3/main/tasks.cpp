@@ -30,7 +30,7 @@ static const char *TAG = "sensor_task";
 #define INA231_SHUNT_UOHM  100000UL
 
 /* ────────── 上报配置 ────────── */
-#define UPLOAD_URL   "https://lark.mintlab.top/api/sensor-upload"
+#define UPLOAD_URL   "https://lark.mintlab.top/api/sensor-upload/batch"
 
 /* ────────── 熔断器 ────────── */
 #define CB_FAIL_THRESHOLD  3
@@ -262,26 +262,17 @@ void sensor_upload_aggregated(const char *aggregated_json)
         }
     }
 
-    /* ── 将 aggregated_json 转义为 JSON 字符串值 ── */
-    char data_escaped[2048];
-    size_t di = 0, si = 0;
-    while (aggregated_json[si] && di + 2 < sizeof(data_escaped)) {
-        char ch = aggregated_json[si++];
-        if (ch == '"' || ch == '\\') data_escaped[di++] = '\\';
-        data_escaped[di++] = ch;
-    }
-    data_escaped[di] = '\0';
-
+    /* ── aggregated_json 已经是合法的 JSON 对象，直接嵌入 body ── */
     char body[2500];
     int len;
     if (have_ts) {
         len = snprintf(body, sizeof(body),
-            "{\"secret\":\"%s\",\"data\":\"%s\",\"timestamp\":\"%s\"}",
-            secret, data_escaped, timestamp);
+            "{\"secret\":\"%s\",\"data\":%s,\"timestamp\":\"%s\"}",
+            secret, aggregated_json, timestamp);
     } else {
         len = snprintf(body, sizeof(body),
-            "{\"secret\":\"%s\",\"data\":\"%s\"}",
-            secret, data_escaped);
+            "{\"secret\":\"%s\",\"data\":%s}",
+            secret, aggregated_json);
     }
     if (len <= 0 || len >= (int)sizeof(body)) {
         ESP_LOGE(TAG, "聚合报文过长 (%d), 跳过上报", len);

@@ -6,8 +6,10 @@
 #define SECRET_NAMESPACE "device"
 #define SECRET_KEY       "secret"
 
-// 默认密钥（首次烧录/未写入时使用）
+// 默认密钥（首次烧录/未写入时使用）默认
 char secret[SECRET_MAX_LEN] = "b1f9562544a348c98c57a66b32a92d32";
+
+// char secret[SECRET_MAX_LEN] = "abe5c43b425c36921ea2ecf1d7f757ee";
 
 esp_err_t save_secret_to_nvs(const char *secret_val)
 {
