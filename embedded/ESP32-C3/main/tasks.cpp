@@ -11,6 +11,7 @@
 #include "esp_crt_bundle.h"
 
 #include "ina231.h"
+#include "hx711.h"
 #include "pms9103m.h"
 #include "sgp30.h"
 #include "sound_meter.h"
@@ -30,7 +31,11 @@ static const char *TAG = "sensor_task";
 #define INA231_SHUNT_UOHM  100000UL
 
 /* ────────── 上报配置 ────────── */
-#define UPLOAD_URL   "https://lark.mintlab.top/api/sensor-upload"
+#define UPLOAD_URL   "https://lark.mintlab.top/api/sensor-upload/batch"
+
+/* ────────── 调试模式（条件编译） ────────── */
+/* 取消下一行注释以启用调试模式：传感器不上传，每秒打印一次采集数据 */
+// #define SENSOR_DEBUG_MODE
 
 /* ────────── 熔断器 ────────── */
 #define CB_FAIL_THRESHOLD  3
@@ -67,6 +72,14 @@ static bool g_uv_ready       = false;
 /* ────────── VEML7700 缓存参数（避免 on-demand 查询时阻塞 I2C） ────────── */
 static uint8_t  g_veml7700_cached_gain = VEML7700_GAIN_1_8;
 static uint8_t  g_veml7700_cached_it   = VEML7700_IT_100MS;
+
+/* ────────── HX711 称重传感器 ────────── */
+#define HX711_DOUT_GPIO        GPIO_NUM_6
+#define HX711_SCK_GPIO         GPIO_NUM_7
+#define HX711_DEFAULT_FULLSCALE_G  2000.0f   /**< 默认量程 2kg，设为 0 则不限制 */
+static hx711_t g_hx711 = {};
+static bool g_hx711_ready = false;
+static float g_hx711_full_scale_g = HX711_DEFAULT_FULLSCALE_G;
 
 /* ────────── device_secret 由 device_secret.c 提供（4MB 分区表需要） ────────── */
 
@@ -262,26 +275,17 @@ void sensor_upload_aggregated(const char *aggregated_json)
         }
     }
 
-    /* ── 将 aggregated_json 转义为 JSON 字符串值 ── */
-    char data_escaped[2048];
-    size_t di = 0, si = 0;
-    while (aggregated_json[si] && di + 2 < sizeof(data_escaped)) {
-        char ch = aggregated_json[si++];
-        if (ch == '"' || ch == '\\') data_escaped[di++] = '\\';
-        data_escaped[di++] = ch;
-    }
-    data_escaped[di] = '\0';
-
+    /* ── aggregated_json 已经是合法的 JSON 对象，直接嵌入 body ── */
     char body[2500];
     int len;
     if (have_ts) {
         len = snprintf(body, sizeof(body),
-            "{\"secret\":\"%s\",\"data\":\"%s\",\"timestamp\":\"%s\"}",
-            secret, data_escaped, timestamp);
+            "{\"secret\":\"%s\",\"data\":%s,\"timestamp\":\"%s\"}",
+            secret, aggregated_json, timestamp);
     } else {
         len = snprintf(body, sizeof(body),
-            "{\"secret\":\"%s\",\"data\":\"%s\"}",
-            secret, data_escaped);
+            "{\"secret\":\"%s\",\"data\":%s}",
+            secret, aggregated_json);
     }
     if (len <= 0 || len >= (int)sizeof(body)) {
         ESP_LOGE(TAG, "聚合报文过长 (%d), 跳过上报", len);
@@ -577,9 +581,141 @@ static esp_err_t read_uv_meter(uv_meter_handle_t &handle, char *json_out, size_t
 }
 
 /* ═══════════════════════════════════════════════════════════
+ * HX711 称重传感器 初始化
+ * ═══════════════════════════════════════════════════════════ */
+
+static bool init_hx711(void)
+{
+    hx711_config_t cfg;
+    hx711_get_default_config(&cfg);
+    cfg.dout_gpio    = HX711_DOUT_GPIO;
+    cfg.sck_gpio     = HX711_SCK_GPIO;
+    cfg.gain         = HX711_GAIN_128;
+    cfg.sample_count = 8;
+
+    esp_err_t err = hx711_init(&g_hx711, &cfg);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "HX711 初始化失败: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    /* 设置量程 */
+    hx711_set_full_scale(&g_hx711, g_hx711_full_scale_g);
+
+    /* 空载去皮（调用前确保称盘为空） */
+    err = hx711_tare(&g_hx711);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "HX711 去皮失败，使用零偏移: %s", esp_err_to_name(err));
+        hx711_set_offset(&g_hx711, 0);
+    }
+
+    /* 使用参考示例中的默认标定系数 GapValue=430。
+       如需精确标定，请放置已知砝码后调用 hx711_calibrate(&g_hx711, 砝码克数)。
+       标定后通过 hx711_set_calibration_factor() 更新。 */
+    vTaskDelay(5000 / portTICK_PERIOD_MS);  // 等待稳定读数
+    hx711_set_calibration_factor(&g_hx711, 500.0f);
+
+    return true;
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * HX711 称重传感器 读取
+ * ═══════════════════════════════════════════════════════════ */
+
+static esp_err_t read_hx711(char *json_out, size_t json_size)
+{
+    float weight_g = 0;
+    esp_err_t err = hx711_read_weight(&g_hx711, &weight_g);
+    if (err == ESP_ERR_INVALID_STATE) {
+        /* 未标定 (calibration_factor <= 0) 或 超量程 */
+        if (g_hx711.calibration_factor <= 0) {
+            snprintf(json_out, json_size,
+                "{\"weight_g\":0.0,\"status\":\"uncalibrated\"}");
+            return err;
+        }
+        /* 超量程 */
+        snprintf(json_out, json_size,
+            "{\"weight_g\":%.1f,\"overload\":true,\"full_scale_g\":%.0f}",
+            weight_g, g_hx711_full_scale_g);
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (err != ESP_OK) return err;
+
+    snprintf(json_out, json_size,
+        "{\"weight_g\":%.1f,\"overload\":false,\"full_scale_g\":%.0f}",
+        weight_g, g_hx711_full_scale_g);
+    return ESP_OK;
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * HX711 WS 控制接口（供 ws_process.c 远程调用）
+ * ═══════════════════════════════════════════════════════════ */
+
+bool hx711_ws_tare(void)
+{
+    if (!g_hx711_ready) {
+        ESP_LOGE(TAG, "hx711_ws_tare: HX711 未就绪");
+        return false;
+    }
+    esp_err_t err = hx711_tare(&g_hx711);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "hx711_ws_tare: 去皮失败: %s", esp_err_to_name(err));
+        return false;
+    }
+    ESP_LOGI(TAG, "hx711_ws_tare: 去皮成功");
+    return true;
+}
+
+bool hx711_ws_calibrate(float known_weight_g)
+{
+    if (!g_hx711_ready) {
+        ESP_LOGE(TAG, "hx711_ws_calibrate: HX711 未就绪");
+        return false;
+    }
+    if (known_weight_g <= 0) {
+        ESP_LOGE(TAG, "hx711_ws_calibrate: 无效砝码重量 %.1f", known_weight_g);
+        return false;
+    }
+    esp_err_t err = hx711_calibrate(&g_hx711, known_weight_g);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "hx711_ws_calibrate: 标定失败: %s", esp_err_to_name(err));
+        return false;
+    }
+    ESP_LOGI(TAG, "hx711_ws_calibrate: 标定成功, 砝码=%.1fg", known_weight_g);
+    return true;
+}
+
+bool hx711_ws_set_full_scale(float full_scale_g)
+{
+    if (!g_hx711_ready) {
+        ESP_LOGE(TAG, "hx711_ws_set_full_scale: HX711 未就绪");
+        return false;
+    }
+    if (full_scale_g < 0) {
+        full_scale_g = 0;  /* 0 表示不限制量程 */
+    }
+    g_hx711_full_scale_g = full_scale_g;
+    hx711_set_full_scale(&g_hx711, full_scale_g);
+    ESP_LOGI(TAG, "hx711_ws_set_full_scale: 量程=%.0fg", full_scale_g);
+    return true;
+}
+
+bool hx711_ws_get_status(char *json_out, size_t json_size)
+{
+    if (!json_out || !json_size) return false;
+
+    snprintf(json_out, json_size,
+        "{\"ready\":%s,\"calibrated\":%s,\"full_scale_g\":%.0f}",
+        g_hx711_ready ? "true" : "false",
+        (g_hx711_ready && g_hx711.calibration_factor > 0) ? "true" : "false",
+        g_hx711_full_scale_g);
+    return true;
+}
+
+/* ═══════════════════════════════════════════════════════════
  * 统一传感器数据采集任务
  *
- * 每分钟顺序采集全部 6 个传感器，聚合后一次性上报。
+ * 每分钟顺序采集全部 7 个传感器，聚合后一次性上报。
  * 每个传感器独立错误处理，单一传感器失败不影响其他。
  * ═══════════════════════════════════════════════════════════ */
 
@@ -621,10 +757,14 @@ void task_sensor_collect(void *pvParameter)
     g_uv_ready = init_uv_meter(g_uv_handle);
     if (!g_uv_ready) ESP_LOGE(TAG, "UV Meter 初始化失败");
 
+    /* ── 阶段 7: 初始化 HX711 称重传感器 ── */
+    g_hx711_ready = init_hx711();
+    if (!g_hx711_ready) ESP_LOGE(TAG, "HX711 称重传感器初始化失败");
+
     ESP_LOGI(TAG, "传感器就绪状态: INA231=%d SGP30=%d VEML7700=%d "
-             "PMS9103M=%d Sound=%d UV=%d",
+             "PMS9103M=%d Sound=%d UV=%d HX711=%d",
              g_ina231_ready, g_sgp30_ready, g_veml7700_ready,
-             g_pms_ready, g_sound_ready, g_uv_ready);
+             g_pms_ready, g_sound_ready, g_uv_ready, g_hx711_ready);
 
     /* ── 主循环：每分钟采集一次 ── */
     TickType_t last_wake = xTaskGetTickCount();
@@ -726,6 +866,20 @@ void task_sensor_collect(void *pvParameter)
             }
         }
 
+        /* ── 7. HX711 称重 ── */
+        if (g_hx711_ready) {
+            ok = (read_hx711(sensor_json, sizeof(sensor_json)) == ESP_OK);
+            if (ok) {
+                append_sensor("hx711", sensor_json, true);
+            } else {
+                ESP_LOGW(TAG, "HX711 读取失败（可能超量程）");
+                /* 超量程时仍然上报 overload 状态 */
+                if (sensor_json[0] != '\0') {
+                    append_sensor("hx711", sensor_json, true);
+                }
+            }
+        }
+
         /* 闭合 JSON 对象 */
         if (agg_len + 2 < sizeof(aggregated)) {
             aggregated[agg_len++] = '}';
@@ -734,16 +888,28 @@ void task_sensor_collect(void *pvParameter)
 
         /* ── 上报 ── */
         if (any_success) {
+#ifdef SENSOR_DEBUG_MODE
+            ESP_LOGI(TAG, "[DEBUG] 采集数据 (len=%zu): %s", agg_len, aggregated);
+#else
             ESP_LOGI(TAG, "聚合数据 (len=%zu): %s", agg_len, aggregated);
             sensor_upload_aggregated(aggregated);
+#endif
         } else {
             ESP_LOGW(TAG, "本轮采集无有效数据");
         }
 
+#ifdef SENSOR_DEBUG_MODE
+        ESP_LOGI(TAG, "──── [DEBUG] 本轮采集完成，等待 1 秒 ────");
+#else
         ESP_LOGI(TAG, "──── 本轮采集完成，等待 %d 秒 ────",
                  (int)(SENSOR_COLLECT_INTERVAL_MS / 1000));
+#endif
 
+#ifdef SENSOR_DEBUG_MODE
+        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(1000));
+#else
         vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(SENSOR_COLLECT_INTERVAL_MS));
+#endif
     }
 }
 
@@ -751,7 +917,8 @@ void task_sensor_collect(void *pvParameter)
  * 按传感器名称读取一次数据（供 WebSocket on-demand 查询）
  *
  * @param sensor_name  "ina231" / "sgp30" / "veml7700" /
- *                     "pms9103m" / "sound_meter" / "uv_meter"
+ *                     "pms9103m" / "sound_meter" / "uv_meter" /
+ *                     "hx711"
  * @param json_out     输出缓冲区（不含外层花括号的 JSON 对象）
  * @param json_size    缓冲区大小
  * @return true 表示读取成功
@@ -764,9 +931,9 @@ extern "C" bool sensor_read_one(const char *sensor_name, char *json_out, size_t 
         return false;
     }
 
-    ESP_LOGI(TAG, "sensor_read_one: 请求传感器 '%s', ready: INA=%d SGP=%d VEML=%d PMS=%d SND=%d UV=%d",
+    ESP_LOGI(TAG, "sensor_read_one: 请求传感器 '%s', ready: INA=%d SGP=%d VEML=%d PMS=%d SND=%d UV=%d HX=%d",
              sensor_name, g_ina231_ready, g_sgp30_ready, g_veml7700_ready,
-             g_pms_ready, g_sound_ready, g_uv_ready);
+             g_pms_ready, g_sound_ready, g_uv_ready, g_hx711_ready);
 
     if (strcasecmp(sensor_name, "ina231") == 0) {
         if (!g_ina231_ready) {
@@ -812,6 +979,13 @@ extern "C" bool sensor_read_one(const char *sensor_name, char *json_out, size_t 
     if (strcasecmp(sensor_name, "uv_meter") == 0) {
         if (!g_uv_ready) return false;
         return (read_uv_meter(g_uv_handle, json_out, json_size) == ESP_OK);
+    }
+
+    if (strcasecmp(sensor_name, "hx711") == 0) {
+        if (!g_hx711_ready) return false;
+        esp_err_t ret = read_hx711(json_out, json_size);
+        /* 超量程时仍返回数据供上层判断 overload 字段 */
+        return (ret == ESP_OK || ret == ESP_ERR_INVALID_STATE);
     }
 
     ESP_LOGW(TAG, "sensor_read_one: 未知传感器 '%s'", sensor_name);

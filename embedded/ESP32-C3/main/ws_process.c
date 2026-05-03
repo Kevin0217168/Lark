@@ -123,6 +123,87 @@ static void query_sensor(const char *key, cJSON *values_item)
     }
 }
 
+/* ──────────────── scale 模块（电子秤） ──────────────── */
+
+static void query_scale(const char *key, cJSON *values_item)
+{
+    if (strcasecmp(key, "weight") == 0) {
+        /* 复用 sensor_read_one 按需读取 */
+        char json_buf[256];
+        ESP_LOGI(TAG, "query_scale: 查询当前重量");
+        if (sensor_read_one("hx711", json_buf, sizeof(json_buf))) {
+            ws_reply(1, "OK.", key, json_buf);
+        } else {
+            ws_reply(0, "HX711 未就绪或读取失败", key, "");
+        }
+    } else if (strcasecmp(key, "status") == 0) {
+        char json_buf[128];
+        if (hx711_ws_get_status(json_buf, sizeof(json_buf))) {
+            ws_reply(1, "OK.", key, json_buf);
+        } else {
+            ws_reply(0, "获取状态失败", key, "");
+        }
+    } else if (strcasecmp(key, "full_scale") == 0) {
+        /* 返回当前量程，通过 status 获取 */
+        char json_buf[128];
+        if (hx711_ws_get_status(json_buf, sizeof(json_buf))) {
+            ws_reply(1, "OK.", key, json_buf);
+        } else {
+            ws_reply(0, "获取量程失败", key, "");
+        }
+    } else {
+        ws_reply(0, "未知的scale键", key, "");
+    }
+}
+
+static float extract_float(cJSON *values_item)
+{
+    if (cJSON_IsNumber(values_item))
+        return (float)values_item->valuedouble;
+    if (cJSON_IsString(values_item))
+        return (float)atof(values_item->valuestring);
+    return -1.0f;
+}
+
+static void set_scale(const char *key, cJSON *values_item)
+{
+    if (strcasecmp(key, "tare") == 0) {
+        if (hx711_ws_tare()) {
+            ws_reply(1, "去皮成功.", key, "ok");
+        } else {
+            ws_reply(0, "去皮失败（HX711未就绪）", key, "");
+        }
+    } else if (strcasecmp(key, "calibrate") == 0) {
+        float w = extract_float(values_item);
+        if (w <= 0) {
+            ws_reply(0, "砝码重量无效，需为正数", key, "");
+            return;
+        }
+        if (hx711_ws_calibrate(w)) {
+            char vbuf[16];
+            snprintf(vbuf, sizeof(vbuf), "%.1f", w);
+            ws_reply(1, "标定成功.", key, vbuf);
+        } else {
+            ws_reply(0, "标定失败（请确认已放上砝码且HX711就绪）", key, "");
+        }
+    } else if (strcasecmp(key, "full_scale") == 0) {
+        float fs = extract_float(values_item);
+        if (fs < 0) {
+            ws_reply(0, "量程值无效", key, "");
+            return;
+        }
+        if (hx711_ws_set_full_scale(fs)) {
+            char vbuf[16];
+            snprintf(vbuf, sizeof(vbuf), "%.0f", fs);
+            ws_reply(1, "量程设置成功.", key, vbuf);
+        } else {
+            ws_reply(0, "量程设置失败（HX711未就绪）", key, "");
+        }
+    } else {
+        ws_reply(0, "未知的scale键", key, "");
+    }
+}
+
 /* ──────────────── 设定处理器 (code == 1) ──────────────── */
 
 /** @return true 表示函数内部已处理 json 释放，调用方需直接 return */
@@ -200,6 +281,7 @@ static const ItemDispatch_t dispatch_table[] = {
     { "device", query_device, NULL /* device 设定需要 json 指针，单独处理 */ },
     { "light",  query_light,  (query_handler_t)set_light },
     { "sensor", query_sensor, NULL /* 传感器仅支持查询 */ },
+    { "scale",  query_scale,  (query_handler_t)set_scale },
 };
 #define DISPATCH_TABLE_SIZE (sizeof(dispatch_table) / sizeof(dispatch_table[0]))
 
