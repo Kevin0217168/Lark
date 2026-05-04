@@ -94,8 +94,8 @@
               <span class="sensor-value">{{ cage.humidity !== null ? cage.humidity + '%' : '--' }}</span>
             </div>
             <div class="cage-sensor-item pm25">
-              <span class="sensor-label">PM2.5</span>
-              <span class="sensor-value">{{ cage.pm25 !== null ? cage.pm25 : '--' }}</span>
+              <span class="sensor-label">AQI</span>
+              <span class="sensor-value">{{ cage.aqi !== null ? cage.aqi : '--' }}</span>
             </div>
             <div class="cage-sensor-item db">
               <span class="sensor-label">dB</span>
@@ -200,7 +200,7 @@ interface CageSnapshot {
   c3DeviceId: number | null;
   temperature: number | null;
   humidity: number | null;
-  pm25: number | null;
+  aqi: number | null;
   db: number | null;
   lux: number | null;
   uv: number | null;
@@ -245,12 +245,12 @@ const avgHumidity = computed(() => {
 });
 
 const todayAQI = computed(() => {
-  const pm25Values = cageSnapshots.value
-    .filter(c => c.pm25 !== null)
-    .map(c => c.pm25!);
-  if (pm25Values.length === 0) return '--';
-  const avg = pm25Values.reduce((s, v) => s + v, 0) / pm25Values.length;
-  return calculateAQI(avg, 0, 0, 0);
+  const aqiValues = cageSnapshots.value
+    .filter(c => c.aqi !== null)
+    .map(c => c.aqi!);
+  if (aqiValues.length === 0) return '--';
+  const avg = aqiValues.reduce((s, v) => s + v, 0) / aqiValues.length;
+  return Math.round(avg);
 });
 
 const aqiLevelClass = computed(() => {
@@ -262,20 +262,64 @@ const aqiLevelClass = computed(() => {
   return 'aqi-good';
 });
 
-const calculateAQI = (pm25: number, pm10: number, _co2: number, _tvoc: number): number => {
-  if (pm25 <= 0 && pm10 <= 0) return 0;
-  const calc = (c: number, bp: number[], ip: number[]) => {
-    if (c < 0) return -1;
-    const idx = bp.findIndex(b => c <= b);
-    if (idx < 0) return ip[ip.length - 1]!;
-    if (idx === 0) return Math.round((ip[0]! / bp[0]!) * c);
-    return Math.round(((ip[idx]! - ip[idx - 1]!) / (bp[idx]! - bp[idx - 1]!)) * (c - bp[idx - 1]!) + ip[idx - 1]!);
+// AQI 计算：根据 PM2.5、PM10、CO2、TVOC 综合计算空气质量指数
+const calculateAQI = (pm25: number, pm10: number, co2: number, tvoc: number): number => {
+  // PM2.5 断点 (浓度下限, 浓度上限, AQI下限, AQI上限)
+  const pm25Breakpoints: [number, number, number, number][] = [
+    [0, 35, 0, 50],
+    [36, 75, 51, 100],
+    [76, 115, 101, 150],
+    [116, 150, 151, 200],
+    [151, 250, 201, 300],
+    [251, 500, 301, 500],
+  ];
+  // PM10 断点
+  const pm10Breakpoints: [number, number, number, number][] = [
+    [0, 50, 0, 50],
+    [51, 150, 51, 100],
+    [151, 250, 101, 150],
+    [251, 350, 151, 200],
+    [351, 420, 201, 300],
+    [421, 600, 301, 500],
+  ];
+  // CO2 断点 (ppm) — 室内空气质量参考
+  const co2Breakpoints: [number, number, number, number][] = [
+    [0, 400, 0, 50],
+    [401, 600, 51, 100],
+    [601, 1000, 101, 150],
+    [1001, 1400, 151, 200],
+    [1401, 2000, 201, 300],
+    [2001, 5000, 301, 500],
+  ];
+  // TVOC 断点 (ppb)
+  const tvocBreakpoints: [number, number, number, number][] = [
+    [0, 250, 0, 50],
+    [251, 500, 51, 100],
+    [501, 1000, 101, 150],
+    [1001, 1600, 151, 200],
+    [1601, 3000, 201, 300],
+    [3001, 10000, 301, 500],
+  ];
+
+  const calc = (c: number, bp: [number, number, number, number][]): number => {
+    if (c <= 0) return 0;
+    for (const [cLo, cHi, iLo, iHi] of bp) {
+      if (c >= cLo && c <= cHi) {
+        return ((iHi - iLo) / (cHi - cLo)) * (c - cLo) + iLo;
+      }
+    }
+    return 500;
   };
-  const pm25AQI = calc(pm25, [12, 35.4, 55.4, 150.4, 250.4, 350.4, 500.4], [50, 100, 150, 200, 300, 400, 500]);
-  const pm10AQI = calc(pm10, [54, 154, 254, 354, 424, 504, 604], [50, 100, 150, 200, 300, 400, 500]);
-  const values = [pm25AQI, pm10AQI].filter(v => v >= 0);
-  if (values.length === 0) return 0;
-  return Math.max(...values);
+
+  // 计算各分指数（缺失传感器时返回 -1 表示忽略）
+  const pm25Aqi = pm25 > 0 ? calc(pm25, pm25Breakpoints) : -1;
+  const pm10Aqi = pm10 > 0 ? calc(pm10, pm10Breakpoints) : -1;
+  const co2Aqi = co2 > 0 ? calc(co2, co2Breakpoints) : -1;
+  const tvocAqi = tvoc > 0 ? calc(tvoc, tvocBreakpoints) : -1;
+
+  // 取有效分指数中的最大值（容错：至少需要1个传感器有效）
+  const validAqi = [pm25Aqi, pm10Aqi, co2Aqi, tvocAqi].filter(v => v >= 0);
+  return validAqi.length > 0 ? Math.round(Math.max(...validAqi)) : 0;
 };
 
 const cageSnapshots = ref<CageSnapshot[]>([]);
@@ -319,7 +363,7 @@ const buildCageSnapshots = () => {
       c3DeviceId: c3Id,
       temperature,
       humidity,
-      pm25: existing?.pm25 ?? null,
+      aqi: existing?.aqi ?? null,
       db: existing?.db ?? null,
       lux: existing?.lux ?? null,
       uv: existing?.uv ?? null,
@@ -386,11 +430,12 @@ const fetchC3SensorData = async () => {
         }
         return null;
       };
+      const pm25Value = extractValue(results[0]!, 'pm2_5_cf1');
       return {
         index: i,
         cage: {
           ...cage,
-          pm25: extractValue(results[0]!, 'pm2_5_cf1'),
+          aqi: pm25Value !== null ? calculateAQI(pm25Value, 0, 0, 0) : null,
           db: extractValue(results[1]!, 'db'),
           lux: extractValue(results[2]!, 'lux'),
           uv: clampUv(extractValue(results[3]!, 'uv_index')),
@@ -446,28 +491,42 @@ const initChartsForCage = async (cage: CageSnapshot) => {
     ]);
     const extract = (r: PromiseSettledResult<{ times: string[]; values: number[] }>) =>
       r.status === 'fulfilled' ? r.value : { times: [] as string[], values: [] as number[] };
-    const aqi = extract(results[0]!);
+    const pm25Data = extract(results[0]!);
     const sound = extract(results[1]!);
     const lux = extract(results[2]!);
     const uv = extract(results[3]!);
-    initEnvChart(aqi.times, aqi.values, sound.values, lux.values, uv.values);
+    
+    // 将PM2.5值转换为AQI值
+    const aqiValues = pm25Data.values.map(v => {
+      if (v === null || v === undefined || !isFinite(v)) return null;
+      return calculateAQI(v, 0, 0, 0);
+    }).filter(v => v !== null) as number[];
+    
+    initEnvChart(pm25Data.times, aqiValues, sound.values, lux.values, uv.values);
   }
+};
+
+const formatUTC8Time = (ms: number): string => {
+  const d = new Date(ms);
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
 };
 
 const fetchSensorTimeSeries = async (deviceId: number, sensorType: string, valueKey: string): Promise<{ times: string[]; values: number[] }> => {
   try {
+    const nowMs = Date.now();
+    const startTime = formatUTC8Time(nowMs + 8 * 3600 * 1000 - 86400 * 1000);
     const response = await api.get('/api/sensor-upload', {
       device_id: deviceId,
       sensor_type: sensorType,
-      limit: 200,
+      start_time: startTime,
+      limit: 1000,
     });
     if (response.code === 200 && response.data && Array.isArray(response.data)) {
       const pairs: { time: string; value: number }[] = [];
-      const cutoff = new Date();
-      cutoff.setSeconds(cutoff.getSeconds() - 86400);
       for (const item of response.data) {
         const ts = new Date(item.timestamp + '+00:00');
-        if (ts < cutoff || isNaN(ts.getTime())) continue;
+        if (isNaN(ts.getTime())) continue;
         const msUTC8 = ts.getTime() + 8 * 3600 * 1000;
         const ts8 = new Date(msUTC8);
         let parsed: any;
@@ -506,23 +565,42 @@ const initTempHumidityChart = (times: string[], tempValues: number[], humidValue
   }
 };
 
-const initEnvChart = (times: string[], pm25Values: number[], dbValues: number[], luxValues: number[], uvValues: number[]) => {
+const initEnvChart = (times: string[], aqiValues: number[], dbValues: number[], luxValues: number[], uvValues: number[]) => {
   if (envChartRef.value) {
     if (envChart) envChart.dispose();
     envChart = echarts.init(envChartRef.value);
+    
+    // 计算UV数据的有效范围
+    const validUvValues = uvValues.filter(v => v !== null && v !== undefined && isFinite(v));
+    let uvMin = 0;
+    let uvMax = 15;
+    
+    if (validUvValues.length > 0) {
+      const dataMin = Math.min(...validUvValues);
+      const dataMax = Math.max(...validUvValues);
+      // 为图表添加适当的边距
+      uvMin = Math.max(0, dataMin - 2);
+      uvMax = dataMax + 2;
+      // 确保至少有一定的范围
+      if (uvMax - uvMin < 5) {
+        uvMax = uvMin + 5;
+      }
+    }
+    
     envChart.setOption({
       tooltip: { trigger: 'axis' },
-      legend: { data: ['PM2.5', 'dB', 'Lux', 'UV'], top: 10, type: 'scroll' },
+      legend: { data: ['AQI', 'dB', 'Lux', 'UV'], top: 10, type: 'scroll' },
       xAxis: { type: 'category', data: times },
       yAxis: [
-        { type: 'value', name: 'PM2.5 / dB' },
-        { type: 'value', name: 'Lux / UV' },
+        { type: 'value', name: 'AQI / dB', position: 'left' },
+        { type: 'value', name: 'Lux', position: 'right', offset: 0 },
+        { type: 'value', name: 'UV', position: 'right', offset: 60, min: uvMin, max: uvMax },
       ],
       series: [
-        { name: 'PM2.5', data: pm25Values, type: 'line', smooth: true, itemStyle: { color: '#ff7875' } },
+        { name: 'AQI', data: aqiValues, type: 'line', smooth: true, itemStyle: { color: '#ff7875' } },
         { name: 'dB', data: dbValues, type: 'line', smooth: true, itemStyle: { color: '#69c0ff' } },
         { name: 'Lux', data: luxValues, type: 'line', smooth: true, yAxisIndex: 1, itemStyle: { color: '#ffc53d' } },
-        { name: 'UV', data: uvValues, type: 'line', smooth: true, yAxisIndex: 1, itemStyle: { color: '#b37feb' } },
+        { name: 'UV', data: uvValues, type: 'line', smooth: true, yAxisIndex: 2, itemStyle: { color: '#b37feb' }, lineStyle: { width: 3 }, emphasis: { focus: 'series' } },
       ],
     });
   }
