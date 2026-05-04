@@ -791,19 +791,6 @@ const pm25History: number[] = [];
 const pm10History: number[] = [];
 const co2History: number[] = [];
 const tvocHistory: number[] = [];
-const luxHistory: number[] = [];
-const uvHistory: number[] = [];
-
-const clampUvValue = (val: number): number => {
-  if (!isFinite(val)) return 0;
-  return Math.min(Math.max(val, 0), 15);
-};
-
-const pushUvHistory = (value: number) => {
-  uvHistory.push(clampUvValue(value));
-  if (uvHistory.length > MAX_HISTORY) uvHistory.shift();
-};
-
 const pushHistory = (arr: number[], value: number) => {
   arr.push(value);
   if (arr.length > MAX_HISTORY) arr.shift();
@@ -837,6 +824,9 @@ let humidityGaugeChart: echarts.ECharts | null = null;
 // 环境数据采集定时器
 let envDataTimer: number | null = null;
 
+const luxValue = ref(0);
+const uvValue = ref(0);
+
 const updateAQIFromHistory = () => {
   aqiValue.value = calculateAQI(
     slidingAvg(pm25History),
@@ -844,164 +834,85 @@ const updateAQIFromHistory = () => {
     slidingAvg(co2History),
     slidingAvg(tvocHistory),
   );
+};
+
+const fetchAllEnvData = async () => {
+  if (!c3DeviceId.value) return;
+  try {
+    const response = await api.get('/api/sensor-upload', {
+      device_id: c3DeviceId.value,
+      sensor_type: ['pms9103m', 'sgp30', 'sound_meter', 'veml7700', 'uv_meter'],
+      limit: 5,
+    });
+    if (response.code === 200 && response.data && Array.isArray(response.data)) {
+      for (const record of response.data) {
+        const parsed = typeof record.data === 'string' ? JSON.parse(record.data) : record.data;
+        switch (record.sensor_type) {
+          case 'pms9103m': {
+            const pm25 = Number(parsed.pm2_5_cf1) || 0;
+            const pm10 = Number(parsed.pm10_cf1) || 0;
+            pushHistory(pm25History, pm25);
+            pushHistory(pm10History, pm10);
+            break;
+          }
+          case 'sgp30': {
+            if (parsed.co2_ppm !== undefined || parsed.tvoc_ppb !== undefined) {
+              pushHistory(co2History, Number(parsed.co2_ppm) || 0);
+              pushHistory(tvocHistory, Number(parsed.tvoc_ppb) || 0);
+            }
+            break;
+          }
+          case 'sound_meter':
+            if (parsed.db !== undefined) dbValue.value = Math.round(parsed.db);
+            break;
+          case 'veml7700':
+            if (parsed.lux !== undefined) luxValue.value = Number(parsed.lux) || 0;
+            break;
+          case 'uv_meter':
+            if (parsed.uv_index !== undefined) {
+              const raw = Number(parsed.uv_index);
+              uvValue.value = isFinite(raw) ? Math.min(Math.max(raw, 0), 15) : 0;
+            }
+            break;
+        }
+      }
+      updateAQIFromHistory();
+    }
+  } catch (error) {
+    console.error('获取环境数据失败:', error);
+  }
+
+  // 温湿度从 CAM 设备获取
+  if (camDeviceId.value) {
+    try {
+      const response = await api.get('/api/sensors/grouped', {
+        period: '300',
+        group: '1',
+        device_id: camDeviceId.value.toString(),
+      });
+      if (response.code === 200 && response.data && response.data.length > 0) {
+        const latest = response.data[0];
+        const temp = latest.avg_temperature;
+        const hum = latest.avg_humidity;
+        if (temp !== undefined && temp !== null) {
+          tempValue.value = Math.round(Number(temp) * 10) / 10;
+        }
+        if (hum !== undefined && hum !== null) {
+          humidityValue.value = Math.round(Number(hum) * 10) / 10;
+        }
+      }
+    } catch (error) {
+      console.error('获取温湿度数据失败:', error);
+    }
+  }
+
   updateGaugeCharts();
-};
-
-const fetchAirQualityData = async () => {
-  if (!c3DeviceId.value) return;
-  try {
-    const response = await api.get('/api/sensor-upload', {
-      device_id: c3DeviceId.value,
-      sensor_type: 'pms9103m',
-      limit: 1,
-    });
-    if (response.code === 200 && response.data && response.data.length > 0) {
-      const record = response.data[0];
-      const parsed = JSON.parse(record.data);
-      if (parsed.pm2_5_cf1 !== undefined || parsed.pm10_cf1 !== undefined) {
-        pushHistory(pm25History, Number(parsed.pm2_5_cf1) || 0);
-        pushHistory(pm10History, Number(parsed.pm10_cf1) || 0);
-        updateAQIFromHistory();
-      }
-    }
-  } catch (error) {
-    console.error('获取颗粒物数据失败:', error);
-  }
-};
-
-const fetchSGP30Data = async () => {
-  if (!c3DeviceId.value) return;
-  try {
-    const response = await api.get('/api/sensor-upload', {
-      device_id: c3DeviceId.value,
-      sensor_type: 'sgp30',
-      limit: 1,
-    });
-    if (response.code === 200 && response.data && response.data.length > 0) {
-      const record = response.data[0];
-      const parsed = JSON.parse(record.data);
-      if (parsed.co2_ppm !== undefined || parsed.tvoc_ppb !== undefined) {
-        pushHistory(co2History, Number(parsed.co2_ppm) || 0);
-        pushHistory(tvocHistory, Number(parsed.tvoc_ppb) || 0);
-        updateAQIFromHistory();
-      }
-    }
-  } catch (error) {
-    console.error('获取SGP30数据失败:', error);
-  }
-};
-
-const fetchSoundData = async () => {
-  if (!c3DeviceId.value) return;
-  try {
-    const response = await api.get('/api/sensor-upload', {
-      device_id: c3DeviceId.value,
-      sensor_type: 'sound_meter',
-      limit: 1,
-    });
-    if (response.code === 200 && response.data && response.data.length > 0) {
-      const record = response.data[0];
-      const parsed = JSON.parse(record.data);
-      if (parsed.db !== undefined) {
-        dbValue.value = Math.round(parsed.db);
-        updateGaugeCharts();
-      }
-    }
-  } catch (error) {
-    console.error('获取声音分贝数据失败:', error);
-  }
-};
-
-const fetchLuxData = async () => {
-  if (!c3DeviceId.value) return;
-  try {
-    const response = await api.get('/api/sensor-upload', {
-      device_id: c3DeviceId.value,
-      sensor_type: 'veml7700',
-      limit: 1,
-    });
-    if (response.code === 200 && response.data && response.data.length > 0) {
-      const record = response.data[0];
-      const parsed = JSON.parse(record.data);
-      if (parsed.lux !== undefined) {
-        pushHistory(luxHistory, Number(parsed.lux) || 0);
-        updateLuxGauge();
-      }
-    }
-  } catch (error) {
-    console.error('获取光照数据失败:', error);
-  }
-};
-
-const fetchUVData = async () => {
-  if (!c3DeviceId.value) return;
-  try {
-    const response = await api.get('/api/sensor-upload', {
-      device_id: c3DeviceId.value,
-      sensor_type: 'uv_meter',
-      limit: 1,
-    });
-    if (response.code === 200 && response.data && response.data.length > 0) {
-      const record = response.data[0];
-      const parsed = JSON.parse(record.data);
-      if (parsed.uv_index !== undefined) {
-        pushUvHistory(Number(parsed.uv_index) || 0);
-        purgeUvHistory();
-        updateUVGauge();
-      }
-    }
-  } catch (error) {
-    console.error('获取紫外线数据失败:', error);
-  }
-};
-
-const purgeUvHistory = () => {
-  for (let i = 0; i < uvHistory.length; i++) {
-    const v = uvHistory[i]!;
-    if (!isFinite(v) || v > 15 || v < 0) {
-      uvHistory[i] = 0;
-    }
-  }
-};
-
-const fetchTempHumidityData = async () => {
-  if (!camDeviceId.value) return;
-  try {
-    const response = await api.get('/api/sensors/grouped', {
-      period: '300',
-      group: '1',
-      device_id: camDeviceId.value.toString(),
-    });
-    if (response.code === 200 && response.data && response.data.length > 0) {
-      const latest = response.data[0];
-      const temp = latest.avg_temperature;
-      const hum = latest.avg_humidity;
-      if (temp !== undefined && temp !== null) {
-        tempValue.value = Math.round(Number(temp) * 10) / 10;
-      }
-      if (hum !== undefined && hum !== null) {
-        humidityValue.value = Math.round(Number(hum) * 10) / 10;
-      }
-      updateGaugeCharts();
-    }
-  } catch (error) {
-    console.error('获取温湿度数据失败:', error);
-  }
-};
-
-const fetchAllEnvData = () => {
-  fetchAirQualityData();
-  fetchSGP30Data();
-  fetchSoundData();
-  fetchLuxData();
-  fetchUVData();
-  fetchTempHumidityData();
 };
 
 const startEnvDataTimer = () => {
   stopEnvDataTimer();
   fetchAllEnvData();
-  envDataTimer = window.setInterval(fetchAllEnvData, 5000);
+  envDataTimer = window.setInterval(fetchAllEnvData, 30000);
 };
 
 const stopEnvDataTimer = () => {
@@ -1092,7 +1003,7 @@ const getGaugeOption = (max: number, color: string, bgColor: string, value: numb
     title: { show: false },
     detail: {
       show: true,
-      valueAnimation: true,
+      valueAnimation: false,
       fontSize: 20,
       fontWeight: 'bold',
       color: color,
@@ -1138,12 +1049,10 @@ const initGaugeChartOption = () => {
   const dbColor = dbValue.value > 85 ? '#f56c6c' : dbValue.value > 65 ? '#e6a23c' : '#67c23a';
   const aqiBg = aqiValue.value > 150 ? '#f56c6c1a' : aqiValue.value > 100 ? '#e6a23c1a' : '#67c23a1a';
   const dbBg = dbValue.value > 85 ? '#f56c6c1a' : dbValue.value > 65 ? '#e6a23c1a' : '#67c23a1a';
-  const luxVal = slidingAvg(luxHistory);
-  const luxColorVal = getLuxColor(luxVal);
-  const luxBgVal = getLuxBg(luxVal);
-  const uvVal = Math.min(Math.max(slidingAvg(uvHistory), 0), 12);
-  const uvColorVal = getUVColor(uvVal);
-  const uvBgVal = getUVBg(uvVal);
+  const luxColorVal = getLuxColor(luxValue.value);
+  const luxBgVal = getLuxBg(luxValue.value);
+  const uvColorVal = getUVColor(uvValue.value);
+  const uvBgVal = getUVBg(uvValue.value);
 
   if (aqiGaugeChart) {
     aqiGaugeChart.setOption(getGaugeOption(300, aqiColor, aqiBg, aqiValue.value, 'AQI'));
@@ -1152,10 +1061,10 @@ const initGaugeChartOption = () => {
     dbGaugeChart.setOption(getGaugeOption(120, dbColor, dbBg, dbValue.value, 'dB'));
   }
   if (luxGaugeChart) {
-    luxGaugeChart.setOption(getGaugeOption(100000, luxColorVal, luxBgVal, luxVal, 'Lux', formatLux));
+    luxGaugeChart.setOption(getGaugeOption(100000, luxColorVal, luxBgVal, luxValue.value, 'Lux', formatLux));
   }
   if (uvGaugeChart) {
-    uvGaugeChart.setOption(getGaugeOption(12, uvColorVal, uvBgVal, uvVal, 'UV'));
+    uvGaugeChart.setOption(getGaugeOption(15, uvColorVal, uvBgVal, uvValue.value, 'UV'));
   }
   if (tempGaugeChart) {
     tempGaugeChart.setOption(getGaugeOption(50, '#ff7875', '#ff78751a', tempValue.value, '℃'));
@@ -1170,12 +1079,10 @@ const updateGaugeCharts = () => {
   const dbColor = dbValue.value > 85 ? '#f56c6c' : dbValue.value > 65 ? '#e6a23c' : '#67c23a';
   const aqiBg = aqiValue.value > 150 ? '#f56c6c1a' : aqiValue.value > 100 ? '#e6a23c1a' : '#67c23a1a';
   const dbBg = dbValue.value > 85 ? '#f56c6c1a' : dbValue.value > 65 ? '#e6a23c1a' : '#67c23a1a';
-  const luxVal = slidingAvg(luxHistory);
-  const luxColorVal = getLuxColor(luxVal);
-  const luxBgVal = getLuxBg(luxVal);
-  const uvVal = Math.min(Math.max(slidingAvg(uvHistory), 0), 12);
-  const uvColorVal = getUVColor(uvVal);
-  const uvBgVal = getUVBg(uvVal);
+  const luxColorVal = getLuxColor(luxValue.value);
+  const luxBgVal = getLuxBg(luxValue.value);
+  const uvColorVal = getUVColor(uvValue.value);
+  const uvBgVal = getUVBg(uvValue.value);
 
   if (aqiGaugeChart) {
     aqiGaugeChart.setOption(getGaugeOption(300, aqiColor, aqiBg, aqiValue.value, 'AQI'));
@@ -1184,34 +1091,16 @@ const updateGaugeCharts = () => {
     dbGaugeChart.setOption(getGaugeOption(120, dbColor, dbBg, dbValue.value, 'dB'));
   }
   if (luxGaugeChart) {
-    luxGaugeChart.setOption(getGaugeOption(100000, luxColorVal, luxBgVal, luxVal, 'Lux', formatLux));
+    luxGaugeChart.setOption(getGaugeOption(100000, luxColorVal, luxBgVal, luxValue.value, 'Lux', formatLux));
   }
   if (uvGaugeChart) {
-    uvGaugeChart.setOption(getGaugeOption(12, uvColorVal, uvBgVal, uvVal, 'UV'));
+    uvGaugeChart.setOption(getGaugeOption(15, uvColorVal, uvBgVal, uvValue.value, 'UV'));
   }
   if (tempGaugeChart) {
     tempGaugeChart.setOption(getGaugeOption(50, '#ff7875', '#ff78751a', tempValue.value, '℃'));
   }
   if (humidityGaugeChart) {
     humidityGaugeChart.setOption(getGaugeOption(100, '#69c0ff', '#69c0ff1a', humidityValue.value, '%'));
-  }
-};
-
-const updateLuxGauge = () => {
-  const luxVal = slidingAvg(luxHistory);
-  const luxColorVal = getLuxColor(luxVal);
-  const luxBgVal = getLuxBg(luxVal);
-  if (luxGaugeChart) {
-    luxGaugeChart.setOption(getGaugeOption(100000, luxColorVal, luxBgVal, luxVal, 'Lux', formatLux));
-  }
-};
-
-const updateUVGauge = () => {
-  const uvVal = Math.min(Math.max(slidingAvg(uvHistory), 0), 12);
-  const uvColorVal = getUVColor(uvVal);
-  const uvBgVal = getUVBg(uvVal);
-  if (uvGaugeChart) {
-    uvGaugeChart.setOption(getGaugeOption(12, uvColorVal, uvBgVal, uvVal, 'UV'));
   }
 };
 
@@ -1250,7 +1139,6 @@ onMounted(() => {
 watch(adoptedBird, (newBird) => {
   if (newBird && camDeviceId.value) {
     nextTick(() => {
-      purgeUvHistory();
       initGaugeCharts();
       startEnvDataTimer();
     });

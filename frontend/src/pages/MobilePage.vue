@@ -90,6 +90,7 @@
       <BirdsPage v-else-if="route.path === '/birds'" />
       <ProfilePage v-else-if="route.path === '/Profile'" />
       <UserManage v-else-if="route.path === '/UserManage' && isAdmin" />
+      <AirQualityDetail v-else-if="route.path === '/air-quality'" />
       <div v-else class="mobile-placeholder">
         <h2>移动端页面</h2>
         <p>内容区域</p>
@@ -181,6 +182,7 @@ import DevicePage from '../components/DevicePage.vue';
 import ProfilePage from '../components/ProfilePage.vue';
 import UserManage from '../components/UserManage.vue';
 import BirdsPage from '../components/BirdsPage.vue';
+import AirQualityDetail from '../components/AirQualityDetail.vue';
 
 const route = useRoute();
 const router = useRouter();

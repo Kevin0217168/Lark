@@ -41,6 +41,10 @@ const router = createRouter({
       props: (route) => ({ activeTab: route.query.activeTab || 'realtime' })
     },
     {
+      path: "/air-quality",
+      component: () => import('@/components/AirQualityDetail.vue'),
+    },
+    {
       path: "/Profile",
       component: Profile,
     },
