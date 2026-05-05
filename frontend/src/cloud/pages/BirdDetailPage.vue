@@ -73,7 +73,7 @@ const fetchBird = async () => {
     loading.value = true;
     error.value = '';
     const birdId = route.params.id as string;
-    const res = await api.get(`/api/birds/bird/${birdId}`, true);
+    const res = await api.get(`/api/birds/bird/${birdId}`);
     bird.value = res;
   } catch (e: any) {
     error.value = e.message || '获取雏鸟信息失败';
@@ -86,7 +86,7 @@ const handleAdopt = async () => {
   if (!bird.value) return;
   try {
     adopting.value = true;
-    await api.post('/api/birds/adopt', { bird_id: bird.value.bird_id }, true);
+    await api.post('/api/birds/adopt', { bird_id: bird.value.bird_id });
     bird.value.isAdopted = true;
   } catch (e: any) {
     error.value = e.message || '认领失败，请重试';
