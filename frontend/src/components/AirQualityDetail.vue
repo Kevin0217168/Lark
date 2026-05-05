@@ -312,9 +312,12 @@ const latestTvoc = ref<number | null>(null);
 const aqiLevelClass = computed(() => {
   const val = latestAqi.value;
   if (val === null) return '';
-  if (val > 150) return 'aqi-bad';
-  if (val > 100) return 'aqi-moderate';
-  return 'aqi-good';
+  if (val <= 50) return 'aqi-excellent';
+  if (val <= 100) return 'aqi-good';
+  if (val <= 150) return 'aqi-mild';
+  if (val <= 200) return 'aqi-moderate';
+  if (val <= 300) return 'aqi-heavy';
+  return 'aqi-severe';
 });
 
 const aqiLevelText = computed(() => {
@@ -1229,19 +1232,39 @@ onUnmounted(() => {
   box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
 }
 
-.overview-card.aqi-good {
+.overview-card.aqi-excellent {
   background: linear-gradient(135deg, #52c41a 0%, #73d13d 100%);
-  box-shadow: 0 4px 16px rgba(95, 238, 24, 0.3);
+  box-shadow: 0 4px 16px rgba(82, 196, 26, 0.3);
+}
+
+.overview-card.aqi-good {
+  background: linear-gradient(135deg, #b7eb8f 0%, #95de64 100%);
+  box-shadow: 0 4px 16px rgba(183, 235, 143, 0.3);
+}
+
+.overview-card.aqi-mild {
+  background: linear-gradient(135deg, #ffd666 0%, #ffc53d 100%);
+  box-shadow: 0 4px 16px rgba(255, 214, 102, 0.3);
+  color: #5c4a1e;
+}
+
+.overview-card.aqi-mild .overview-level {
+  background: rgba(0, 0, 0, 0.1);
 }
 
 .overview-card.aqi-moderate {
-  background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
-  box-shadow: 0 4px 16px rgba(246, 211, 101, 0.3);
+  background: linear-gradient(135deg, #ff9c6e 0%, #ff7a45 100%);
+  box-shadow: 0 4px 16px rgba(255, 156, 110, 0.3);
 }
 
-.overview-card.aqi-bad {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  box-shadow: 0 4px 16px rgba(245, 87, 108, 0.3);
+.overview-card.aqi-heavy {
+  background: linear-gradient(135deg, #ff85c0 0%, #f759ab 100%);
+  box-shadow: 0 4px 16px rgba(255, 133, 192, 0.3);
+}
+
+.overview-card.aqi-severe {
+  background: linear-gradient(135deg, #b37feb 0%, #722ed1 100%);
+  box-shadow: 0 4px 16px rgba(179, 127, 235, 0.3);
 }
 
 .overview-info {

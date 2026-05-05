@@ -45,6 +45,7 @@
 
       <div class="action-container">
         <el-button type="primary" @click="openEditDialog">修改账号信息</el-button>
+        <el-button type="success" @click="goToCloudBird">云养鸟系统</el-button>
         <el-button type="danger" @click="handleLogout">退出登录</el-button>
         <el-button type="danger" @click="openDeleteAccountDialog">注销账号</el-button>
       </div>

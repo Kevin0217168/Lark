@@ -1,26 +1,35 @@
 <template>
-  <div class="cloud-app">
-    <!-- 桌面端提示 -->
-    <div class="desktop-notice">
-      <div class="notice-content">
-        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="notice-icon">
-          <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
-          <line x1="12" y1="18" x2="12.01" y2="18"></line>
-        </svg>
-        <p class="notice-text">请使用移动端访问此网页</p>
-      </div>
-    </div>
+  <div class="cloud-app" :class="{ 'cloud-app-desktop': isDesktop }">
 
-    <transition name="page-transition" mode="out-in">
-      <RouterView :key="$route.fullPath" />
-    </transition>
-    <BottomNav />
+    <SideNav v-if="isDesktop" />
+    <div class="main-wrapper">
+      <transition name="page-transition" mode="out-in">
+        <RouterView :key="$route.fullPath" />
+      </transition>
+      <BottomNav v-if="!isDesktop" />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue';
 import { RouterView } from 'vue-router';
 import BottomNav from './components/BottomNav.vue';
+import SideNav from './components/SideNav.vue';
+
+const isDesktop = ref(window.innerWidth >= 769);
+
+const handleResize = () => {
+  isDesktop.value = window.innerWidth >= 769;
+};
+
+onMounted(() => {
+  window.addEventListener('resize', handleResize);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize);
+});
 </script>
 
 <style scoped>
@@ -29,10 +38,22 @@ import BottomNav from './components/BottomNav.vue';
   width: 100%;
 }
 
+.cloud-app-desktop {
+  display: flex;
+  min-height: 100vh;
+}
+
+.main-wrapper {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 /* 页面过渡动画 */
 .page-transition-enter-active,
 .page-transition-leave-active {
-  transition: all 0.1s ease;
+  transition: all 0.2s ease;
 }
 
 .page-transition-enter-from {
@@ -57,41 +78,5 @@ import BottomNav from './components/BottomNav.vue';
   top: 0;
   left: 0;
   right: 0;
-}
-
-/* 桌面端提示 */
-.desktop-notice {
-  display: none;
-}
-
-@media (min-width: 769px) {
-  .desktop-notice {
-    display: flex;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 9999;
-    background: #ffffff;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .notice-content {
-    text-align: center;
-  }
-
-  .notice-icon {
-    color: #9ca3af;
-    margin-bottom: 24px;
-  }
-
-  .notice-text {
-    font-size: 18px;
-    color: #6b7280;
-    margin: 0;
-    font-weight: 500;
-  }
 }
 </style>

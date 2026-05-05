@@ -1,12 +1,7 @@
 <template>
   <div class="birds-page">
-    <!-- 背景装饰 -->
-    <div class="background-decorations">
-      <div class="decoration decoration-1"></div>
-      <div class="decoration decoration-2"></div>
-      <div class="decoration decoration-3"></div>
-    </div>
-    
+    <BackgroundDecoration />
+
     <div class="page-content">
       <h1 class="page-title" :class="{ 'fade-in': isLoaded }">我的雏鸟</h1>
       
@@ -105,58 +100,61 @@
             </div>
           </div>
           
-          <div class="bird-image-container">
-            <div v-if="currentFrameImage" class="video-container">
-              <img 
-                :src="currentFrameImage" 
-                class="video-stream"
-                :class="{ 'disconnected': isStreamDisconnected, 'flip-horizontal': flipHorizontal, 'flip-vertical': flipVertical }"
-                alt="雏鸟实时画面"
-              />
-              <div class="frame-info">
-                <span>更新时间: {{ lastFrameTime }}</span>
-                <span class="fps-info">帧率: {{ currentFps }} FPS</span>
-              </div>
-              <div class="stream-disconnected-overlay" v-if="isStreamDisconnected">
-                <div class="disconnected-content">
-                  <div class="disconnected-icon">⚠️</div>
-                  <div class="disconnected-message">视频流已断联</div>
+          <!-- 视频 + 状态卡片 横向排布（桌面端CSS order交换位置） -->
+          <div class="bird-media-row">
+            <div class="bird-image-container">
+              <div v-if="currentFrameImage" class="video-container">
+                <img 
+                  :src="currentFrameImage" 
+                  class="video-stream"
+                  :class="{ 'disconnected': isStreamDisconnected, 'flip-horizontal': flipHorizontal, 'flip-vertical': flipVertical }"
+                  alt="雏鸟实时画面"
+                />
+                <div class="frame-info">
+                  <span>更新时间: {{ lastFrameTime }}</span>
+                  <span class="fps-info">帧率: {{ currentFps }} FPS</span>
+                </div>
+                <div class="stream-disconnected-overlay" v-if="isStreamDisconnected">
+                  <div class="disconnected-content">
+                    <div class="disconnected-icon">⚠️</div>
+                    <div class="disconnected-message">视频流已断联</div>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div v-else-if="connectionError" class="video-error">
-              <div class="error-content">
-                <div class="error-icon">❌</div>
-                <div class="error-message">{{ connectionError }}</div>
-                <button v-if="camDeviceId" class="retry-btn" @click="reconnectWebSocket">
-                  重试连接
+              <div v-else-if="connectionError" class="video-error">
+                <div class="error-content">
+                  <div class="error-icon">❌</div>
+                  <div class="error-message">{{ connectionError }}</div>
+                  <button v-if="camDeviceId" class="retry-btn" @click="reconnectWebSocket">
+                    重试连接
+                  </button>
+                </div>
+              </div>
+              <div v-else class="image-placeholder">
+                <div class="placeholder-icon">🐣</div>
+                <p class="placeholder-text">雏鸟画面显示区域</p>
+                <button v-if="camDeviceId" class="start-stream-btn" @click="startRealtimeMonitoring">
+                  开始监控
                 </button>
               </div>
             </div>
-            <div v-else class="image-placeholder">
-              <div class="placeholder-icon">🐣</div>
-              <p class="placeholder-text">雏鸟画面显示区域</p>
-              <button v-if="camDeviceId" class="start-stream-btn" @click="startRealtimeMonitoring">
-                开始监控
-              </button>
-            </div>
-          </div>
-          
-          <!-- 关键状态信息 -->
-          <div class="bird-status-info">
-            <div class="status-item">
-              <div class="status-value">{{ calculateAge(adoptedBird?.birth_date) }}</div>
-              <div class="status-label">日龄</div>
-            </div>
-            <div class="status-divider"></div>
-            <div class="status-item">
-              <div class="status-value">{{ adoptedBird?.bird_species }}</div>
-              <div class="status-label">品种</div>
-            </div>
-            <div class="status-divider"></div>
-            <div class="status-item">
-              <div class="status-value">{{ adoptedBird?.birdcage?.label || adoptedBird?.area ? `${adoptedBird?.area} #${adoptedBird?.number}` : '未绑定' }}</div>
-              <div class="status-label">鸟笼</div>
+
+            <!-- 关键状态信息 -->
+            <div class="bird-status-info">
+              <div class="status-item">
+                <div class="status-value">{{ calculateAge(adoptedBird?.birth_date) }}</div>
+                <div class="status-label">日龄</div>
+              </div>
+              <div class="status-divider"></div>
+              <div class="status-item">
+                <div class="status-value">{{ adoptedBird?.bird_species }}</div>
+                <div class="status-label">品种</div>
+              </div>
+              <div class="status-divider"></div>
+              <div class="status-item">
+                <div class="status-value">{{ adoptedBird?.birdcage?.label || adoptedBird?.area ? `${adoptedBird?.area} #${adoptedBird?.number}` : '未绑定' }}</div>
+                <div class="status-label">鸟笼</div>
+              </div>
             </div>
           </div>
         </div>
@@ -208,44 +206,47 @@
             </div>
         </div>
         
-        <!-- 详细信息区域 -->
-        <div class="bird-details-section">
-          <h3 class="section-title">基本信息</h3>
-          
-          <div class="detail-item">
-            <span class="detail-label">出生日期：</span>
-            <span class="detail-value">{{ adoptedBird?.birth_date || '未知' }}</span>
+        <!-- 底部两栏：基本信息 + 食量表格 -->
+        <div class="bottom-info-row">
+          <!-- 详细信息区域 -->
+          <div class="bird-details-section">
+            <h3 class="section-title">基本信息</h3>
+
+            <div class="detail-item">
+              <span class="detail-label">出生日期：</span>
+              <span class="detail-value">{{ adoptedBird?.birth_date || '未知' }}</span>
+            </div>
+
+            <div class="detail-item description">
+              <span class="detail-label">描述：</span>
+              <p class="detail-text">{{ adoptedBird?.description || '暂无描述' }}</p>
+            </div>
           </div>
-          
-          <div class="detail-item description">
-            <span class="detail-label">描述：</span>
-            <p class="detail-text">{{ adoptedBird?.description || '暂无描述' }}</p>
-          </div>
-        </div>
-        
-        <!-- 食量统计表格 -->
-        <div class="feed-table-section" :class="{ 'fade-in': isLoaded }">
-          <div class="feed-table-card">
-            <h3 class="feed-table-title">每日食量</h3>
-            <p class="feed-table-desc">近5天食量记录</p>
-            <div class="feed-table">
-              <div class="feed-table-header">
-                <span class="th-date">日期</span>
-                <span class="th-grams">食量 (克)</span>
-              </div>
-              <div
-                v-for="(row, idx) in feedTableData"
-                :key="idx"
-                class="feed-table-row"
-                :style="{ animationDelay: `${idx * 0.1}s` }"
-              >
-                <span class="td-date">{{ row.date }}</span>
-                <span class="td-grams">{{ row.grams }} g</span>
-                <div class="td-bar-wrapper">
-                  <div
-                    class="td-bar-fill"
-                    :style="{ width: (row.grams / maxFeedGrams * 100) + '%' }"
-                  ></div>
+
+          <!-- 食量统计表格 -->
+          <div class="feed-table-section" :class="{ 'fade-in': isLoaded }">
+            <div class="feed-table-card">
+              <h3 class="feed-table-title">每日食量</h3>
+              <p class="feed-table-desc">近5天食量记录</p>
+              <div class="feed-table">
+                <div class="feed-table-header">
+                  <span class="th-date">日期</span>
+                  <span class="th-grams">食量 (克)</span>
+                </div>
+                <div
+                  v-for="(row, idx) in feedTableData"
+                  :key="idx"
+                  class="feed-table-row"
+                  :style="{ animationDelay: `${idx * 0.1}s` }"
+                >
+                  <span class="td-date">{{ row.date }}</span>
+                  <span class="td-grams">{{ row.grams }} g</span>
+                  <div class="td-bar-wrapper">
+                    <div
+                      class="td-bar-fill"
+                      :style="{ width: (row.grams / maxFeedGrams * 100) + '%' }"
+                    ></div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -284,6 +285,7 @@ import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { api } from '@/utils/api';
 import * as echarts from 'echarts';
+import BackgroundDecoration from '../components/BackgroundDecoration.vue';
 
 const router = useRouter();
 
@@ -329,6 +331,7 @@ const maxFeedGrams = computed(() => {
 const currentFrameImage = ref<string>('');
 const lastFrameTime = ref<string>('');
 const connectionError = ref<string>('');
+const reconnectAttempts = ref(0);
 const isStreamDisconnected = ref<boolean>(false);
 const currentFps = ref<number>(0);
 let lastFrameTimestamp = 0;
@@ -584,6 +587,7 @@ const startRealtimeMonitoring = async () => {
     
     ws.onopen = () => {
       connectionError.value = '';
+      reconnectAttempts.value = 0;
       lastFrameTimestamp = Date.now();
       isStreamDisconnected.value = false;
       
@@ -626,6 +630,12 @@ const startRealtimeMonitoring = async () => {
       if (!event.wasClean) {
         connectionError.value = 'WSS连接已关闭';
       }
+      setTimeout(() => {
+        if (camDeviceId.value) {
+          startRealtimeMonitoring();
+        }
+      }, Math.min(1000 * Math.pow(2, reconnectAttempts.value), 30000));
+      reconnectAttempts.value++;
     };
     
   } catch (error) {
@@ -1015,6 +1025,8 @@ const getGaugeOption = (max: number, color: string, bgColor: string, value: numb
   };
 };
 
+let resizeObserver: ResizeObserver | null = null;
+
 const initGaugeCharts = () => {
   if (aqiGaugeRef.value) {
     if (aqiGaugeChart) aqiGaugeChart.dispose();
@@ -1129,6 +1141,15 @@ const checkAdoptedBird = async () => {
   }
 };
 
+const handleResize = () => {
+  aqiGaugeChart?.resize();
+  dbGaugeChart?.resize();
+  luxGaugeChart?.resize();
+  uvGaugeChart?.resize();
+  tempGaugeChart?.resize();
+  humidityGaugeChart?.resize();
+};
+
 // 页面加载时检查
 onMounted(() => {
   checkAdoptedBird();
@@ -1141,26 +1162,30 @@ watch(adoptedBird, (newBird) => {
     nextTick(() => {
       initGaugeCharts();
       startEnvDataTimer();
+      window.addEventListener('resize', handleResize);
     });
   } else {
     stopEnvDataTimer();
+    window.removeEventListener('resize', handleResize);
   }
 });
 
-// 监听 camDeviceId 变化
 watch(camDeviceId, (newId) => {
   if (newId) {
     nextTick(() => {
       initGaugeCharts();
       startEnvDataTimer();
+      window.addEventListener('resize', handleResize);
     });
   } else {
     stopEnvDataTimer();
+    window.removeEventListener('resize', handleResize);
   }
 });
 
 // 页面卸载时清理
 onUnmounted(() => {
+  window.removeEventListener('resize', handleResize);
   stopRealtimeMonitoring();
   stopFpsUpdate();
   stopEnvDataTimer();
@@ -1180,64 +1205,6 @@ onUnmounted(() => {
   padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
   position: relative;
   overflow: hidden;
-}
-
-/* 背景装饰 */
-.background-decorations {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1;
-}
-
-.decoration {
-  position: absolute;
-  border-radius: 50%;
-  background: rgba(139, 173, 66, 0.1);
-  filter: blur(60px);
-  animation: float 8s ease-in-out infinite;
-}
-
-.decoration-1 {
-  top: 10%;
-  left: 10%;
-  width: 200px;
-  height: 200px;
-  animation-delay: 0s;
-}
-
-.decoration-2 {
-  top: 60%;
-  right: 10%;
-  width: 150px;
-  height: 150px;
-  animation-delay: 2s;
-}
-
-.decoration-3 {
-  bottom: 20%;
-  left: 20%;
-  width: 180px;
-  height: 180px;
-  animation-delay: 4s;
-}
-
-/* 浮动动画 */
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0px) translateX(0px);
-  }
-  25% {
-    transform: translateY(-20px) translateX(10px);
-  }
-  50% {
-    transform: translateY(10px) translateX(-10px);
-  }
-  75% {
-    transform: translateY(-15px) translateX(5px);
-  }
 }
 
 .page-content {
@@ -2111,7 +2078,539 @@ onUnmounted(() => {
   margin: 0;
 }
 
-/* 响应式设计 */
+/* ==================== 桌面端完全重写 ==================== */
+@media (min-width: 769px) {
+  .birds-page {
+    background: linear-gradient(160deg, #E6F4EA 0%, #D4EBD0 30%, #ecfdf5 70%, #f8fafc 100%);
+    min-height: 100vh;
+    padding-bottom: 0;
+  }
+
+  .page-content {
+    padding: 60px 48px 60px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .page-title {
+    font-size: 26px;
+    margin-bottom: 28px;
+    text-align: left;
+  }
+
+  /* ── 头部：鸟名 + 徽章在左，监控控制在右 ── */
+  .adopted-bird-section {
+    gap: 28px;
+  }
+
+  .bird-header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 0 4px;
+    margin-bottom: 0;
+  }
+
+  .bird-name {
+    font-size: 24px;
+    font-weight: 700;
+    color: #166534;
+    text-shadow: none;
+  }
+
+  .status-badge {
+    background: rgba(22, 163, 74, 0.08);
+    color: #15803d;
+    padding: 5px 14px;
+    border-radius: 16px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0;
+    margin-left: 12px;
+  }
+
+  /* ── 监控控制栏 —— 独立一行，扁平按钮 ── */
+  .monitoring-controls {
+    max-width: 100%;
+    margin: 0 0 20px;
+    background: rgba(255, 255, 255, 0.65);
+    backdrop-filter: blur(10px);
+    border-radius: 14px;
+    padding: 12px 20px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    border: 1px solid rgba(139, 173, 66, 0.12);
+    gap: 20px;
+    box-shadow: 0 2px 12px rgba(139, 173, 66, 0.04);
+  }
+
+  .control-group {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .control-btn {
+    height: 36px;
+    padding: 0 14px;
+    border-radius: 9px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    font-size: 13px;
+    font-weight: 500;
+    color: #374151;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: none;
+    flex: none;
+    box-shadow: none;
+  }
+
+  .control-btn:hover {
+    background: #f3f4f6;
+    border-color: #d1d5db;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .control-btn.active {
+    background: rgba(139, 173, 66, 0.08);
+    border-color: rgba(139, 173, 66, 0.35);
+    color: #5a7a28;
+  }
+
+  .control-btn .btn-icon {
+    font-size: 14px;
+  }
+
+  .control-btn .btn-text {
+    font-size: 13px;
+  }
+
+  .video-settings {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-shrink: 0;
+  }
+
+  .setting-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .setting-label {
+    font-size: 12px;
+    color: #64748b;
+    font-weight: 500;
+    white-space: nowrap;
+    min-width: auto;
+  }
+
+  .quality-slider {
+    width: 80px;
+    accent-color: #8BAD42;
+    height: 4px;
+    background: #e5e7eb;
+    flex: none;
+  }
+
+  .quality-slider::-webkit-slider-thumb {
+    width: 14px;
+    height: 14px;
+    background: linear-gradient(135deg, #8BAD42 0%, #6A9A35 100%);
+  }
+
+  .quality-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: linear-gradient(135deg, #8BAD42 0%, #6A9A35 100%);
+  }
+
+  .setting-value {
+    font-size: 13px;
+    color: #374151;
+    font-weight: 600;
+    min-width: 22px;
+    text-align: center;
+  }
+
+  .resolution-select {
+    padding: 5px 8px;
+    border-radius: 7px;
+    border: 1px solid #e5e7eb;
+    font-size: 12px;
+    color: #374151;
+    background: #f9fafb;
+    cursor: pointer;
+    flex: none;
+    width: auto;
+  }
+
+  .resolution-select:focus {
+    border-color: #8BAD42;
+    box-shadow: 0 0 0 2px rgba(139, 173, 66, 0.12);
+    outline: none;
+  }
+
+  /* ── 视频 + 状态卡片横向排布 ── */
+  .bird-hero-section {
+    padding: 0;
+    gap: 0;
+  }
+
+  .bird-media-row {
+    display: grid;
+    grid-template-columns: 180px minmax(0, 1fr);
+    gap: 24px;
+    max-width: none;
+    margin: 0 0 28px;
+    align-items: stretch;
+  }
+
+  .bird-status-info {
+    order: -1;
+  }
+
+  .bird-image-container {
+    min-height: 480px;
+    max-width: none;
+    margin: 0;
+    border-radius: 18px;
+    overflow: hidden;
+    border: 1px solid rgba(139, 173, 66, 0.08);
+    box-shadow: 0 4px 24px rgba(139, 173, 66, 0.06);
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  }
+
+  .bird-image-container:hover {
+    box-shadow: 0 8px 32px rgba(139, 173, 66, 0.1);
+    transform: translateY(-2px);
+  }
+
+  .video-stream {
+    max-width: 100%;
+    max-height: 440px;
+    width: auto;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  .frame-info {
+    border-radius: 6px;
+    font-size: 11px;
+    padding: 4px 10px;
+  }
+
+  /* ── 状态信息卡片（日龄/品种/鸟笼）── */
+  .bird-status-info {
+    gap: 0;
+    padding: 24px 16px;
+    border-radius: 18px;
+    max-width: none;
+    margin: 0;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(139, 173, 66, 0.1);
+    box-shadow: 0 4px 24px rgba(139, 173, 66, 0.06);
+  }
+
+  .status-item {
+    text-align: center;
+    flex: none;
+  }
+
+  .status-value {
+    font-size: 32px;
+  }
+
+  .status-label {
+    font-size: 12px;
+  }
+
+  .status-divider {
+    width: 60%;
+    height: 1px;
+    background: rgba(139, 173, 66, 0.12);
+    margin: 16px 0;
+  }
+
+  /* ── 环境数据仪表盘：网格一排放满 ── */
+  .env-gauges-section {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 16px;
+    max-width: 1160px;
+    margin: 0 auto 28px;
+    align-items: stretch;
+  }
+
+  .gauges-title {
+    grid-column: 1 / -1;
+    text-align: left;
+    font-size: 18px;
+    font-weight: 700;
+    color: #166534;
+    margin: 0;
+  }
+
+  .c3-missing-alert {
+    grid-column: 1 / -1;
+    margin-bottom: 0;
+  }
+
+  .gauges-row,
+  .gauges-row-second,
+  .gauges-row-third {
+    display: contents !important;
+    gap: unset !important;
+    margin: 0 !important;
+    justify-content: unset !important;
+  }
+
+  .gauge-item {
+    max-width: none;
+    flex: none !important;
+    align-self: stretch;
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(12px);
+    border-radius: 16px;
+    padding: 24px 12px 20px;
+    border: 1px solid rgba(139, 173, 66, 0.1);
+    transition: all 0.25s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 12px rgba(139, 173, 66, 0.04);
+    min-height: 0;
+  }
+
+  .gauge-item:hover {
+    box-shadow: 0 6px 20px rgba(139, 173, 66, 0.1);
+    transform: translateY(-3px);
+    border-color: rgba(139, 173, 66, 0.25);
+  }
+
+  .gauge-chart {
+    width: 140px;
+    height: 140px;
+  }
+
+  .gauge-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #4b5563;
+    margin-top: 2px;
+  }
+
+  /* ── 底部信息区：基本信息 + 食量表格 并排 ── */
+  .bottom-info-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    max-width: 1160px;
+    margin: 0 auto 28px;
+  }
+
+  .bird-details-section {
+    margin: 0;
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(12px);
+    border-radius: 18px;
+    padding: 24px;
+    border: 1px solid rgba(139, 173, 66, 0.1);
+    box-shadow: 0 2px 16px rgba(139, 173, 66, 0.06);
+  }
+
+  .bird-details-section .section-title {
+    font-size: 17px;
+    font-weight: 700;
+    margin-bottom: 16px;
+  }
+
+  .detail-item {
+    margin-bottom: 12px;
+  }
+
+  .detail-label {
+    font-size: 13px;
+    min-width: 80px;
+  }
+
+  .detail-value,
+  .detail-text {
+    font-size: 14px;
+  }
+
+  /* 食量表格 */
+  .feed-table-section {
+    margin: 0;
+    max-width: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .feed-table-card {
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(12px);
+    border-radius: 18px;
+    padding: 24px;
+    border: 1px solid rgba(139, 173, 66, 0.1);
+    box-shadow: 0 2px 16px rgba(139, 173, 66, 0.06);
+    max-width: none;
+  }
+
+  .feed-table-title {
+    font-size: 17px;
+  }
+
+  .feed-table-desc {
+    font-size: 12px;
+    margin-bottom: 16px;
+  }
+
+  .th-date,
+  .th-grams {
+    font-size: 12px;
+  }
+
+  .td-date,
+  .td-grams {
+    font-size: 13px;
+  }
+
+  /* ── 操作按钮 ── */
+  .action-section {
+    padding: 0;
+    margin-bottom: 0;
+    display: flex;
+    justify-content: center;
+    opacity: 1;
+    transform: none;
+  }
+
+  .release-btn {
+    padding: 14px 40px;
+    font-size: 15px;
+    border-radius: 14px;
+    min-width: 220px;
+  }
+
+  .adopt-btn {
+    padding: 14px 48px;
+    font-size: 16px;
+    border-radius: 16px;
+    min-width: 280px;
+  }
+
+  /* ── 空状态 / 加载 ── */
+  .empty-section {
+    min-height: 50vh;
+  }
+
+  .empty-card {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 48px 40px;
+  }
+
+  .empty-icon {
+    font-size: 64px;
+  }
+
+  .empty-title {
+    font-size: 22px;
+  }
+
+  .empty-text {
+    font-size: 15px;
+  }
+}
+
+/* ── 中等桌面（769-1099px）：仪表盘 3 列、信息区堆叠 ── */
+@media (min-width: 769px) and (max-width: 1099px) {
+  .page-content {
+    padding: 28px 28px 48px;
+  }
+
+  .monitoring-controls {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .control-group {
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .video-settings {
+    flex: 1;
+    min-width: 200px;
+    justify-content: flex-end;
+  }
+
+  .env-gauges-section {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+
+  .gauge-chart {
+    width: 120px;
+    height: 120px;
+  }
+
+  .bottom-info-row {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .bird-image-container {
+    max-width: 100%;
+    min-height: 380px;
+  }
+
+  .bird-media-row {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .bird-status-info {
+    flex-direction: row !important;
+    flex-wrap: wrap;
+    gap: 0;
+    padding: 20px 24px;
+    justify-content: center;
+  }
+
+  .status-item {
+    flex: 1;
+    min-width: 80px;
+  }
+
+  .status-divider {
+    width: 1px;
+    height: 36px;
+    margin: 0 12px;
+  }
+
+  .video-stream {
+    max-height: 340px;
+  }
+}
+
+/* 移动端样式 - 原封不动 */
 @media (max-width: 768px) {
   .page-content {
     padding: 16px 12px;
@@ -2144,6 +2643,7 @@ onUnmounted(() => {
   .bird-image-container {
     min-height: 180px;
     border-radius: 16px;
+    margin-bottom: 24px;
   }
   
   .image-placeholder {
@@ -2172,11 +2672,21 @@ onUnmounted(() => {
   .gauge-label {
     font-size: 12px;
   }
+
+  .bottom-info-row {
+    gap: 32px;
+    display: flex;
+    flex-direction: column;
+  }
   
   .bird-details-section {
     margin: 0 12px;
     padding: 20px;
     border-radius: 16px;
+  }
+  
+  .feed-table-section {
+    margin: 0 12px;
   }
   
   .section-title {

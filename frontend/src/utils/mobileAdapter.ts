@@ -1,59 +1,57 @@
 /**
  * 移动端适配工具
- * 用于检测设备类型并切换到相应的页面
+ * 用于检测设备类型、屏幕尺寸并提供响应式断点
  */
 
-/**
- * 检测当前设备是否为移动设备
- * @returns {boolean} 是否为移动设备
- */
+export const BREAKPOINTS = {
+  MOBILE: 480,
+  TABLET: 768,
+  DESKTOP: 1024,
+  LARGE_DESKTOP: 1440
+} as const;
+
 export function isMobileDevice(): boolean {
-  // 简单的设备检测逻辑
   const userAgent = navigator.userAgent.toLowerCase();
   const mobileKeywords = [
-    'android',
-    'webos',
-    'iphone',
-    'ipad',
-    'ipod',
-    'blackberry',
-    'windows phone',
-    'mobile'
+    'android', 'webos', 'iphone', 'ipad', 'ipod',
+    'blackberry', 'windows phone', 'mobile'
   ];
-  
   return mobileKeywords.some(keyword => userAgent.includes(keyword));
 }
 
-/**
- * 检测当前设备屏幕宽度
- * @returns {boolean} 是否为小屏幕设备
- */
 export function isSmallScreen(): boolean {
-  return window.innerWidth < 768;
+  return window.innerWidth < BREAKPOINTS.TABLET;
 }
 
-/**
- * 检查是否需要使用移动端页面
- * @returns {boolean} 是否需要使用移动端页面
- */
+export function isDesktop(): boolean {
+  return window.innerWidth >= BREAKPOINTS.TABLET;
+}
+
+export function isLargeDesktop(): boolean {
+  return window.innerWidth >= BREAKPOINTS.LARGE_DESKTOP;
+}
+
 export function shouldUseMobilePage(): boolean {
   return isMobileDevice() || isSmallScreen();
 }
 
-/**
- * 页面切换逻辑（空实现）
- * 后续可以在这里实现具体的页面切换逻辑
- */
 export function switchToMobilePage(): void {
-  // 空实现，后续添加具体逻辑
-  console.log('切换到移动端页面');
+  const mobileRouter = (window as any).__MOBILE_ROUTER__;
+  if (mobileRouter) {
+    mobileRouter.push('/mobile');
+  }
 }
 
-/**
- * 页面切换逻辑（空实现）
- * 后续可以在这里实现具体的页面切换逻辑
- */
 export function switchToDesktopPage(): void {
-  // 空实现，后续添加具体逻辑
-  console.log('切换到桌面端页面');
+  const desktopRouter = (window as any).__DESKTOP_ROUTER__;
+  if (desktopRouter) {
+    desktopRouter.push('/');
+  }
+}
+
+export function subscribeToResize(callback: (isDesktop: boolean) => void): () => void {
+  const handler = () => callback(window.innerWidth >= BREAKPOINTS.TABLET);
+  window.addEventListener('resize', handler);
+  handler();
+  return () => window.removeEventListener('resize', handler);
 }

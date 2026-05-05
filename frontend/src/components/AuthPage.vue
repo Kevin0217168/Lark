@@ -52,6 +52,12 @@
           <router-link :to="mode === 'login' ? '/Register' : '/Login'">{{ mode === 'login' ? '去注册' : '去登录' }}</router-link>
         </div>
       </el-form>
+
+      <div class="cloud-switch">
+        <el-button type="default" class="cloud-switch-btn" @click="switchToCloud">
+          您不是工作人员？点击切换到云养鸟系统
+        </el-button>
+      </div>
     </el-card>
 
     <!-- 移动端：全屏设计 -->
@@ -544,6 +550,28 @@ const switchToCloud = () => {
 
 .auth-card .toggle-link a:hover {
   text-decoration: underline;
+}
+
+.auth-card .cloud-switch {
+  margin-top: 16px;
+  text-align: center;
+}
+
+.auth-card .cloud-switch-btn {
+  width: 100%;
+  height: 40px;
+  font-size: 13px;
+  border-radius: 10px;
+  background: #f0fdf4;
+  border-color: rgba(22, 163, 74, 0.25);
+  color: #16a34a;
+  transition: all 0.2s ease;
+}
+
+.auth-card .cloud-switch-btn:hover {
+  background: #dcfce7;
+  border-color: #16a34a;
+  color: #15803d;
 }
 
 /* 移动端样式 */
