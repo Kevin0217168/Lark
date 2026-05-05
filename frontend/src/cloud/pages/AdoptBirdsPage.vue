@@ -1,19 +1,7 @@
 <template>
   <div class="adopt-birds-page">
-    <!-- 背景装饰 -->
-    <div class="background-decorations">
-      <div class="decoration decoration-1"></div>
-      <div class="decoration decoration-2"></div>
-      <div class="decoration decoration-3"></div>
-      <div class="floating-elements">
-        <div class="floating-element"></div>
-        <div class="floating-element"></div>
-        <div class="floating-element"></div>
-        <div class="floating-element"></div>
-      </div>
-    </div>
-    
-    <!-- 页面头部 -->
+    <BackgroundDecoration />
+
     <div class="page-header">
       <h1 class="page-title">认领雏鸟</h1>
       <p class="page-subtitle">找到属于你的专属雏鸟</p>
@@ -155,6 +143,7 @@ import { useRouter } from 'vue-router';
 import { api } from '@/utils/api';
 import { ElMessage, ElSkeleton, ElButton, ElInput, ElSelect, ElOption } from 'element-plus';
 import { Search, InfoFilled, Calendar, Monitor } from '@element-plus/icons-vue';
+import BackgroundDecoration from '../components/BackgroundDecoration.vue';
 
 const router = useRouter();
 
@@ -261,132 +250,6 @@ onMounted(() => {
 }
 
 /* 背景装饰 */
-.background-decorations {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1;
-}
-
-.decoration {
-  position: absolute;
-  border-radius: 50%;
-  background: rgba(167, 243, 208, 0.4);
-  filter: blur(60px);
-  animation: float 8s ease-in-out infinite;
-}
-
-.decoration-1 {
-  top: 10%;
-  left: 10%;
-  width: 200px;
-  height: 200px;
-  background: rgba(110, 231, 183, 0.3);
-  animation-delay: 0s;
-}
-
-.decoration-2 {
-  top: 60%;
-  right: 10%;
-  width: 150px;
-  height: 150px;
-  background: rgba(167, 243, 208, 0.2);
-  animation-delay: 2s;
-}
-
-.decoration-3 {
-  bottom: 20%;
-  left: 20%;
-  width: 180px;
-  height: 180px;
-  background: rgba(74, 222, 128, 0.25);
-  animation-delay: 4s;
-}
-
-/* 浮动元素 */
-.floating-elements {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  overflow: hidden;
-}
-
-.floating-element {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  background: rgba(74, 222, 128, 0.6);
-  border-radius: 50%;
-  animation: floatUp 6s ease-in-out infinite;
-}
-
-.floating-element:nth-child(1) {
-  top: 20%;
-  left: 20%;
-  animation-delay: 0s;
-}
-
-.floating-element:nth-child(2) {
-  top: 40%;
-  right: 30%;
-  animation-delay: 1s;
-  background: rgba(110, 231, 183, 0.5);
-}
-
-.floating-element:nth-child(3) {
-  bottom: 30%;
-  left: 40%;
-  animation-delay: 2s;
-  background: rgba(167, 243, 208, 0.4);
-}
-
-.floating-element:nth-child(4) {
-  top: 60%;
-  left: 70%;
-  animation-delay: 3s;
-  background: rgba(74, 222, 128, 0.5);
-}
-
-/* 浮动动画 */
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0px) translateX(0px);
-  }
-  25% {
-    transform: translateY(-20px) translateX(10px);
-  }
-  50% {
-    transform: translateY(10px) translateX(-10px);
-  }
-  75% {
-    transform: translateY(-15px) translateX(5px);
-  }
-}
-
-/* 上浮动画 */
-@keyframes floatUp {
-  0% {
-    transform: translateY(100vh) scale(0);
-    opacity: 0;
-  }
-  10% {
-    opacity: 1;
-    transform: translateY(80vh) scale(1);
-  }
-  90% {
-    opacity: 1;
-    transform: translateY(20vh) scale(1);
-  }
-  100% {
-    transform: translateY(-20vh) scale(0);
-    opacity: 0;
-  }
-}
-
 /* 页面头部 */
 .page-header {
   text-align: center;
@@ -973,23 +836,150 @@ onMounted(() => {
   }
 }
 
-/* 移动端优化 */
-@media (max-width: 480px) {
+/* ==================== 桌面端完全重写 ==================== */
+@media (min-width: 769px) {
+  .adopt-birds-page {
+    padding: 40px 48px;
+    max-width: 1400px;
+    margin: 0 auto;
+    background: linear-gradient(135deg, #f8fafc 0%, #f0fdf4 50%, #ecfdf5 100%);
+    min-height: 100vh;
+  }
+
   .page-header {
-    margin-bottom: 24px;
+    margin-bottom: 32px;
   }
-  
+
+  .page-title {
+    font-size: 28px;
+    font-weight: 800;
+    color: #065f46;
+  }
+
+  .page-subtitle {
+    font-size: 14px;
+    color: #64748b;
+  }
+
   .search-container {
-    margin-bottom: 24px;
+    margin-bottom: 32px;
   }
-  
-  .bird-name {
-    font-size: 18px;
+
+  .search-card {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    border-radius: 16px;
+    padding: 20px 24px;
+    border: 1px solid rgba(209, 213, 219, 0.2);
   }
-  
+
+  .search-row {
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 0;
+    flex-wrap: nowrap;
+  }
+
+  .search-row + .search-row {
+    margin-top: 12px;
+  }
+
+  .search-input-wrapper {
+    flex: 3;
+  }
+
+  .filter-select {
+    flex: 1;
+    min-width: 160px;
+  }
+
+  .modern-input :deep(.el-input__inner) {
+    border-radius: 10px;
+    height: 44px;
+    font-size: 14px;
+  }
+
+  .modern-select :deep(.el-input__inner) {
+    border-radius: 10px;
+    height: 44px;
+    font-size: 14px;
+  }
+
+  .search-btn {
+    flex-shrink: 0;
+    padding: 0 28px;
+    height: 44px;
+    font-size: 15px;
+    border-radius: 10px;
+  }
+
+  .birds-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+  }
+
+  .bird-card {
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(12px);
+    border-radius: 16px;
+    padding: 24px;
+    border: 1px solid rgba(209, 213, 219, 0.2);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+  }
+
+  .bird-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+    border-color: rgba(16, 185, 129, 0.3);
+  }
+
   .bird-avatar {
     width: 100px;
     height: 100px;
+    font-size: 48px;
+    margin-bottom: 16px;
+  }
+
+  .bird-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: #111827;
+    margin-bottom: 4px;
+  }
+
+  .bird-species {
+    font-size: 13px;
+    color: #6b7280;
+    margin-bottom: 8px;
+  }
+
+  .bird-cage {
+    font-size: 12px;
+    color: #9ca3af;
+  }
+
+  .pagination-container {
+    display: flex;
+    justify-content: center;
+    margin-top: 32px;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1199px) {
+  .adopt-birds-page {
+    padding: 32px 24px;
+  }
+
+  .birds-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+
+  .search-row {
+    flex-wrap: wrap;
   }
 }
 

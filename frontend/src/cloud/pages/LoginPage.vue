@@ -1,19 +1,7 @@
 <template>
   <div class="cloud-login-page">
-    <!-- 背景装饰 -->
-    <div class="background-decorations">
-      <div class="decoration decoration-1"></div>
-      <div class="decoration decoration-2"></div>
-      <div class="decoration decoration-3"></div>
-      <div class="floating-elements">
-        <div class="floating-element"></div>
-        <div class="floating-element"></div>
-        <div class="floating-element"></div>
-        <div class="floating-element"></div>
-      </div>
-    </div>
-    
-    <!-- 主内容 -->
+    <BackgroundDecoration />
+
     <div class="login-container">
       <!-- Logo区域 -->
       <div class="logo-section">
@@ -131,6 +119,7 @@ import { ref, reactive, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { api } from '../../utils/api';
+import BackgroundDecoration from '../components/BackgroundDecoration.vue';
 
 const router = useRouter();
 const loading = ref(false);
@@ -346,132 +335,6 @@ const switchToAdmin = () => {
 }
 
 /* 背景装饰 */
-.background-decorations {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1;
-}
-
-.decoration {
-  position: absolute;
-  border-radius: 50%;
-  background: rgba(167, 243, 208, 0.4);
-  filter: blur(60px);
-  animation: float 8s ease-in-out infinite;
-}
-
-.decoration-1 {
-  top: 10%;
-  left: 10%;
-  width: 200px;
-  height: 200px;
-  background: rgba(110, 231, 183, 0.3);
-  animation-delay: 0s;
-}
-
-.decoration-2 {
-  top: 60%;
-  right: 10%;
-  width: 150px;
-  height: 150px;
-  background: rgba(167, 243, 208, 0.2);
-  animation-delay: 2s;
-}
-
-.decoration-3 {
-  bottom: 20%;
-  left: 20%;
-  width: 180px;
-  height: 180px;
-  background: rgba(74, 222, 128, 0.25);
-  animation-delay: 4s;
-}
-
-/* 浮动元素 */
-.floating-elements {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  overflow: hidden;
-}
-
-.floating-element {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  background: rgba(74, 222, 128, 0.6);
-  border-radius: 50%;
-  animation: floatUp 6s ease-in-out infinite;
-}
-
-.floating-element:nth-child(1) {
-  top: 20%;
-  left: 20%;
-  animation-delay: 0s;
-}
-
-.floating-element:nth-child(2) {
-  top: 40%;
-  right: 30%;
-  animation-delay: 1s;
-  background: rgba(110, 231, 183, 0.5);
-}
-
-.floating-element:nth-child(3) {
-  bottom: 30%;
-  left: 40%;
-  animation-delay: 2s;
-  background: rgba(167, 243, 208, 0.4);
-}
-
-.floating-element:nth-child(4) {
-  top: 60%;
-  left: 70%;
-  animation-delay: 3s;
-  background: rgba(74, 222, 128, 0.5);
-}
-
-/* 浮动动画 */
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0px) translateX(0px);
-  }
-  25% {
-    transform: translateY(-20px) translateX(10px);
-  }
-  50% {
-    transform: translateY(10px) translateX(-10px);
-  }
-  75% {
-    transform: translateY(-15px) translateX(5px);
-  }
-}
-
-/* 上浮动画 */
-@keyframes floatUp {
-  0% {
-    transform: translateY(100vh) scale(0);
-    opacity: 0;
-  }
-  10% {
-    opacity: 1;
-    transform: translateY(80vh) scale(1);
-  }
-  90% {
-    opacity: 1;
-    transform: translateY(20vh) scale(1);
-  }
-  100% {
-    transform: translateY(-20vh) scale(0);
-    opacity: 0;
-  }
-}
-
 /* 登录容器 */
 .login-container {
   position: relative;
@@ -910,7 +773,76 @@ const switchToAdmin = () => {
   text-decoration: underline;
 }
 
-/* 响应式设计 */
+/* ==================== 桌面端完全重写 ==================== */
+@media (min-width: 769px) {
+  .cloud-login-page {
+    background: linear-gradient(135deg, #f8fafc 0%, #f0fdf4 50%, #ecfdf5 100%);
+    min-height: 100vh;
+  }
+
+  .login-container {
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 80px 0 60px;
+  }
+
+  .login-card {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(16px);
+    border-radius: 20px;
+    padding: 40px 36px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+    border: 1px solid rgba(209, 213, 219, 0.2);
+  }
+
+  .logo-section {
+    margin-bottom: 32px;
+  }
+
+  .logo-wrapper {
+    width: 64px;
+    height: 64px;
+    border-radius: 18px;
+  }
+
+  .app-name {
+    font-size: 24px;
+    letter-spacing: 2px;
+  }
+
+  .app-subtitle {
+    font-size: 13px;
+    color: #64748b;
+  }
+
+  .login-form {
+    gap: 16px;
+  }
+
+  .form-input {
+    height: 48px;
+    border-radius: 10px;
+    font-size: 14px;
+  }
+
+  .login-button {
+    height: 48px;
+    font-size: 16px;
+    border-radius: 12px;
+    font-weight: 600;
+  }
+
+  .extra-links {
+    margin-top: 24px;
+    gap: 16px;
+  }
+
+  .extra-link {
+    font-size: 13px;
+  }
+}
+
+/* 移动端样式 - 原封不动 */
 @media (max-width: 400px) {
   .login-container {
     padding: 48px 20px 32px;

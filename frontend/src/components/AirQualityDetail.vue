@@ -106,10 +106,10 @@
     <!-- 数据概览卡片 -->
     <div class="mobile-overview">
       <div class="overview-card aqi-card" :class="aqiLevelClass">
-        <div class="overview-icon">🌬️</div>
         <div class="overview-info">
           <div class="overview-value">{{ latestAqi ?? '--' }}</div>
-          <div class="overview-label">AQI 空气质量</div>
+          <div class="overview-label">AQI</div>
+          <div class="overview-level" v-if="aqiLevelText">{{ aqiLevelText }}</div>
         </div>
       </div>
       <div class="overview-grid">
@@ -312,9 +312,23 @@ const latestTvoc = ref<number | null>(null);
 const aqiLevelClass = computed(() => {
   const val = latestAqi.value;
   if (val === null) return '';
-  if (val > 150) return 'aqi-bad';
-  if (val > 100) return 'aqi-moderate';
-  return 'aqi-good';
+  if (val <= 50) return 'aqi-excellent';
+  if (val <= 100) return 'aqi-good';
+  if (val <= 150) return 'aqi-mild';
+  if (val <= 200) return 'aqi-moderate';
+  if (val <= 300) return 'aqi-heavy';
+  return 'aqi-severe';
+});
+
+const aqiLevelText = computed(() => {
+  const val = latestAqi.value;
+  if (val === null) return '';
+  if (val <= 50) return '优';
+  if (val <= 100) return '良';
+  if (val <= 150) return '轻度污染';
+  if (val <= 200) return '中度污染';
+  if (val <= 300) return '重度污染';
+  return '严重污染';
 });
 
 // 图表引用
@@ -1207,9 +1221,10 @@ onUnmounted(() => {
 
 .overview-card {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 16px;
-  padding: 20px;
+  text-align: center;
+  padding: 24px 20px;
   border-radius: 16px;
   margin-bottom: 16px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -1217,40 +1232,70 @@ onUnmounted(() => {
   box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
 }
 
+.overview-card.aqi-excellent {
+  background: linear-gradient(135deg, #52c41a 0%, #73d13d 100%);
+  box-shadow: 0 4px 16px rgba(82, 196, 26, 0.3);
+}
+
 .overview-card.aqi-good {
-  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-  box-shadow: 0 4px 16px rgba(67, 233, 123, 0.3);
+  background: linear-gradient(135deg, #b7eb8f 0%, #95de64 100%);
+  box-shadow: 0 4px 16px rgba(183, 235, 143, 0.3);
+}
+
+.overview-card.aqi-mild {
+  background: linear-gradient(135deg, #ffd666 0%, #ffc53d 100%);
+  box-shadow: 0 4px 16px rgba(255, 214, 102, 0.3);
+  color: #5c4a1e;
+}
+
+.overview-card.aqi-mild .overview-level {
+  background: rgba(0, 0, 0, 0.1);
 }
 
 .overview-card.aqi-moderate {
-  background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
-  box-shadow: 0 4px 16px rgba(246, 211, 101, 0.3);
+  background: linear-gradient(135deg, #ff9c6e 0%, #ff7a45 100%);
+  box-shadow: 0 4px 16px rgba(255, 156, 110, 0.3);
 }
 
-.overview-card.aqi-bad {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  box-shadow: 0 4px 16px rgba(245, 87, 108, 0.3);
+.overview-card.aqi-heavy {
+  background: linear-gradient(135deg, #ff85c0 0%, #f759ab 100%);
+  box-shadow: 0 4px 16px rgba(255, 133, 192, 0.3);
 }
 
-.overview-icon {
-  font-size: 40px;
-  line-height: 1;
+.overview-card.aqi-severe {
+  background: linear-gradient(135deg, #b37feb 0%, #722ed1 100%);
+  box-shadow: 0 4px 16px rgba(179, 127, 235, 0.3);
 }
 
 .overview-info {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
 }
 
 .overview-value {
-  font-size: 36px;
-  font-weight: 700;
-  line-height: 1.2;
-  margin-bottom: 4px;
+  font-size: 48px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -2px;
 }
 
 .overview-label {
   font-size: 13px;
-  opacity: 0.9;
+  opacity: 0.75;
+  letter-spacing: 2px;
+}
+
+.overview-level {
+  margin-top: 6px;
+  padding: 4px 14px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.25);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1px;
 }
 
 .overview-grid {

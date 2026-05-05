@@ -16,68 +16,37 @@
   
   <!-- 桌面端界面 -->
   <div v-else>
-    <el-image
-      v-if="!isAuthPage"
-      class="banner"
-      src="banner.jpg"
-      fit="cover"
-    />
-    <el-container class="app-container">
-      <el-header>
-        <Header />
-      </el-header>
-      <Sider v-if="!isAuthPage" @tabChange="handleTabChange" />
-      <el-main>
-        <RouterView v-slot="{ Component }">
-          <component :is="Component" :activeTab="activeTab" />
-        </RouterView>
-      </el-main>
-      <el-footer> 
-        <template v-if="isAuthPage">
-          <div class="auth-page-footer-content">
-            <div class="footer-left">
-              <div class="brand-info">
-                <div class="brand-logo">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lark-logo" aria-hidden="true"> 
-                    <path d="M16 7h.01"></path> 
-                    <path d="M3.4 18H12a8 8 0 0 0 8-8V7a4 4 0 0 0-7.28-2.3L2 20"></path> 
-                    <path d="m20 7 2 .5-2 .5"></path> 
-                    <path d="M10 18v3"></path> 
-                    <path d="M14 17.75V21"></path> 
-                    <path d="M7 18a6 6 0 0 0 3.84-10.61"></path> 
-                  </svg>
-                  <span class="brand-name">云雀 Lark</span>
-                </div>
-                <p class="brand-desc">专注于智慧鸟厂管理系统的研发与服务，以物联网技术赋能传统养殖业，推动行业数字化转型。</p>
-              </div>
-            </div>
-            <div class="footer-right">
-              <div class="copyright">© 2026 Lark. All Rights Reserved.</div>
-              <div class="copyright">Powered by Vue.js & FastAPI</div>
-              <div class="beian">
-                <div class="beian-item">
-                  <img src="https://www.beian.gov.cn/img/ghs.png" class="beian-icon"> 
-                  <a class="beian-link" href="https://beian.mps.gov.cn/#/query/webSearch?code=41010502007493" rel="noreferrer" target="_blank">豫公网安备41010502007493号</a>
-                </div>
-                <div class="beian-item">
-                  <span class="beian-placeholder"></span>
-                  <a class="beian-link" href="https://beian.miit.gov.cn/" target="_blank">豫ICP备2026008104号</a>
-                </div>
-                <div class="beian-item">
-                  <img src="https://icp.gov.moe/images/ico64.png" class="beian-icon moe-icon">
-                  <a class="beian-link" target="_blank" href="https://icp.gov.moe/?keyword=20261324">萌ICP备20261324号</a>
-                </div>
-              </div>
-            </div>
-          </div>
-        </template>
-        <template v-else>
+    <!-- 云养鸟系统：独立渲染，不使用鸟场管理布局 -->
+    <template v-if="isAuthPage">
+      <RouterView v-slot="{ Component }">
+        <component :is="Component" />
+      </RouterView>
+    </template>
+
+    <!-- 鸟场管理系统：使用 el-container 布局 -->
+    <template v-else>
+      <el-image
+        class="banner"
+        src="banner.jpg"
+        fit="cover"
+      />
+      <el-container class="app-container">
+        <el-header>
+          <Header />
+        </el-header>
+        <Sider @tabChange="handleTabChange" />
+        <el-main>
+          <RouterView v-slot="{ Component }">
+            <component :is="Component" :activeTab="activeTab" />
+          </RouterView>
+        </el-main>
+        <el-footer>
           <div class="footer-content">
             <div class="copyright">© 2026 Lark. All Rights Reserved.</div>
             <div class="copyright">Powered by Vue.js & FastAPI</div>
             <div class="beian">
               <div class="beian-item">
-                <img src="https://www.beian.gov.cn/img/ghs.png" class="beian-icon"> 
+                <img src="https://www.beian.gov.cn/img/ghs.png" class="beian-icon">
                 <a class="beian-link" href="https://beian.mps.gov.cn/#/query/webSearch?code=41010502007493" rel="noreferrer" target="_blank">豫公网安备41010502007493号</a>
               </div>
               <div class="beian-item">
@@ -90,9 +59,9 @@
               </div>
             </div>
           </div>
-        </template>
-      </el-footer>
-    </el-container>
+        </el-footer>
+      </el-container>
+    </template>
   </div>
 </template>
 
@@ -134,7 +103,7 @@ const wrappedFetch: typeof window.fetch = async (...args) => {
   
   // 排除登录、注册和刷新接口的401处理
   const url = args[0] as string;
-  const isAuthPage = route.path === '/Login' || route.path === '/Register' || route.path.startsWith('/cloud');
+  const isAuthPage = route.path === '/Login' || route.path === '/Register' || route.path === '/cloud' || route.path.startsWith('/cloud/');
   const isAuthApi = url.includes('/api/login') || url.includes('/api/register') || url.includes('/api/refresh');
   
   if (response.status === 401 && !isAuthPage && !isAuthApi) {
@@ -164,7 +133,7 @@ if ((import.meta as any).hot) {
 
 // 检查是否是登录或注册页面
 const isAuthPage = computed(() => {
-  return route.path === '/Login' || route.path === '/Register' || route.path.startsWith('/cloud');
+  return route.path === '/Login' || route.path === '/Register' || route.path === '/cloud' || route.path.startsWith('/cloud/');
 });
 
 // 检查是否需要使用移动端页面

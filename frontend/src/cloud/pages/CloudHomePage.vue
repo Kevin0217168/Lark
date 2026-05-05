@@ -1,16 +1,6 @@
 <template>
   <div class="cloud-home-page">
-    <div class="background-decorations">
-      <div class="decoration decoration-1"></div>
-      <div class="decoration decoration-2"></div>
-      <div class="decoration decoration-3"></div>
-      <div class="floating-elements">
-        <div class="floating-element"></div>
-        <div class="floating-element"></div>
-        <div class="floating-element"></div>
-        <div class="floating-element"></div>
-      </div>
-    </div>
+    <BackgroundDecoration />
 
     <div class="page-header">
       <div class="logo-section">
@@ -181,6 +171,7 @@ import { api } from '@/utils/api';
 import BirdInfoCard from '@/cloud/components/BirdInfoCard.vue';
 import EnvQuickView from '@/cloud/components/EnvQuickView.vue';
 import ActivityTimeline from '@/cloud/components/ActivityTimeline.vue';
+import BackgroundDecoration from '@/cloud/components/BackgroundDecoration.vue';
 
 const router = useRouter();
 
@@ -347,88 +338,7 @@ onMounted(async () => {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
-/* 背景装饰 */
-.background-decorations {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1;
-  pointer-events: none;
-}
 
-.decoration {
-  position: absolute;
-  border-radius: 50%;
-  background: rgba(167, 243, 208, 0.4);
-  filter: blur(60px);
-  animation: float 8s ease-in-out infinite;
-}
-
-.decoration-1 {
-  top: 10%;
-  left: 10%;
-  width: 200px;
-  height: 200px;
-  background: rgba(110, 231, 183, 0.3);
-  animation-delay: 0s;
-}
-
-.decoration-2 {
-  top: 60%;
-  right: 10%;
-  width: 150px;
-  height: 150px;
-  background: rgba(167, 243, 208, 0.2);
-  animation-delay: 2s;
-}
-
-.decoration-3 {
-  bottom: 20%;
-  left: 20%;
-  width: 180px;
-  height: 180px;
-  background: rgba(74, 222, 128, 0.25);
-  animation-delay: 4s;
-}
-
-.floating-elements {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  overflow: hidden;
-}
-
-.floating-element {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  background: rgba(74, 222, 128, 0.6);
-  border-radius: 50%;
-  animation: floatUp 6s ease-in-out infinite;
-}
-
-.floating-element:nth-child(1) { top: 20%; left: 20%; }
-.floating-element:nth-child(2) { top: 40%; right: 30%; animation-delay: 1s; background: rgba(110, 231, 183, 0.5); }
-.floating-element:nth-child(3) { bottom: 30%; left: 40%; animation-delay: 2s; background: rgba(167, 243, 208, 0.4); }
-.floating-element:nth-child(4) { top: 60%; left: 70%; animation-delay: 3s; background: rgba(74, 222, 128, 0.5); }
-
-@keyframes float {
-  0%, 100% { transform: translateY(0px) translateX(0px); }
-  25% { transform: translateY(-20px) translateX(10px); }
-  50% { transform: translateY(10px) translateX(-10px); }
-  75% { transform: translateY(-15px) translateX(5px); }
-}
-
-@keyframes floatUp {
-  0% { transform: translateY(100vh) scale(0); opacity: 0; }
-  10% { opacity: 1; transform: translateY(80vh) scale(1); }
-  90% { opacity: 1; transform: translateY(20vh) scale(1); }
-  100% { transform: translateY(-20vh) scale(0); opacity: 0; }
-}
 
 /* 页面头部 */
 .page-header {
@@ -976,7 +886,151 @@ onMounted(async () => {
   opacity: 1 !important;
 }
 
-/* 响应式 */
+/* ==================== 桌面端完全重写 ==================== */
+@media (min-width: 769px) {
+  .cloud-home-page {
+    padding: 0;
+    max-width: none;
+    margin: 0;
+    background: linear-gradient(135deg, #f8fafc 0%, #f0fdf4 50%, #ecfdf5 100%);
+  }
+
+  .page-header {
+    margin-bottom: 32px;
+    padding: 0 48px;
+  }
+
+  .app-name {
+    font-size: 28px;
+    letter-spacing: 3px;
+  }
+
+  .app-subtitle {
+    font-size: 14px;
+    color: #64748b;
+  }
+
+  .logo-wrapper {
+    width: 80px;
+    height: 80px;
+    border-radius: 24px;
+  }
+
+  /* 仪表盘布局 */
+  .dashboard-layout {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 24px;
+    padding: 0 48px 40px;
+  }
+
+  .dashboard-layout > :first-child {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .feed-table-section {
+    grid-column: 1;
+    grid-row: 2;
+    margin: 0;
+  }
+
+  .feed-table-card {
+    border-radius: 16px;
+    padding: 28px;
+    background: rgba(255, 255, 255, 0.9);
+  }
+
+  .feed-table-title {
+    font-size: 18px;
+  }
+
+  .feed-table-desc {
+    font-size: 13px;
+    margin-bottom: 20px;
+  }
+
+  .quick-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .quick-btn {
+    height: 56px;
+    font-size: 16px;
+    justify-content: flex-start;
+    padding: 0 24px;
+  }
+
+  /* 未认领状态 */
+  .stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+
+  .stat-item {
+    padding: 20px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(22, 163, 74, 0.04), rgba(21, 128, 61, 0.02));
+  }
+
+  .stat-icon {
+    width: 52px;
+    height: 52px;
+    font-size: 28px;
+  }
+
+  .stat-value {
+    font-size: 28px;
+  }
+
+  .stat-label {
+    font-size: 13px;
+  }
+
+  .user-card {
+    border-radius: 16px;
+    padding: 24px;
+  }
+
+  .quick-access-section {
+    display: flex;
+    justify-content: center;
+  }
+
+  .quick-btn.primary.large {
+    max-width: 400px;
+  }
+
+  .activity-card {
+    border-radius: 16px;
+    padding: 28px;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .activity-title {
+    font-size: 18px;
+    margin-bottom: 20px;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1023px) {
+  .dashboard-layout {
+    grid-template-columns: 1fr 320px;
+    gap: 20px;
+    padding: 0 24px 32px;
+  }
+
+  .page-header {
+    padding: 0 24px;
+  }
+}
+
+/* 移动端样式 - 原封不动 */
 @media (max-width: 480px) {
   .cloud-home-page {
     padding: 16px 12px calc(80px + env(safe-area-inset-bottom, 0px));

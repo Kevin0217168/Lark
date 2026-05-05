@@ -1,15 +1,6 @@
 <template>
   <div class="my-page">
-    <!-- 背景装饰 -->
-    <div class="bg-decoration">
-      <div class="bg-ball bg-ball-1"></div>
-      <div class="bg-ball bg-ball-2"></div>
-      <div class="bg-ball bg-ball-3"></div>
-      <div class="floating-element floating-1"></div>
-      <div class="floating-element floating-2"></div>
-      <div class="floating-element floating-3"></div>
-      <div class="floating-element floating-4"></div>
-    </div>
+    <BackgroundDecoration />
 
     <!-- 主内容区 -->
     <div class="main-content">
@@ -199,6 +190,7 @@ import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { api } from '../../utils/api';
+import BackgroundDecoration from '../components/BackgroundDecoration.vue';
 
 const router = useRouter();
 const loading = ref(false);
@@ -589,104 +581,6 @@ onMounted(() => {
   box-sizing: border-box;
 }
 
-/* 背景装饰 */
-.bg-decoration {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.bg-ball {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(40px);
-  opacity: 0.3;
-}
-
-.bg-ball-1 {
-  width: 300px;
-  height: 300px;
-  background: #a3e635;
-  top: -100px;
-  right: -100px;
-  animation: float 6s ease-in-out infinite;
-}
-
-.bg-ball-2 {
-  width: 200px;
-  height: 200px;
-  background: #65a30d;
-  bottom: -50px;
-  left: -50px;
-  animation: float 8s ease-in-out infinite reverse;
-}
-
-.bg-ball-3 {
-  width: 150px;
-  height: 150px;
-  background: #84cc16;
-  top: 50%;
-  left: 20%;
-  animation: float 10s ease-in-out infinite;
-}
-
-.floating-element {
-  position: absolute;
-  width: 4px;
-  height: 4px;
-  background: rgba(139, 173, 66, 0.6);
-  border-radius: 50%;
-  animation: floatUp 10s linear infinite;
-}
-
-.floating-1 {
-  top: 20%;
-  left: 10%;
-  animation-delay: 0s;
-}
-
-.floating-2 {
-  top: 60%;
-  right: 15%;
-  animation-delay: 2s;
-}
-
-.floating-3 {
-  top: 40%;
-  left: 80%;
-  animation-delay: 4s;
-}
-
-.floating-4 {
-  top: 80%;
-  right: 25%;
-  animation-delay: 6s;
-}
-
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0) rotate(0deg);
-  }
-  50% {
-    transform: translateY(-20px) rotate(180deg);
-  }
-}
-
-@keyframes floatUp {
-  0% {
-    transform: translateY(100vh) scale(0);
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(-100px) scale(1);
-    opacity: 0;
-  }
-}
-
 /* 主内容区 */
 .main-content {
   position: relative;
@@ -696,6 +590,167 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 32px;
+}
+
+/* ==================== 桌面端完全重写 ==================== */
+@media (min-width: 769px) {
+  .my-page {
+    background: linear-gradient(135deg, #f8fafc 0%, #f0fdf4 50%, #ecfdf5 100%);
+    min-height: 100vh;
+    padding: 40px 48px;
+  }
+
+  .main-content {
+    max-width: 640px;
+    margin: 0 auto;
+    gap: 40px;
+  }
+
+  .profile-header {
+    padding: 24px 0;
+  }
+
+  .avatar-circle {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    border: 3px solid rgba(255, 255, 255, 0.9);
+  }
+
+  .username {
+    font-size: 24px;
+    margin-bottom: 8px;
+  }
+
+  .role-badge {
+    font-size: 12px;
+    padding: 4px 14px;
+    border-radius: 12px;
+  }
+
+  .info-section {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    border-radius: 16px;
+    padding: 28px;
+    border: 1px solid rgba(209, 213, 219, 0.2);
+  }
+
+  .section-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #065f46;
+    margin-bottom: 20px;
+  }
+
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .info-item {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+    padding: 16px;
+    background: linear-gradient(135deg, rgba(22, 163, 74, 0.03), rgba(21, 128, 61, 0.02));
+    border-radius: 12px;
+    transition: all 0.2s ease;
+  }
+
+  .info-item:hover {
+    background: linear-gradient(135deg, rgba(22, 163, 74, 0.06), rgba(21, 128, 61, 0.04));
+  }
+
+  .info-icon {
+    width: 44px;
+    height: 44px;
+    font-size: 20px;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .info-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .info-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .info-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: #111827;
+  }
+
+  .action-section {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    border-radius: 16px;
+    padding: 28px;
+    border: 1px solid rgba(209, 213, 219, 0.2);
+  }
+
+  .action-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    max-width: none;
+    margin: 0;
+  }
+
+  .action-btn {
+    height: 44px;
+    padding: 0 20px;
+    font-size: 14px;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+    color: #374151;
+  }
+
+  .action-btn:hover {
+    background: #f3f4f6;
+    border-color: #d1d5db;
+  }
+
+  .action-btn.danger {
+    color: #ef4444;
+    border-color: #fecaca;
+    background: #fef2f2;
+  }
+
+  .action-btn.danger:hover {
+    background: #fee2e2;
+    border-color: #fca5a5;
+  }
+
+  .action-btn.primary {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #fff;
+    border: none;
+  }
+
+  .action-btn.primary:hover {
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+  }
 }
 
 /* 头像和用户信息 */

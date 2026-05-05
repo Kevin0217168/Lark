@@ -231,4 +231,10 @@ const handleNavClick = (item: NavItem) => {
 }
 
 /* 强制浅色模式 - 移除深色模式支持 */
+
+@media (min-width: 769px) {
+  .bottom-nav {
+    display: none;
+  }
+}
 </style>
