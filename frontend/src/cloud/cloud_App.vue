@@ -16,11 +16,12 @@ import { ref, onMounted, onUnmounted } from 'vue';
 import { RouterView } from 'vue-router';
 import BottomNav from './components/BottomNav.vue';
 import SideNav from './components/SideNav.vue';
+import { BREAKPOINTS } from '@/utils/mobileAdapter';
 
-const isDesktop = ref(window.innerWidth >= 769);
+const isDesktop = ref(window.innerWidth >= BREAKPOINTS.DESKTOP);
 
 const handleResize = () => {
-  isDesktop.value = window.innerWidth >= 769;
+  isDesktop.value = window.innerWidth >= BREAKPOINTS.DESKTOP;
 };
 
 onMounted(() => {
