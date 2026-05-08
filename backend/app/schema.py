@@ -205,6 +205,10 @@ R404_USER_NOT_FOUND = {
     }
 }
 
+
+class LightSetRequest(BaseModel):
+    brightness: int = Field(..., ge=0, le=100, description="灯光亮度 (0-100)")
+
 R400_USER_ALREADY_EXIST = {
     400: {
         "model": CommonOut[None],

@@ -2275,10 +2275,6 @@ onUnmounted(() => {
     align-items: stretch;
   }
 
-  .bird-status-info {
-    order: -1;
-  }
-
   .bird-image-container {
     min-height: 480px;
     max-width: none;
@@ -2643,7 +2639,6 @@ onUnmounted(() => {
   .bird-image-container {
     min-height: 180px;
     border-radius: 16px;
-    margin-bottom: 24px;
   }
   
   .image-placeholder {
@@ -2672,21 +2667,11 @@ onUnmounted(() => {
   .gauge-label {
     font-size: 12px;
   }
-
-  .bottom-info-row {
-    gap: 32px;
-    display: flex;
-    flex-direction: column;
-  }
   
   .bird-details-section {
     margin: 0 12px;
     padding: 20px;
     border-radius: 16px;
-  }
-  
-  .feed-table-section {
-    margin: 0 12px;
   }
   
   .section-title {

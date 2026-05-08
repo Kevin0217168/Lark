@@ -17,6 +17,7 @@ from schema import (
     R404_DEVICE_NOT_FOUND,
     R400_DEVICE_ALREADY_EXIST,
     R403_FORBIDDEN,
+    LightSetRequest,
 )
 
 router = APIRouter(prefix="/devices", tags=["Devices"])
@@ -27,7 +28,8 @@ esp32IdDict = {}
 CMD_RESTART  = {"code": 1, "item": "device", "key": "restart", "values": ""}
 CMD_OTA      = {"code": 1, "item": "device", "key": "ota", "values": ""}
 CMD_VERSION  = {"code": 0, "item": "device", "key": "version", "values": ""}
-CMD_FEEDING  = {"code": 1, "item": "servo", "key": "feeding", "values": ""}
+CMD_AUTO_FEED = {"code": 1, "item": "device", "key": "auto_feed", "values": ""}
+CMD_LIGHT_GET = {"code": 0, "item": "light", "key": "brightness", "values": ""}
 
 class Esp32:
     def __init__(self, device:Db.M_Devices):
@@ -429,3 +431,82 @@ async def get_device_version(
 
     await async_log(logger, "info", f"设备{id}固件版本: {result.get('values')}")
     return CommonOut(data={"key": "version", "values": result.get("values", "")})
+
+
+# ──────────────────── 灯光控制 (C3) ────────────────────
+
+@router.get(
+    "/{id}/light/brightness",
+    response_model=CommonOut[dict],
+    responses={**R404_DEVICE_NOT_FOUND},
+    summary="查询C3设备灯光亮度",
+)
+async def get_light_brightness(
+    id: Annotated[int, Path(title="设备id")],
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
+    db: Db.Session = Depends(Db.GetDb("GetLightBrightness")),
+):
+    data = Db.GetDevices(db, id=id)
+    if not data:
+        return JSONResponse(
+            status_code=404,
+            content=CommonOut(code=404, msg="Device not found", data=None).model_dump(),
+        )
+
+    if data[0].device_type != "ESP32-C3":
+        return JSONResponse(
+            status_code=400,
+            content=CommonOut(code=400, msg="仅C3设备支持灯光控制", data=None).model_dump(),
+        )
+
+    device = esp32IdDict.get(id)
+    if device is None or not _is_device_ws_alive(device):
+        return JSONResponse(
+            status_code=503,
+            content=CommonOut(code=503, msg="Device is not online", data=None).model_dump(),
+        )
+
+    result = await device.send_and_wait(CMD_LIGHT_GET, "brightness", timeout=5.0)
+    if result is None:
+        return JSONResponse(
+            status_code=504,
+            content=CommonOut(code=504, msg="Device response timed out", data=None).model_dump(),
+        )
+
+    await async_log(logger, "info", f"设备{id}灯光亮度: {result.get('values')}")
+    return CommonOut(data={"key": "brightness", "values": result.get("values", ""), "device_id": id})
+
+
+@router.put(
+    "/{id}/light/brightness",
+    response_model=CommonOut[dict],
+    responses={**R404_DEVICE_NOT_FOUND},
+    summary="设置C3设备灯光亮度",
+)
+async def set_light_brightness(
+    id: Annotated[int, Path(title="设备id")],
+    body: LightSetRequest,
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
+    db: Db.Session = Depends(Db.GetDb("SetLightBrightness")),
+):
+    data = Db.GetDevices(db, id=id)
+    if not data:
+        return JSONResponse(
+            status_code=404,
+            content=CommonOut(code=404, msg="Device not found", data=None).model_dump(),
+        )
+
+    if data[0].device_type != "ESP32-C3":
+        return JSONResponse(
+            status_code=400,
+            content=CommonOut(code=400, msg="仅C3设备支持灯光控制", data=None).model_dump(),
+        )
+
+    device, err = await _send_device_command(
+        id, {"code": 1, "item": "light", "key": "brightness", "values": body.brightness}
+    )
+    if err:
+        return err
+
+    await async_log(logger, "info", f"已向设备{id}设置灯光亮度为{body.brightness}")
+    return CommonOut(msg="亮度设置成功.", data={"key": "brightness", "values": str(body.brightness)})
