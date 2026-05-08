@@ -1,0 +1,91 @@
+dependencies:
+  Wifista:
+    dependencies: []
+    source:
+      path: /home/mint/Documents/contests/Lark/embedded/ESP32-C3/components/Wifista
+      type: local
+    version: '*'
+  device_secret:
+    dependencies: []
+    source:
+      path: /home/mint/Documents/contests/Lark/embedded/ESP32-camera/components/device_secret
+      type: local
+    version: '*'
+  esp_camera:
+    dependencies: []
+    source:
+      path: /home/mint/Documents/contests/Lark/embedded/ESP32-C3/components/esp_camera
+      type: local
+    version: '*'
+  espressif/esp_websocket_client:
+    component_hash: c5a067a9fddea370c478017e66fac302f4b79c3d4027e9bdd42a019786cceb92
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.6.1
+  idf:
+    source:
+      type: idf
+    version: 5.5.3
+  ina231:
+    dependencies: []
+    source:
+      path: /home/mint/Documents/contests/Lark/embedded/ESP32-C3/components/ina231
+      type: local
+    version: '*'
+  pms9103m:
+    dependencies: []
+    source:
+      path: /home/mint/Documents/contests/Lark/embedded/ESP32-C3/components/pms9103m
+      type: local
+    version: '*'
+  remote_log:
+    dependencies: []
+    source:
+      path: /home/mint/Documents/contests/Lark/embedded/ESP32-C3/components/remote_log
+      type: local
+    version: '*'
+  sgp30:
+    dependencies: []
+    source:
+      path: /home/mint/Documents/contests/Lark/embedded/ESP32-C3/components/sgp30
+      type: local
+    version: '*'
+  sound_meter:
+    dependencies: []
+    source:
+      path: /home/mint/Documents/contests/Lark/embedded/ESP32-C3/components/sound_meter
+      type: local
+    version: '*'
+  uv_meter:
+    dependencies: []
+    source:
+      path: /home/mint/Documents/contests/Lark/embedded/ESP32-C3/components/uv_meter
+      type: local
+    version: '*'
+  veml7700:
+    dependencies: []
+    source:
+      path: /home/mint/Documents/contests/Lark/embedded/ESP32-C3/components/veml7700
+      type: local
+    version: '*'
+direct_dependencies:
+- Wifista
+- device_secret
+- esp_camera
+- espressif/esp_websocket_client
+- idf
+- ina231
+- pms9103m
+- remote_log
+- sgp30
+- sound_meter
+- uv_meter
+- veml7700
+manifest_hash: 6d0f4b44240087c132320278a8b869b65803ed2b8ce4d76c7f275c37a7d813d5
+target: esp32s3
+version: 2.0.0

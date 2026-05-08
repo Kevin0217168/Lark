@@ -1,0 +1,12 @@
+{
+    "tasks": [
+        {
+            "type": "shell",
+            "label": "esp-idf build",
+            "command": "source $IDF_PATH/export.sh && idf.py build",
+            "group": "build",
+            "problemMatcher": []
+        }
+    ],
+    "version": "2.0.0"
+}

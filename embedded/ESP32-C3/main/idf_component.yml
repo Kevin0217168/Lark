@@ -1,0 +1,28 @@
+## IDF Component Manager Manifest File
+dependencies:
+  ## Required IDF version
+  idf:
+    version: '>=4.1.0'
+  espressif/esp_websocket_client: '*'
+  ina231:
+    path: ../components/ina231
+  pms9103m:
+    path: ../components/pms9103m
+  sgp30:
+    path: ../components/sgp30
+  sound_meter:
+    path: ../components/sound_meter
+  uv_meter:
+    path: ../components/uv_meter
+  veml7700:
+    path: ../components/veml7700
+
+  device_secret:
+    path: ../../ESP32-camera/components/device_secret
+  remote_log:
+    path: ../components/remote_log
+
+  Wifista:
+    path: ../components/Wifista
+  esp_camera:
+    path: ../components/esp_camera
