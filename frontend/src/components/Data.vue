@@ -1751,10 +1751,26 @@ const toggleVerticalFlip = () => {
   flipVertical.value = !flipVertical.value;
 };
 
-// 灯光开关（虚拟）
+// 灯光开关
 const lightOn = ref(false);
-const toggleLight = () => {
-  lightOn.value = !lightOn.value;
+const toggleLight = async () => {
+  if (!c3DeviceId.value) {
+    ElMessage.warning('未找到C3设备，无法控制灯光')
+    return
+  }
+  const newBrightness = lightOn.value ? 0 : 100
+  try {
+    const resp = await api.put(`/api/devices/${c3DeviceId.value}/light/brightness`, {
+      brightness: newBrightness
+    })
+    if (resp.code === 200) {
+      lightOn.value = !lightOn.value
+    } else {
+      ElMessage.error(resp.msg || '灯光控制失败')
+    }
+  } catch {
+    ElMessage.error('灯光控制请求失败')
+  }
 };
 
 // 处理接收到的图片帧数据

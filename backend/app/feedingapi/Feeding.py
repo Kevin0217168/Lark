@@ -16,7 +16,7 @@ from datacontrol.FeedingDb import (
 )
 
 from datacontrol.DeviceDb import GetDevicesByAreaNumber
-from deviceapi.Device import CMD_FEEDING, esp32IdDict, _is_device_ws_alive
+from deviceapi.Device import CMD_AUTO_FEED, esp32IdDict, _is_device_ws_alive
 
 router = APIRouter(prefix="/feeding", tags=["Feeding"])
 
@@ -33,7 +33,7 @@ def _check_feeding_permission(db, current_user, bird_id: int) -> Optional[JSONRe
         )
     return None
 
-def _find_cam_device_id(db, bird_id: int, device_id: Optional[int]) -> Optional[int]:
+def _find_c3_device_id(db, bird_id: int, device_id: Optional[int]) -> Optional[int]:
     if device_id is not None:
         return device_id
     from datacontrol.BirdDb import GetBirdById
@@ -41,8 +41,8 @@ def _find_cam_device_id(db, bird_id: int, device_id: Optional[int]) -> Optional[
     if not bird or not bird.area:
         return None
     devices = GetDevicesByAreaNumber(db, bird.area, bird.number)
-    cam = next((d for d in devices if d.device_type == "ESP32-CAM"), None)
-    return cam.id if cam else None
+    c3 = next((d for d in devices if d.device_type == "ESP32-C3"), None)
+    return c3.id if c3 else None
 
 
 async def _send_action_command(device_id: int, command: dict, action_name: str, bird_id: int):
@@ -73,7 +73,7 @@ async def _send_action_command(device_id: int, command: dict, action_name: str, 
 async def trigger_feeding(
     bird_id: Annotated[int, Query(description="雏鸟ID")],
     current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
-    device_id: Annotated[Optional[int], Query(description="设备ID（可选，不传则自动查找鸟笼CAM设备）")] = None,
+    device_id: Annotated[Optional[int], Query(description="C3设备ID（可选，不传则自动查找鸟笼中的C3设备）")] = None,
     db: Db.Session = Depends(Db.GetDb("TriggerFeeding")),
 ):
     bird = Db.GetBirdById(db, bird_id)
@@ -87,11 +87,11 @@ async def trigger_feeding(
     if perm_err:
         return perm_err
 
-    cam_dev_id = _find_cam_device_id(db, bird_id, device_id)
-    if not cam_dev_id:
+    c3_dev_id = _find_c3_device_id(db, bird_id, device_id)
+    if not c3_dev_id:
         return JSONResponse(
             status_code=400,
-            content=CommonOut(code=400, msg="未找到鸟笼中的CAM设备，无法执行喂食", data=None).model_dump(),
+            content=CommonOut(code=400, msg="未找到鸟笼中的C3设备，无法执行喂食", data=None).model_dump(),
         )
 
     today_count = GetTodayRecordCount(db, bird_id, "feeding")
@@ -104,13 +104,13 @@ async def trigger_feeding(
             }).model_dump(),
         )
 
-    err = await _send_action_command(cam_dev_id, CMD_FEEDING, "喂食", bird_id)
+    err = await _send_action_command(c3_dev_id, CMD_AUTO_FEED, "喂食", bird_id)
     if err:
         return err
 
     record = CreateFeedingRecord(db, bird_id, current_user.id, "feeding")
 
-    await async_log(logger, "info", f"用户 {current_user.username} 触发雏鸟 {bird_id} 喂食操作，设备 {cam_dev_id}")
+    await async_log(logger, "info", f"用户 {current_user.username} 触发雏鸟 {bird_id} 喂食操作，设备 {c3_dev_id}")
 
     return CommonOut(
         msg="喂食指令已发送",

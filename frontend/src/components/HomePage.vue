@@ -613,8 +613,35 @@ const goToDataAnalysis = (cage?: CageSnapshot) => {
   router.push({ path: '/Data', query: { activeTab: 'analysis' } });
 };
 
-const handleFeedAllCages = () => {
-  ElMessage.success('喂食指令已发送至所有鸟笼！');
+const handleFeedAllCages = async () => {
+  let successCount = 0
+  let failCount = 0
+
+  for (const cage of cageSnapshots.value) {
+    if (!cage.c3DeviceId || cage.birdCount === 0) continue
+
+    const cageBird = birds.value.find(b => b.area === cage.area && b.number === cage.number)
+    if (!cageBird) continue
+
+    try {
+      const resp = await api.post(`/api/feeding/trigger?bird_id=${cageBird.id}`)
+      if (resp.code === 200) {
+        successCount++
+      } else {
+        failCount++
+      }
+    } catch {
+      failCount++
+    }
+  }
+
+  if (failCount === 0 && successCount > 0) {
+    ElMessage.success(`喂食指令已发送（${successCount} 个鸟笼）！`)
+  } else if (successCount > 0) {
+    ElMessage.warning(`喂食完成：${successCount} 成功，${failCount} 失败`)
+  } else {
+    ElMessage.warning('没有可喂食的鸟笼（需要C3设备在线且鸟笼中有雏鸟）')
+  }
 };
 
 const handleResize = () => {

@@ -3,6 +3,7 @@ from fastapi import status, Path, Query, Depends, Body, Cookie
 from pydantic import BaseModel
 from typing import Annotated, List
 import jwt
+import os
 from jwt.exceptions import InvalidTokenError
 from datetime import datetime, timedelta, timezone
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -14,7 +15,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/login")
 
 # to get a string like this run:
 # openssl rand -hex 32
-SECRET_KEY = "289313931e02a200f1b5288395d36515d8daa90b279202f879a6da680b974975"
+SECRET_KEY = os.environ.get("SECRET_KEY", "289313931e02a200f1b5288395d36515d8daa90b279202f879a6da680b974975")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
