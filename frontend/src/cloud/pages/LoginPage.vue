@@ -237,7 +237,7 @@ onMounted(async () => {
     if (autoLoginSuccess) {
       ElMessage.success('自动登录成功');
       window.dispatchEvent(new CustomEvent('loginStatusChanged'));
-      router.push('/cloud/my');
+      router.push('/cloud/home');
     }
   } else {
     sessionStorage.removeItem('isFromLogout');
@@ -297,7 +297,7 @@ const handleLogin = async () => {
     }
     
     window.dispatchEvent(new CustomEvent('loginStatusChanged'));
-    router.push('/cloud/my');
+    router.push('/cloud/home');
   } catch (error) {
     console.error('登录错误:', error);
     const errorMessage = (error as Error).message;
