@@ -60,8 +60,8 @@
             <span class="action-dot"></span>
             <span class="action-text">鸟笼喂食</span>
           </div>
-          <button class="feed-all-btn" @click="handleFeedAllCages">
-            <span class="btn-text">一键喂食全部鸟笼</span>
+          <button class="feed-all-btn" :class="{ 'feed-stop': feedingAction === 'start' }" @click="handleFeedAllCages">
+            <span class="btn-text">{{ feedingAction === 'start' ? '一键停止全部喂食' : '一键喂食全部鸟笼' }}</span>
             <span class="btn-ripple"></span>
           </button>
         </div>
@@ -161,6 +161,8 @@ const {
 
 const isMobile = ref(window.innerWidth < 768);
 const loading = ref(true);
+const isFeeding = ref(false);
+const feedingAction = ref<'start' | 'stop'>('stop');
 
 interface Bird {
   id: number;
@@ -613,34 +615,150 @@ const goToDataAnalysis = (cage?: CageSnapshot) => {
   router.push({ path: '/Data', query: { activeTab: 'analysis' } });
 };
 
+const checkFeedStatus = async () => {
+  const token = localStorage.getItem('accessToken')
+  if (!token) return
+
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const host = location.host
+
+  const queries: Promise<boolean>[] = []
+
+  for (const cage of cageSnapshots.value) {
+    if (!cage.c3DeviceId) continue
+
+    const promise = new Promise<boolean>((resolve) => {
+      const wsUrl = `${protocol}//${host}/api/stream/viewer/ws/${cage.c3DeviceId}?token=${token}`
+      let resolved = false
+
+      const finish = (isActive: boolean) => {
+        if (resolved) return
+        resolved = true
+        try { ws.close() } catch {}
+        resolve(isActive)
+      }
+
+      const ws = new WebSocket(wsUrl)
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ code: 0, item: 'device', key: 'feed', values: '' }))
+      }
+
+      ws.onmessage = (event) => {
+        if (resolved) return
+        try {
+          const data = JSON.parse(event.data)
+          if (data.code === 1 && data.key === 'feed') {
+            finish(data.values === 'active')
+          }
+        } catch {
+          // 非 JSON 消息忽略
+        }
+      }
+
+      ws.onerror = () => finish(false)
+
+      setTimeout(() => finish(false), 5000)
+    })
+
+    queries.push(promise)
+  }
+
+  if (queries.length === 0) return
+
+  const results = await Promise.allSettled(queries)
+  const anyActive = results.some(r => r.status === 'fulfilled' && r.value === true)
+
+  feedingAction.value = anyActive ? 'start' : 'stop'
+}
+
 const handleFeedAllCages = async () => {
+  if (isFeeding.value) {
+    ElMessage.warning('喂食操作进行中，请稍后再试')
+    return
+  }
+
+  const token = localStorage.getItem('accessToken')
+  if (!token) {
+    ElMessage.warning('请先登录')
+    return
+  }
+
+  const feedAction = feedingAction.value === 'start' ? 'stop' : 'start'
+  isFeeding.value = true
+
+  const feedValue = feedAction === 'start' ? 1 : 0
   let successCount = 0
   let failCount = 0
+  const feedPromises: Promise<void>[] = []
+
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const host = location.host
 
   for (const cage of cageSnapshots.value) {
     if (!cage.c3DeviceId || cage.birdCount === 0) continue
 
-    const cageBird = birds.value.find(b => b.area === cage.area && b.number === cage.number)
-    if (!cageBird) continue
+    const promise = new Promise<void>((resolve) => {
+      const wsUrl = `${protocol}//${host}/api/stream/viewer/ws/${cage.c3DeviceId}?token=${token}`
+      let resolved = false
 
-    try {
-      const resp = await api.post(`/api/feeding/trigger?bird_id=${cageBird.id}`)
-      if (resp.code === 200) {
-        successCount++
-      } else {
-        failCount++
+      const finish = (success: boolean) => {
+        if (resolved) return
+        resolved = true
+        if (success) successCount++
+        else failCount++
+        try { ws.close() } catch {}
+        resolve()
       }
-    } catch {
-      failCount++
-    }
+
+      const ws = new WebSocket(wsUrl)
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ code: 1, item: 'device', key: 'feed', values: feedValue }))
+      }
+
+      ws.onmessage = (event) => {
+        if (resolved) return
+        try {
+          const data = JSON.parse(event.data)
+          if (data.key === 'feed' && (data.values === 'started' || data.values === 'stopped')) {
+            finish(true)
+          }
+        } catch {
+          // 非 JSON 消息（如二进制帧）忽略
+        }
+      }
+
+      ws.onerror = () => finish(false)
+
+      setTimeout(() => finish(false), 10000)
+    })
+
+    feedPromises.push(promise)
   }
 
+  if (feedPromises.length === 0) {
+    isFeeding.value = false
+    ElMessage.warning('没有可喂食的鸟笼（需要C3设备在线且鸟笼中有雏鸟）')
+    return
+  }
+
+  await Promise.allSettled(feedPromises)
+
+  isFeeding.value = false
+
   if (failCount === 0 && successCount > 0) {
-    ElMessage.success(`喂食指令已发送（${successCount} 个鸟笼）！`)
+    if (feedAction === 'start') {
+      feedingAction.value = 'start'
+      ElMessage.success(`喂食已开始（${successCount} 个鸟笼）！`)
+    } else {
+      feedingAction.value = 'stop'
+      ElMessage.success(`喂食已停止（${successCount} 个鸟笼）！`)
+    }
   } else if (successCount > 0) {
     ElMessage.warning(`喂食完成：${successCount} 成功，${failCount} 失败`)
   } else {
-    ElMessage.warning('没有可喂食的鸟笼（需要C3设备在线且鸟笼中有雏鸟）')
+    ElMessage.warning('喂食失败，请确认设备在线后重试')
   }
 };
 
@@ -665,7 +783,7 @@ onMounted(() => {
     const endTime = formatLocalISO(now);
     const deviceIds = devices.value.map(d => d.id);
     if (deviceIds.length > 0) {
-      fetchDeviceLogs(deviceIds, 0, 100, ['WARNING', 'ERROR'], startTime, endTime)
+      fetchDeviceLogs(deviceIds, 0, 500, ['WARNING', 'ERROR'], startTime, endTime)
         .catch(err => console.error('获取告警日志失败:', err));
     }
   });
@@ -680,6 +798,7 @@ onMounted(() => {
       if (cageSnapshots.value.length > 0) {
         selectCage(cageSnapshots.value[0]!);
       }
+      checkFeedStatus();
     });
 });
 
@@ -997,6 +1116,23 @@ onUnmounted(() => {
 
 .feed-all-btn:active .btn-ripple {
   animation: feedRipple 0.6s ease-out;
+}
+
+.feed-all-btn.feed-stop {
+  background: linear-gradient(135deg, #f87171 0%, #ef4444 50%, #dc2626 100%);
+  box-shadow: 0 2px 14px rgba(239, 68, 68, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.feed-all-btn.feed-stop::before {
+  background: linear-gradient(135deg, #fca5a5 0%, #f87171 50%, #ef4444 100%);
+}
+
+.feed-all-btn.feed-stop:hover {
+  box-shadow: 0 8px 28px rgba(239, 68, 68, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.feed-all-btn.feed-stop:active {
+  box-shadow: 0 1px 8px rgba(239, 68, 68, 0.25);
 }
 
 @keyframes feedRipple {

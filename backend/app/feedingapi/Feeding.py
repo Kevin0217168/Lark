@@ -16,7 +16,7 @@ from datacontrol.FeedingDb import (
 )
 
 from datacontrol.DeviceDb import GetDevicesByAreaNumber
-from deviceapi.Device import CMD_AUTO_FEED, esp32IdDict, _is_device_ws_alive
+from deviceapi.Device import CMD_FEED_START, CMD_FEED_STOP, esp32IdDict, _is_device_ws_alive
 
 router = APIRouter(prefix="/feeding", tags=["Feeding"])
 
@@ -104,7 +104,7 @@ async def trigger_feeding(
             }).model_dump(),
         )
 
-    err = await _send_action_command(c3_dev_id, CMD_AUTO_FEED, "喂食", bird_id)
+    err = await _send_action_command(c3_dev_id, CMD_FEED_START, "喂食", bird_id)
     if err:
         return err
 
@@ -113,8 +113,10 @@ async def trigger_feeding(
     await async_log(logger, "info", f"用户 {current_user.username} 触发雏鸟 {bird_id} 喂食操作，设备 {c3_dev_id}")
 
     return CommonOut(
-        msg="喂食指令已发送",
+        msg="喂食已开始，2 分钟后自动停止.",
         data={
+            "key": "feed",
+            "values": "started",
             "record": FeedingRecordOut.from_orm(record).model_dump(),
             "remaining": DAILY_FEEDING_LIMIT - (today_count + 1),
         }
@@ -158,6 +160,53 @@ async def get_feeding_status(
         "feeding": feeding_status.model_dump(),
         "bird_id": bird_id,
     })
+
+
+@router.post(
+    "/stop",
+    response_model=CommonOut[dict],
+    summary="停止喂食操作",
+)
+async def stop_feeding(
+    bird_id: Annotated[int, Query(description="雏鸟ID")],
+    current_user: Annotated[Db.M_Users, Depends(Security.GetCurrentUser)],
+    device_id: Annotated[Optional[int], Query(description="C3设备ID（可选，不传则自动查找鸟笼中的C3设备）")] = None,
+    db: Db.Session = Depends(Db.GetDb("StopFeeding")),
+):
+    bird = Db.GetBirdById(db, bird_id)
+    if not bird:
+        return JSONResponse(
+            status_code=404,
+            content=CommonOut(code=404, msg="雏鸟不存在", data=None).model_dump(),
+        )
+
+    perm_err = _check_feeding_permission(db, current_user, bird_id)
+    if perm_err:
+        return perm_err
+
+    c3_dev_id = _find_c3_device_id(db, bird_id, device_id)
+    if not c3_dev_id:
+        return JSONResponse(
+            status_code=400,
+            content=CommonOut(code=400, msg="未找到鸟笼中的C3设备，无法执行停止喂食", data=None).model_dump(),
+        )
+
+    err = await _send_action_command(c3_dev_id, CMD_FEED_STOP, "停止喂食", bird_id)
+    if err:
+        return err
+
+    record = CreateFeedingRecord(db, bird_id, current_user.id, "stop_feeding")
+
+    await async_log(logger, "info", f"用户 {current_user.username} 停止雏鸟 {bird_id} 喂食操作，设备 {c3_dev_id}")
+
+    return CommonOut(
+        msg="喂食已停止.",
+        data={
+            "key": "feed",
+            "values": "stopped",
+            "record": FeedingRecordOut.from_orm(record).model_dump(),
+        }
+    )
 
 
 @router.get(

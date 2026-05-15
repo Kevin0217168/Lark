@@ -8,16 +8,6 @@
     <div class="data-content">
       <!-- 实时数据 -->
       <div v-if="activeTab === 'realtime'" class="realtime-container">
-        <!-- 所有设备离线提示 -->
-        <el-alert
-          v-if="showAllOfflineAlert"
-          title="所有设备均处于离线状态"
-          type="warning"
-          :closable="false"
-          show-icon
-          style="margin-bottom: 16px;"
-        />
-        
         <!-- 左侧数据区域 -->
         <div class="data-left">
           <!-- 设备选择 -->
@@ -110,60 +100,135 @@
               </div>
             </div>
           </div>
+          
+          <!-- INA231 电流电压功率 -->
+          <div class="ina231-container" v-if="selectedC3Device">
+            <h3>电流电压功率 (INA231)</h3>
+            <div class="ina231-card">
+              <div class="ina231-left">
+                <div class="ina231-value-item">
+                  <span class="ina231-value-label">电压</span>
+                  <span class="ina231-number">{{ ina231BusV }}<small>V</small></span>
+                </div>
+                <div class="ina231-value-item">
+                  <span class="ina231-value-label">电流</span>
+                  <span class="ina231-number">{{ ina231CurrentMa }}<small>mA</small></span>
+                </div>
+              </div>
+              <div class="ina231-right">
+                <div ref="ina231GaugeRef" class="ina231-gauge-chart"></div>
+                <div class="gauge-label">功率</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 称重功能模块 -->
+          <div class="scale-container" v-if="selectedC3Device">
+            <h3>称重模块 (HX711)</h3>
+            <div class="scale-card">
+              <div class="scale-display">
+                <div class="scale-value">
+                  <span class="scale-number">{{ weightValue }}</span>
+                  <span class="scale-unit">g</span>
+                </div>
+                <div class="scale-status" :class="{ 'overload': isOverload, 'uncalibrated': isUncalibrated }">
+                  <span v-if="isUncalibrated">⚠️ 未标定</span>
+                  <span v-else-if="isOverload">⚠️ 超量程</span>
+                  <span v-else-if="isWeightRefreshing || isScaleLoading">⏳ 加载中...</span>
+                  <span v-else class="ready">✓ 就绪</span>
+                </div>
+              </div>
+              <div class="scale-info">
+                <span>量程上限: {{ fullScaleValue }}g</span>
+              </div>
+              <div class="scale-controls">
+                <el-button 
+                  :type="isWeightRefreshing ? 'danger' : 'primary'"
+                  size="small" 
+                  @click="toggleWeightRefresh"
+                  :disabled="!isWsC3Connected"
+                >
+                  {{ isWeightRefreshing ? '⏹ 停止刷新' : '📏 读取重量' }}
+                </el-button>
+                <el-button 
+                  type="warning" 
+                  size="small" 
+                  @click="performTare"
+                  :disabled="!isWsC3Connected || isScaleLoading"
+                >
+                  🔄 去皮归零
+                </el-button>
+              </div>
+            </div>
+          </div>
         </div>
         
         <!-- 右侧视频流区域 -->
         <div class="data-right">
           <div class="video-header">
-            <h3>实时监控 (ESP32-CAM)</h3>
+            <div class="video-header-top">
+              <h3>实时监控 (ESP32-CAM)</h3>
+            </div>
             <div class="video-controls">
-              <el-button 
-                type="warning"
-                size="small"
-                @click="reconnectWebSocket"
-                :disabled="!camDeviceId || isWebSocketConnected"
-              >
-                <el-icon><Refresh /></el-icon>
-                手动重连
-              </el-button>
-              <el-button 
-                :type="flipHorizontal ? 'primary' : 'default'"
-                size="small"
-                @click="toggleHorizontalFlip"
-              >
-                <el-icon><Switch /></el-icon>
-                左右翻转
-              </el-button>
-              <el-button 
-                :type="flipVertical ? 'primary' : 'default'"
-                size="small"
-                @click="toggleVerticalFlip"
-              >
-                <el-icon><Sort /></el-icon>
-                上下翻转
-              </el-button>
-              <el-button 
-                :type="lightOn ? 'warning' : 'default'"
-                size="small"
-                @click="toggleLight"
-              >
-                {{ lightOn ? '💡 关灯' : '🔌 开灯' }}
-              </el-button>
-              <div class="quality-control">
-                <span class="quality-label">视频质量</span>
-                <el-slider v-model="imageQuality" :min="1" :max="63" :step="1" :show-tooltip="false" style="width: 120px" />
+              <div class="video-controls-row">
+                <el-button 
+                  type="warning"
+                  size="small"
+                  @click="reconnectWebSocket"
+                  :disabled="!camDeviceId || isWebSocketConnected"
+                >
+                  <el-icon><Refresh /></el-icon>
+                  手动重连
+                </el-button>
+                <el-button 
+                  :type="flipHorizontal ? 'primary' : 'default'"
+                  size="small"
+                  @click="toggleHorizontalFlip"
+                >
+                  <el-icon><Switch /></el-icon>
+                  左右翻转
+                </el-button>
+                <el-button 
+                  :type="flipVertical ? 'primary' : 'default'"
+                  size="small"
+                  @click="toggleVerticalFlip"
+                >
+                  <el-icon><Sort /></el-icon>
+                  上下翻转
+                </el-button>
+                <el-button 
+                  :type="lightOn ? 'warning' : 'default'"
+                  size="small"
+                  @click="toggleLight"
+                >
+                  {{ lightOn ? '💡 关灯' : '🔌 开灯' }}
+                </el-button>
+                <el-button 
+                  :type="fanOn ? 'success' : 'default'"
+                  size="small"
+                  @click="toggleFan"
+                  :disabled="!isWsC3Connected"
+                >
+                  {{ fanOn ? '🌀 关通风' : '💨 开通风' }}
+                </el-button>
               </div>
-              <div class="quality-control">
-                <span class="quality-label">视频尺寸</span>
-                <el-select v-model="frameSize" style="width: 120px" size="small">
-                  <el-option label="128x128" value="FRAMESIZE_128X128" />
-                  <el-option label="240x240" value="FRAMESIZE_240X240" />
-                  <el-option label="320x320" value="FRAMESIZE_320X320" />
-                  <el-option label="VGA" value="FRAMESIZE_VGA" />
-                  <el-option label="SVGA" value="FRAMESIZE_SVGA" />
-                  <el-option label="HD" value="FRAMESIZE_HD" />
-                  <el-option label="FHD" value="FRAMESIZE_FHD" />
-                </el-select>
+              <div class="video-controls-row">
+                <div class="quality-control">
+                  <span class="quality-label">视频质量</span>
+                  <el-slider v-model="imageQuality" :min="1" :max="63" :step="1" :show-tooltip="false" style="width: 120px" />
+                </div>
+                <div class="quality-control">
+                  <span class="quality-label">视频尺寸</span>
+                  <el-select v-model="frameSize" style="width: 120px" size="small">
+                    <el-option label="128x128" value="FRAMESIZE_128X128" />
+                    <el-option label="240x240" value="FRAMESIZE_240X240" />
+                    <el-option label="320x320" value="FRAMESIZE_320X320" />
+                    <el-option label="VGA" value="FRAMESIZE_VGA" />
+                    <el-option label="SVGA" value="FRAMESIZE_SVGA" />
+                    <el-option label="HD" value="FRAMESIZE_HD" />
+                    <el-option label="FHD" value="FRAMESIZE_FHD" />
+                  </el-select>
+                </div>
               </div>
             </div>
           </div>
@@ -270,6 +335,11 @@
           <div class="chart-container">
             <h3>紫外线指数 <span class="time-range">({{ timeRangeText }})</span></h3>
             <div ref="analysisUvChartRef" class="chart"></div>
+          </div>
+          <!-- 电流电压数据 -->
+          <div class="chart-container">
+            <h3>电压电流功率 <span class="time-range">({{ timeRangeText }})</span></h3>
+            <div ref="analysisIna231ChartRef" class="chart"></div>
           </div>
         </div>
       </div>
@@ -404,16 +474,6 @@
         </el-select>
       </div>
       
-      <!-- 所有设备离线提示 -->
-      <el-alert
-        v-if="showAllOfflineAlert"
-        title="所有设备均处于离线状态"
-        type="warning"
-        :closable="false"
-        show-icon
-        style="margin-bottom: 16px;"
-      />
-      
       <!-- 鸟笼设备信息卡片 -->
       <div v-if="selectedDevice || selectedC3Device" class="device-data-card">
         <div class="data-header">
@@ -482,12 +542,75 @@
         </div>
       </div>
       
+      <!-- INA231 电流电压功率（移动端） -->
+      <div v-if="selectedC3Device" class="mobile-ina231-container">
+        <h3>电流电压功率 (INA231)</h3>
+        <div class="mobile-ina231-card">
+          <div class="mobile-ina231-left">
+            <div class="mobile-ina231-value-item">
+              <span class="mobile-ina231-value-label">电压</span>
+              <span class="mobile-ina231-number">{{ ina231BusV }}<small>V</small></span>
+            </div>
+            <div class="mobile-ina231-value-item">
+              <span class="mobile-ina231-value-label">电流</span>
+              <span class="mobile-ina231-number">{{ ina231CurrentMa }}<small>mA</small></span>
+            </div>
+          </div>
+          <div class="mobile-ina231-right">
+            <div ref="ina231GaugeRefMobile" class="mobile-ina231-gauge-chart"></div>
+            <div class="mobile-gauge-label">功率</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 称重模块（移动端） -->
+      <div v-if="selectedC3Device" class="mobile-scale-container">
+        <h3>称重模块 (HX711)</h3>
+        <div class="mobile-scale-card">
+          <div class="mobile-scale-display">
+            <div class="mobile-scale-value">
+              <span class="mobile-scale-number">{{ weightValue }}</span>
+              <span class="mobile-scale-unit">g</span>
+            </div>
+            <div class="mobile-scale-status" :class="{ 'overload': isOverload, 'uncalibrated': isUncalibrated }">
+              <span v-if="isUncalibrated">⚠️ 未标定</span>
+              <span v-else-if="isOverload">⚠️ 超量程</span>
+              <span v-else-if="isWeightRefreshing || isScaleLoading">⏳ 加载中...</span>
+              <span v-else>✓ 就绪</span>
+            </div>
+          </div>
+          <div class="mobile-scale-info">
+            <span>量程上限: {{ fullScaleValue }}g</span>
+          </div>
+          <div class="mobile-scale-controls">
+            <el-button 
+              :type="isWeightRefreshing ? 'danger' : 'primary'"
+              size="small" 
+              @click="toggleWeightRefresh"
+              :disabled="!isWsC3Connected"
+            >
+              {{ isWeightRefreshing ? '⏹ 停止刷新' : '📏 读取重量' }}
+            </el-button>
+            <el-button 
+              type="warning" 
+              size="small" 
+              @click="performTare"
+              :disabled="!isWsC3Connected || isScaleLoading"
+            >
+              🔄 去皮归零
+            </el-button>
+          </div>
+        </div>
+      </div>
+      
       <!-- 实时监控 -->
       <div v-if="selectedDevice" class="video-section">
         <div class="video-header">
           <div class="video-header-top">
             <h3>实时监控 (ESP32-CAM)</h3>
-            <div class="video-controls">
+          </div>
+          <div class="video-controls">
+            <div class="video-controls-row">
               <el-button 
                 type="warning"
                 size="small"
@@ -513,12 +636,22 @@
                 <el-icon><Sort /></el-icon>
                 上下
               </el-button>
+            </div>
+            <div class="video-controls-row">
               <el-button 
                 :type="lightOn ? 'warning' : 'default'"
                 size="small"
                 @click="toggleLight"
               >
                 {{ lightOn ? '💡' : '🔌' }}
+              </el-button>
+              <el-button 
+                :type="fanOn ? 'success' : 'default'"
+                size="small"
+                @click="toggleFan"
+                :disabled="!isWsC3Connected"
+              >
+                {{ fanOn ? '🌀' : '💨' }}
               </el-button>
             </div>
           </div>
@@ -647,6 +780,10 @@
         <div class="chart-card">
           <h3>紫外线指数 <span class="time-range">({{ timeRangeText }})</span></h3>
           <div ref="analysisUvChartRef" class="chart"></div>
+        </div>
+        <div class="chart-card">
+          <h3>电压电流功率 <span class="time-range">({{ timeRangeText }})</span></h3>
+          <div ref="analysisIna231ChartRef" class="chart"></div>
         </div>
       </div>
     </div>
@@ -875,6 +1012,8 @@ const isWebSocketConnected = computed(() => {
   return ws !== null && ws.readyState === WebSocket.OPEN;
 });
 
+const isWsC3Connected = ref(false);
+
 // 实时温湿度数据定时器
 let realtimeDataTimer: number | null = null;
 
@@ -938,6 +1077,8 @@ const autoSelectFirstOnlineDevice = async () => {
     nextTick(() => {
       initGaugeCharts();
     });
+    startRealtimeMonitoring();
+    connectC3WebSocket();
   } else {
     selectedBirdcageKey.value = '';
     showAllOfflineAlert.value = true;
@@ -966,6 +1107,7 @@ const handleBirdcageChange = async () => {
       initGaugeCharts();
     });
     startRealtimeMonitoring();
+    connectC3WebSocket();
   } else if (activeTab.value === 'analysis') {
     nextTick(async () => {
       await initCharts();
@@ -1238,6 +1380,7 @@ const analysisAqiChartRef = ref<HTMLElement | null>(null);
 const analysisSoundChartRef = ref<HTMLElement | null>(null);
 const analysisLuxChartRef = ref<HTMLElement | null>(null);
 const analysisUvChartRef = ref<HTMLElement | null>(null);
+const analysisIna231ChartRef = ref<HTMLElement | null>(null);
 
 // 时间范围状态
 const timeRange = ref<'today' | 'two_days'>('today');
@@ -1294,6 +1437,7 @@ let analysisAqiChart: echarts.ECharts | null = null;
 let analysisSoundChart: echarts.ECharts | null = null;
 let analysisLuxChart: echarts.ECharts | null = null;
 let analysisUvChart: echarts.ECharts | null = null;
+let analysisIna231Chart: echarts.ECharts | null = null;
 
 // 实时监控图片帧
 const currentFrameImage = ref<string>('');
@@ -1305,6 +1449,9 @@ let lastFrameTimestamp = 0;
 let previousFrameTimestamp = 0;
 let streamCheckInterval: number | null = null;
 let ws: WebSocket | null = null;
+const wsC3 = ref<WebSocket | null>(null);
+
+const getWsBaseUrl = () => location.hostname === 'localhost' ? 'wss://lark.mintlab.top' : '';
 let currentImageUrl: string = '';
 
 // 帧率计算相关
@@ -1357,7 +1504,24 @@ const dbGaugeRefMobile = ref<HTMLElement | null>(null);
 const luxGaugeRef = ref<HTMLElement | null>(null);
 const uvGaugeRef = ref<HTMLElement | null>(null);
 const luxGaugeRefMobile = ref<HTMLElement | null>(null);
+
+// 称重功能变量
+const weightValue = ref('--');
+const fullScaleValue = ref(5000);
+const isOverload = ref(false);
+const isUncalibrated = ref(false);
+const isScaleLoading = ref(false);
+let weightRefreshTimer: number | null = null;
+const isWeightRefreshing = ref(false);
 const uvGaugeRefMobile = ref<HTMLElement | null>(null);
+const ina231GaugeRef = ref<HTMLElement | null>(null);
+const ina231GaugeRefMobile = ref<HTMLElement | null>(null);
+
+// INA231 实时数据
+const ina231BusV = ref('--');
+const ina231CurrentMa = ref('--');
+const ina231PowerMw = ref(0);
+
 let aqiGaugeChart: echarts.ECharts | null = null;
 let dbGaugeChart: echarts.ECharts | null = null;
 let aqiGaugeChartMobile: echarts.ECharts | null = null;
@@ -1366,6 +1530,8 @@ let luxGaugeChart: echarts.ECharts | null = null;
 let uvGaugeChart: echarts.ECharts | null = null;
 let luxGaugeChartMobile: echarts.ECharts | null = null;
 let uvGaugeChartMobile: echarts.ECharts | null = null;
+let ina231GaugeChart: echarts.ECharts | null = null;
+let ina231GaugeChartMobile: echarts.ECharts | null = null;
 
 // 环境数据采集定时器
 let envDataTimer: number | null = null;
@@ -1435,8 +1601,8 @@ const fetchAllEnvData = async () => {
   try {
     const response = await api.get('/api/sensor-upload', {
       device_id: c3DeviceId.value,
-      sensor_type: ['pms9103m', 'sound_meter', 'veml7700', 'uv_meter'],
-      limit: 4,
+      sensor_type: ['pms9103m', 'sound_meter', 'veml7700', 'uv_meter', 'ina231'],
+      limit: 5,
     });
     if (response.code === 200 && response.data && Array.isArray(response.data)) {
       for (const record of response.data) {
@@ -1458,6 +1624,18 @@ const fetchAllEnvData = async () => {
             if (parsed.uv_index !== undefined) {
               const raw = Number(parsed.uv_index);
               uvValue.value = isFinite(raw) ? Math.min(Math.max(raw, 0), 15) : 0;
+            }
+            break;
+          case 'ina231':
+            if (parsed.bus_v !== undefined) {
+              ina231BusV.value = Number(parsed.bus_v).toFixed(3);
+            }
+            if (parsed.current_ma !== undefined) {
+              ina231CurrentMa.value = Number(parsed.current_ma).toFixed(2);
+            }
+            if (parsed.power_mw !== undefined) {
+              const raw = Number(parsed.power_mw);
+              ina231PowerMw.value = isFinite(raw) ? Math.max(raw, 0) : 0;
             }
             break;
         }
@@ -1503,6 +1681,10 @@ const initGaugeCharts = () => {
       if (uvGaugeChartMobile) uvGaugeChartMobile.dispose();
       uvGaugeChartMobile = echarts.init(uvGaugeRefMobile.value);
     }
+    if (ina231GaugeRefMobile.value) {
+      if (ina231GaugeChartMobile) ina231GaugeChartMobile.dispose();
+      ina231GaugeChartMobile = echarts.init(ina231GaugeRefMobile.value);
+    }
   } else {
     if (aqiGaugeRef.value) {
       if (aqiGaugeChart) aqiGaugeChart.dispose();
@@ -1520,6 +1702,10 @@ const initGaugeCharts = () => {
       if (uvGaugeChart) uvGaugeChart.dispose();
       uvGaugeChart = echarts.init(uvGaugeRef.value);
     }
+    if (ina231GaugeRef.value) {
+      if (ina231GaugeChart) ina231GaugeChart.dispose();
+      ina231GaugeChart = echarts.init(ina231GaugeRef.value);
+    }
   }
   initGaugeChartOption();
   updateGaugeCharts();
@@ -1529,12 +1715,14 @@ const getActiveGaugeCharts = () => {
   if (isMobile.value) {
     return {
       aqi: aqiGaugeChartMobile, db: dbGaugeChartMobile,
-      lux: luxGaugeChartMobile, uv: uvGaugeChartMobile
+      lux: luxGaugeChartMobile, uv: uvGaugeChartMobile,
+      ina231: ina231GaugeChartMobile,
     };
   }
   return {
     aqi: aqiGaugeChart, db: dbGaugeChart,
-    lux: luxGaugeChart, uv: uvGaugeChart
+    lux: luxGaugeChart, uv: uvGaugeChart,
+    ina231: ina231GaugeChart,
   };
 };
 
@@ -1640,7 +1828,9 @@ const initGaugeChartOption = () => {
   const luxBg = getLuxBg(luxValue.value);
   const uvColor = getUVColor(uvValue.value);
   const uvBg = getUVBg(uvValue.value);
-  const { aqi, db, lux, uv } = getActiveGaugeCharts();
+  const ina231Color = '#8b5cf6';
+  const ina231Bg = '#8b5cf61a';
+  const { aqi, db, lux, uv, ina231 } = getActiveGaugeCharts();
 
   if (aqi) {
     aqi.setOption(getGaugeOption(300, aqiColor, aqiBg, aqiValue.value, 'AQI'));
@@ -1653,6 +1843,10 @@ const initGaugeChartOption = () => {
   }
   if (uv) {
     uv.setOption(getGaugeOption(12, uvColor, uvBg, uvValue.value, 'UV'));
+  }
+  if (ina231) {
+    const formatter = (v: number) => (v / 1000).toFixed(2) + ' W';
+    ina231.setOption(getGaugeOption(20000, ina231Color, ina231Bg, ina231PowerMw.value, 'W', formatter));
   }
 };
 
@@ -1665,7 +1859,9 @@ const updateGaugeCharts = () => {
   const luxBg = getLuxBg(luxValue.value);
   const uvColor = getUVColor(uvValue.value);
   const uvBg = getUVBg(uvValue.value);
-  const { aqi, db, lux, uv } = getActiveGaugeCharts();
+  const ina231Color = '#8b5cf6';
+  const ina231Bg = '#8b5cf61a';
+  const { aqi, db, lux, uv, ina231 } = getActiveGaugeCharts();
 
   if (aqi) {
     aqi.setOption(getGaugeOption(300, aqiColor, aqiBg, aqiValue.value, 'AQI'));
@@ -1678,6 +1874,10 @@ const updateGaugeCharts = () => {
   }
   if (uv) {
     uv.setOption(getGaugeOption(12, uvColor, uvBg, uvValue.value, 'UV'));
+  }
+  if (ina231) {
+    const formatter = (v: number) => (v / 1000).toFixed(2) + ' W';
+    ina231.setOption(getGaugeOption(20000, ina231Color, ina231Bg, ina231PowerMw.value, 'W', formatter));
   }
 };
 
@@ -1773,6 +1973,152 @@ const toggleLight = async () => {
   }
 };
 
+// 通风开关
+const fanOn = ref(false);
+const toggleFan = () => {
+  if (!wsC3.value || wsC3.value.readyState !== WebSocket.OPEN) {
+    ElMessage.warning('C3设备WebSocket连接未建立，无法控制通风')
+    return
+  }
+  const fanSpeed = fanOn.value ? 0 : 70
+  const message = JSON.stringify({
+    code: 1,
+    item: 'device',
+    key: 'fan',
+    values: fanSpeed
+  })
+  wsC3.value.send(message)
+  fanOn.value = !fanOn.value
+};
+
+// 称重功能 - 查询重量
+const fetchWeight = () => {
+  if (!isWsC3Connected.value) {
+    stopWeightRefreshTimer();
+    isWeightRefreshing.value = false;
+    return
+  }
+
+  if (!wsC3.value || wsC3.value.readyState !== WebSocket.OPEN) {
+    isWsC3Connected.value = false;
+    stopWeightRefreshTimer();
+    isWeightRefreshing.value = false;
+    return
+  }
+
+  isScaleLoading.value = true;
+
+  const message = JSON.stringify({
+    code: 0,
+    item: 'scale',
+    key: 'weight',
+    values: ''
+  });
+
+  try {
+    wsC3.value.send(message);
+  } catch (error) {
+    isScaleLoading.value = false;
+    ElMessage.error('发送重量查询请求失败');
+  }
+};
+
+// 切换重量自动刷新
+const toggleWeightRefresh = () => {
+  if (!isWsC3Connected.value) {
+    ElMessage.warning('C3设备WebSocket连接未建立，无法读取重量')
+    return
+  }
+
+  if (isWeightRefreshing.value) {
+    stopWeightRefreshTimer();
+    isWeightRefreshing.value = false;
+    isScaleLoading.value = false;
+  } else {
+    isWeightRefreshing.value = true;
+    startWeightRefreshTimer();
+  }
+};
+
+// 称重功能 - 去皮归零
+const performTare = () => {
+  if (!wsC3.value || wsC3.value.readyState !== WebSocket.OPEN) {
+    ElMessage.warning('C3设备WebSocket连接未建立，无法执行去皮')
+    return
+  }
+  
+  isScaleLoading.value = true;
+  
+  const message = JSON.stringify({
+    code: 1,
+    item: 'scale',
+    key: 'tare',
+    values: ''
+  });
+  
+  try {
+    wsC3.value.send(message);
+  } catch (error) {
+    isScaleLoading.value = false;
+    ElMessage.error('发送去皮请求失败');
+  }
+};
+
+// 解析称重响应数据
+const handleScaleResponse = (data: any) => {
+  try {
+    isScaleLoading.value = false;
+    
+    if (data.key === 'weight') {
+      const values = JSON.parse(data.values);
+      
+      if (values.status === 'uncalibrated') {
+        weightValue.value = '0.0';
+        isUncalibrated.value = true;
+        isOverload.value = false;
+      } else {
+        weightValue.value = values.weight_g.toFixed(1);
+        isOverload.value = values.overload === true;
+        isUncalibrated.value = false;
+        if (values.full_scale_g !== undefined) {
+          fullScaleValue.value = values.full_scale_g;
+        }
+      }
+    } else if (data.key === 'tare') {
+      if (data.values === 'ok') {
+        ElMessage.success('去皮成功');
+        weightValue.value = '0.0';
+        isOverload.value = false;
+        isUncalibrated.value = false;
+      } else {
+        ElMessage.error(data.msg || '去皮失败');
+      }
+    }
+  } catch (error) {
+    console.error('解析称重响应失败:', error);
+    isScaleLoading.value = false;
+  }
+};
+
+// 启动重量刷新定时器（每0.5秒刷新一次）
+const startWeightRefreshTimer = () => {
+  stopWeightRefreshTimer();
+  
+  fetchWeight();
+  
+  weightRefreshTimer = window.setInterval(() => {
+    fetchWeight();
+  }, 1000);
+};
+
+// 停止重量刷新定时器
+const stopWeightRefreshTimer = () => {
+  if (weightRefreshTimer) {
+    clearInterval(weightRefreshTimer);
+    weightRefreshTimer = null;
+  }
+};
+
 // 处理接收到的图片帧数据
 const handleFrameData = (data: any) => {
   try {
@@ -1860,7 +2206,7 @@ const startRealtimeMonitoring = async () => {
       return;
     }
     
-    const wsUrl = `/api/stream/viewer/ws/${selectedDeviceId.value}?token=${token}`;
+    const wsUrl = `${getWsBaseUrl()}/api/stream/viewer/ws/${selectedDeviceId.value}?token=${token}`;
     connectionError.value = '正在开启ws连接';
     ws = new WebSocket(wsUrl);
     
@@ -1874,7 +2220,7 @@ const startRealtimeMonitoring = async () => {
       }
       streamCheckInterval = window.setInterval(() => {
         const now = Date.now();
-        if (now - lastFrameTimestamp > 2000 && currentFrameImage.value) {
+        if (now - lastFrameTimestamp > 5000 && currentFrameImage.value) {
           isStreamDisconnected.value = true;
         }
       }, 2500);
@@ -1911,6 +2257,63 @@ const startRealtimeMonitoring = async () => {
     
   } catch (error) {
     connectionError.value = '建立WSS连接失败';
+  }
+};
+
+// 连接C3设备WebSocket
+const connectC3WebSocket = async () => {
+  console.log('[C3-WS] connectC3WebSocket 调用, c3DeviceId=', c3DeviceId.value);
+  if (!c3DeviceId.value) {
+    console.warn('[C3-WS] c3DeviceId 为空，无法连接。当前 selectedBirdcageKey=', selectedBirdcageKey.value);
+    return;
+  }
+  
+  if (wsC3.value && (wsC3.value.readyState === WebSocket.OPEN || wsC3.value.readyState === WebSocket.CONNECTING)) {
+    wsC3.value.close();
+    wsC3.value = null;
+    isWsC3Connected.value = false;
+  }
+  
+  try {
+    let token = await refreshToken();
+    if (!token) {
+      console.warn('[C3-WS] token 为空，无法连接');
+      return;
+    }
+    
+    const wsUrl = `${getWsBaseUrl()}/api/stream/viewer/ws/${c3DeviceId.value}?token=${token}`;
+    console.log('[C3-WS] 正在连接:', wsUrl);
+    wsC3.value = new WebSocket(wsUrl);
+    
+    wsC3.value.onopen = () => {
+      console.log('[C3-WS] 连接成功');
+      isWsC3Connected.value = true;
+    };
+    
+    wsC3.value.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('[C3-WS] 收到消息:', data);
+        if (data.key === 'weight' || data.key === 'tare') {
+          handleScaleResponse(data);
+        }
+      } catch (error) {
+        console.error('[C3-WS] 消息解析失败:', error, 'raw:', event.data);
+      }
+    };
+    
+    wsC3.value.onerror = () => {
+      console.error('[C3-WS] 连接错误');
+      isWsC3Connected.value = false;
+    };
+    
+    wsC3.value.onclose = (event) => {
+      console.warn('[C3-WS] 连接关闭, code=', event.code, 'reason=', event.reason, 'wasClean=', event.wasClean);
+      isWsC3Connected.value = false;
+    };
+    
+  } catch (error) {
+    console.error('[C3-WS] 建立连接异常:', error);
   }
 };
 
@@ -1986,8 +2389,10 @@ const stopRealtimeMonitoring = async () => {
     streamCheckInterval = null;
   }
   
+  // 停止重量刷新定时器
+  stopWeightRefreshTimer();
+  
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-    // 新的连接模式：WebSocket断开时会自动清理订阅关系
     ws.close();
     ws = null;
   }
@@ -2043,6 +2448,7 @@ const handleResize = () => {
   analysisSoundChart?.resize();
   analysisLuxChart?.resize();
   analysisUvChart?.resize();
+  analysisIna231Chart?.resize();
 };
 
 const formatUTC8DateTime = (ms: number): string => {
@@ -2229,6 +2635,62 @@ const fetchAqiTimeSeries = async (deviceId: number): Promise<{ times: string[]; 
   };
 };
 
+const fetchIna231TimeSeries = async (deviceId: number): Promise<{ times: string[]; busVValues: number[]; currentMaValues: number[]; powerMwValues: number[]; rawTimestamps: string[] }> => {
+  const pairs: { time: string; busV: number; currentMa: number; powerMw: number; rawTime: string }[] = [];
+  try {
+    const nowMs = Date.now();
+    const secondsAgo = timeRange.value === 'today' ? 86400 : 172800;
+    const startTime = formatUTC8DateTime(nowMs + 8 * 3600 * 1000 - secondsAgo * 1000);
+    const response = await api.get('/api/sensor-upload', {
+      device_id: deviceId,
+      sensor_type: 'ina231',
+      start_time: startTime,
+      limit: 1000,
+    });
+    if (response.code === 200 && response.data && Array.isArray(response.data)) {
+      const rawData: any[] = response.data;
+
+      for (const item of rawData) {
+        const ts = new Date(item.timestamp + '+00:00');
+        if (isNaN(ts.getTime())) continue;
+        const msUTC8 = ts.getTime() + 8 * 3600 * 1000;
+        const ts8 = new Date(msUTC8);
+        let parsed: any;
+        try {
+          parsed = typeof item.data === 'string' ? JSON.parse(item.data) : item.data;
+        } catch { continue; }
+        if (parsed.bus_v !== undefined && parsed.bus_v !== null && parsed.current_ma !== undefined && parsed.current_ma !== null) {
+          const rawTime = item.timestamp;
+          const pv = Number(parsed.bus_v);
+          const cm = Number(parsed.current_ma);
+          const pm = parsed.power_mw !== undefined && parsed.power_mw !== null ? Number(parsed.power_mw) : 0;
+          if (timeRange.value === 'two_days') {
+            const month = (ts8.getUTCMonth() + 1).toString().padStart(2, '0');
+            const day = ts8.getUTCDate().toString().padStart(2, '0');
+            const hh = ts8.getUTCHours().toString().padStart(2, '0');
+            const mm = ts8.getUTCMinutes().toString().padStart(2, '0');
+            pairs.push({ time: `${month}/${day} ${hh}:${mm}`, busV: pv, currentMa: cm, powerMw: pm, rawTime });
+          } else {
+            const hh = ts8.getUTCHours().toString().padStart(2, '0');
+            const mm = ts8.getUTCMinutes().toString().padStart(2, '0');
+            pairs.push({ time: `${hh}:${mm}`, busV: pv, currentMa: cm, powerMw: pm, rawTime });
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('获取INA231时间序列数据失败:', error);
+  }
+  pairs.reverse();
+  return {
+    times: pairs.map(p => p.time),
+    busVValues: pairs.map(p => p.busV),
+    currentMaValues: pairs.map(p => p.currentMa),
+    powerMwValues: pairs.map(p => p.powerMw),
+    rawTimestamps: pairs.map(p => p.rawTime),
+  };
+};
+
 // 初始化图表
 const initCharts = async () => {
   if (!camDeviceId.value && !c3DeviceId.value) return;
@@ -2286,6 +2748,8 @@ const areaColorMap: Record<string, string[]> = {
   '#909399': ['rgba(144, 147, 153, 0.3)', 'rgba(144, 147, 153, 0.05)'],
   '#67c23a': ['rgba(103, 194, 58, 0.3)', 'rgba(103, 194, 58, 0.05)'],
   '#f56c6c': ['rgba(245, 108, 108, 0.3)', 'rgba(245, 108, 108, 0.05)'],
+  '#f59e0b': ['rgba(245, 158, 11, 0.3)', 'rgba(245, 158, 11, 0.05)'],
+  '#06b6d4': ['rgba(6, 182, 212, 0.3)', 'rgba(6, 182, 212, 0.05)'],
 };
 
 const filterAndSampleSensorData = async (camId: number) => {
@@ -2370,6 +2834,85 @@ const initDesktopCharts = async () => {
       const uvResult = results['uv_meter']!;
       analysisUvChart.setOption(makeLineChartOption(uvResult.times, uvResult.values, 'UV', '#f56c6c', 'UV指数'));
     }
+
+    // 电压电流功率图表 (INA231)
+    if (analysisIna231ChartRef.value) {
+      analysisIna231Chart?.dispose();
+      analysisIna231Chart = echarts.init(analysisIna231ChartRef.value);
+      const ina231Data = await fetchIna231TimeSeries(c3Id);
+      const busVArr = ina231Data.busVValues.filter(v => v !== undefined && v !== null);
+      const busVMax = busVArr.length > 0 ? Math.max(...busVArr) : 5;
+      const curArr = ina231Data.currentMaValues.filter(v => v !== undefined && v !== null);
+      const curMax = curArr.length > 0 ? Math.max(...curArr) : 100;
+      const pwrArr = ina231Data.powerMwValues.filter(v => v !== undefined && v !== null);
+      const pwrMax = pwrArr.length > 0 ? Math.max(...pwrArr) : 500;
+      analysisIna231Chart.setOption({
+        tooltip: { trigger: 'axis' as const },
+        legend: { data: ['电压', '电流', '功率'], bottom: 0 },
+        grid: { left: '12%', right: '12%', bottom: '15%', top: '12%', containLabel: false },
+        xAxis: { type: 'category' as const, data: ina231Data.times },
+        yAxis: [
+          { type: 'value' as const, name: '电压 (V)', position: 'left', min: 0, max: Math.ceil(busVMax * 1.2 * 100) / 100 },
+          { type: 'value' as const, name: '电流 (mA)', position: 'right', min: 0, max: Math.ceil(curMax * 1.2) },
+          { type: 'value' as const, name: '功率 (mW)', position: 'right', offset: 60, min: 0, max: Math.ceil(pwrMax * 1.2) },
+        ],
+        series: [
+          {
+            name: '电压',
+            data: ina231Data.busVValues,
+            type: 'line' as const,
+            smooth: true,
+            itemStyle: { color: '#f59e0b' },
+            areaStyle: {
+              color: {
+                type: 'linear' as const,
+                x: 0, y: 0, x2: 0, y2: 1,
+                colorStops: [
+                  { offset: 0, color: 'rgba(245, 158, 11, 0.3)' },
+                  { offset: 1, color: 'rgba(245, 158, 11, 0.05)' },
+                ],
+              },
+            },
+          },
+          {
+            name: '电流',
+            data: ina231Data.currentMaValues,
+            type: 'line' as const,
+            smooth: true,
+            yAxisIndex: 1,
+            itemStyle: { color: '#06b6d4' },
+            areaStyle: {
+              color: {
+                type: 'linear' as const,
+                x: 0, y: 0, x2: 0, y2: 1,
+                colorStops: [
+                  { offset: 0, color: 'rgba(6, 182, 212, 0.3)' },
+                  { offset: 1, color: 'rgba(6, 182, 212, 0.05)' },
+                ],
+              },
+            },
+          },
+          {
+            name: '功率',
+            data: ina231Data.powerMwValues,
+            type: 'line' as const,
+            smooth: true,
+            yAxisIndex: 2,
+            itemStyle: { color: '#8b5cf6' },
+            areaStyle: {
+              color: {
+                type: 'linear' as const,
+                x: 0, y: 0, x2: 0, y2: 1,
+                colorStops: [
+                  { offset: 0, color: 'rgba(139, 92, 246, 0.3)' },
+                  { offset: 1, color: 'rgba(139, 92, 246, 0.05)' },
+                ],
+              },
+            },
+          },
+        ],
+      });
+    }
   }
 };
 
@@ -2409,6 +2952,7 @@ const initMobileCharts = async () => {
   analysisSoundChart?.dispose();
   analysisLuxChart?.dispose();
   analysisUvChart?.dispose();
+  analysisIna231Chart?.dispose();
 
   // 温度 & 湿度 (CAM) - 使用 /sensors/grouped 接口
   if (camId) {
@@ -2471,6 +3015,61 @@ const initMobileCharts = async () => {
       const sUvV = uvResult.values.length > 0 ? sampleData(uvResult.values, 12) : [];
       analysisUvChart.setOption(makeMobileLineOption(sUv, sUvV, 'UV指数', '#f56c6c'));
     }
+    // 电压电流功率图表 (INA231)
+    if (analysisIna231ChartRef.value) {
+      analysisIna231Chart = echarts.init(analysisIna231ChartRef.value);
+      const ina231Data = await fetchIna231TimeSeries(c3Id);
+      const sTimes = ina231Data.times.length > 0 ? sampleData(ina231Data.times, 12) : [];
+      const sBusV = ina231Data.busVValues.length > 0 ? sampleData(ina231Data.busVValues, 12) : [];
+      const sCurrent = ina231Data.currentMaValues.length > 0 ? sampleData(ina231Data.currentMaValues, 12) : [];
+      const sPower = ina231Data.powerMwValues.length > 0 ? sampleData(ina231Data.powerMwValues, 12) : [];
+      const busVMin = sBusV.filter(v => v !== undefined && v !== null);
+      const busVMax = busVMin.length > 0 ? Math.max(...busVMin) : 5;
+      const currentMin = sCurrent.filter(v => v !== undefined && v !== null);
+      const currentMax = currentMin.length > 0 ? Math.max(...currentMin) : 100;
+      const pwrMin = sPower.filter(v => v !== undefined && v !== null);
+      const pwrMax = pwrMin.length > 0 ? Math.max(...pwrMin) : 500;
+      const isTwoDays = timeRange.value === 'two_days';
+      analysisIna231Chart.setOption({
+        tooltip: { trigger: 'axis' as const },
+        legend: { data: ['电压', '电流', '功率'], bottom: 0 },
+        grid: { left: '12%', right: '18%', bottom: isTwoDays ? '26%' : '15%', top: '12%', containLabel: false },
+        xAxis: { type: 'category' as const, data: sTimes, axisLabel: { fontSize: isTwoDays ? 8 : 10, rotate: isTwoDays ? 45 : 0, interval: isTwoDays ? 'auto' : 1 } },
+        yAxis: [
+          { type: 'value' as const, name: 'V', position: 'left', nameTextStyle: { fontSize: 10 }, axisLabel: { fontSize: 10 }, min: 0, max: Math.ceil(busVMax * 1.2 * 100) / 100 },
+          { type: 'value' as const, name: 'mA', position: 'right', nameTextStyle: { fontSize: 10 }, axisLabel: { fontSize: 10 }, min: 0, max: Math.ceil(currentMax * 1.2) },
+          { type: 'value' as const, name: 'mW', position: 'right', offset: 45, nameTextStyle: { fontSize: 10 }, axisLabel: { fontSize: 10 }, min: 0, max: Math.ceil(pwrMax * 1.2) },
+        ],
+        series: [
+          {
+            name: '电压',
+            data: sBusV,
+            type: 'line' as const,
+            smooth: true,
+            itemStyle: { color: '#f59e0b' },
+            areaStyle: { color: { type: 'linear' as const, x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(245, 158, 11, 0.3)' }, { offset: 1, color: 'rgba(245, 158, 11, 0.05)' }] } },
+          },
+          {
+            name: '电流',
+            data: sCurrent,
+            type: 'line' as const,
+            smooth: true,
+            yAxisIndex: 1,
+            itemStyle: { color: '#06b6d4' },
+            areaStyle: { color: { type: 'linear' as const, x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(6, 182, 212, 0.3)' }, { offset: 1, color: 'rgba(6, 182, 212, 0.05)' }] } },
+          },
+          {
+            name: '功率',
+            data: sPower,
+            type: 'line' as const,
+            smooth: true,
+            yAxisIndex: 2,
+            itemStyle: { color: '#8b5cf6' },
+            areaStyle: { color: { type: 'linear' as const, x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(139, 92, 246, 0.3)' }, { offset: 1, color: 'rgba(139, 92, 246, 0.05)' }] } },
+          },
+        ],
+      });
+    }
   }
 };
 
@@ -2505,6 +3104,8 @@ onMounted(async () => {
           nextTick(() => {
             initGaugeCharts();
           });
+          startRealtimeMonitoring();
+          connectC3WebSocket();
         }
       } else if (activeTab.value === 'history' && !selectedBirdcageKey.value) {
         if (birdcageGroups.value.length > 0) {
@@ -2556,6 +3157,12 @@ onUnmounted(() => {
   stopRealtimeMonitoring();
   stopRealtimeDataTimer();
   stopEnvDataTimer();
+  stopWeightRefreshTimer();
+  if (wsC3.value && (wsC3.value.readyState === WebSocket.OPEN || wsC3.value.readyState === WebSocket.CONNECTING)) {
+    wsC3.value.close();
+    wsC3.value = null;
+    isWsC3Connected.value = false;
+  }
   // 清理帧率计算定时器
   if (fpsUpdateInterval) {
     clearInterval(fpsUpdateInterval);
@@ -2567,6 +3174,7 @@ onUnmounted(() => {
   analysisSoundChart?.dispose();
   analysisLuxChart?.dispose();
   analysisUvChart?.dispose();
+  analysisIna231Chart?.dispose();
   aqiGaugeChart?.dispose();
   dbGaugeChart?.dispose();
   aqiGaugeChartMobile?.dispose();
@@ -2575,6 +3183,8 @@ onUnmounted(() => {
   uvGaugeChart?.dispose();
   luxGaugeChartMobile?.dispose();
   uvGaugeChartMobile?.dispose();
+  ina231GaugeChart?.dispose();
+  ina231GaugeChartMobile?.dispose();
 });
 
 // 监听activeTab变化，重置设备选择
@@ -2629,6 +3239,7 @@ watch(() => props.activeTab, async (newTab, oldTab) => {
       if (selectedDeviceId.value) {
         nextTick(() => {
           startRealtimeMonitoring();
+          connectC3WebSocket();
         });
       }
     });
@@ -2691,6 +3302,7 @@ watch(() => selectedDeviceId.value, (newDeviceId, oldDeviceId) => {
   nextTick(() => {
     if (newDeviceId && activeTab.value === 'realtime') {
       startRealtimeMonitoring();
+      connectC3WebSocket();
     }
   });
 });
@@ -2944,12 +3556,179 @@ const goToAirQualityDetail = () => {
   color: #dc2626;
 }
 
+/* 称重模块样式 */
+.scale-container {
+  margin-top: 20px;
+}
+
+.scale-container h3 {
+  margin: 0 0 14px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #2d5016;
+}
+
+.scale-card {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(139, 173, 66, 0.2);
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 0 8px 32px rgba(139, 173, 66, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.scale-display {
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.scale-value {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+}
+
+.scale-number {
+  font-size: 48px;
+  font-weight: 700;
+  color: #2d5016;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  text-shadow: 0 2px 8px rgba(139, 173, 66, 0.15);
+}
+
+.scale-unit {
+  font-size: 20px;
+  font-weight: 600;
+  color: #4a6741;
+}
+
+.scale-status {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #16a34a;
+  
+  &.overload {
+    color: #dc2626;
+  }
+  
+  &.uncalibrated {
+    color: #f59e0b;
+  }
+  
+  .ready {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+}
+
+.scale-info {
+  text-align: center;
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 16px;
+}
+
+.scale-controls {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.scale-controls .el-button {
+  min-width: 100px;
+}
+
+/* INA231 电流电压功率卡片 */
+.ina231-container {
+  margin-top: 20px;
+}
+
+.ina231-container h3 {
+  margin: 0 0 14px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #2d5016;
+}
+
+.ina231-card {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(139, 173, 66, 0.2);
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 0 8px 32px rgba(139, 173, 66, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.ina231-left {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-right: 20px;
+  border-right: 1px solid rgba(139, 173, 66, 0.15);
+}
+
+.ina231-value-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.ina231-value-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+  letter-spacing: 0.5px;
+}
+
+.ina231-number {
+  font-size: 32px;
+  font-weight: 700;
+  color: #2d5016;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  text-shadow: 0 2px 8px rgba(139, 173, 66, 0.08);
+}
+
+.ina231-number small {
+  font-size: 16px;
+  font-weight: 500;
+  color: #4a6741;
+  margin-left: 4px;
+}
+
+.ina231-right {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 140px;
+}
+
+.ina231-gauge-chart {
+  width: 120px;
+  height: 120px;
+}
+
 /* 视频控制区域样式 */
 .video-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
   margin-bottom: 15px;
+}
+
+.video-header-top {
+  width: 100%;
 }
 
 .video-header h3 {
@@ -2959,6 +3738,12 @@ const goToAirQualityDetail = () => {
 }
 
 .video-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.video-controls-row {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -3542,6 +4327,160 @@ const goToAirQualityDetail = () => {
 
 .mobile-data .mobile-gauges-row-second {
   margin-top: 12px;
+}
+
+/* 移动端 INA231 电流电压功率卡片 */
+.mobile-data .mobile-ina231-container {
+  margin-bottom: 16px;
+}
+
+.mobile-data .mobile-ina231-container h3 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #2d5016;
+}
+
+.mobile-data .mobile-ina231-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(139, 173, 66, 0.2);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 8px 32px rgba(139, 173, 66, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.mobile-data .mobile-ina231-left {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 12px;
+  border-right: 1px solid rgba(139, 173, 66, 0.15);
+}
+
+.mobile-data .mobile-ina231-value-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.mobile-data .mobile-ina231-value-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.mobile-data .mobile-ina231-number {
+  font-size: 24px;
+  font-weight: 700;
+  color: #2d5016;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+}
+
+.mobile-data .mobile-ina231-number small {
+  font-size: 13px;
+  font-weight: 500;
+  color: #4a6741;
+  margin-left: 3px;
+}
+
+.mobile-data .mobile-ina231-right {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 110px;
+}
+
+.mobile-data .mobile-ina231-gauge-chart {
+  width: 100px;
+  height: 100px;
+}
+
+/* 移动端称重模块 */
+.mobile-data .mobile-scale-container {
+  margin-bottom: 16px;
+}
+
+.mobile-data .mobile-scale-container h3 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #2d5016;
+}
+
+.mobile-data .mobile-scale-card {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(139, 173, 66, 0.18);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 20px rgba(139, 173, 66, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.mobile-data .mobile-scale-display {
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.mobile-data .mobile-scale-value {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+}
+
+.mobile-data .mobile-scale-number {
+  font-size: 36px;
+  font-weight: 700;
+  color: #2d5016;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+}
+
+.mobile-data .mobile-scale-unit {
+  font-size: 16px;
+  font-weight: 600;
+  color: #4a6741;
+}
+
+.mobile-data .mobile-scale-status {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #16a34a;
+}
+
+.mobile-data .mobile-scale-status.overload {
+  color: #dc2626;
+}
+
+.mobile-data .mobile-scale-status.uncalibrated {
+  color: #f59e0b;
+}
+
+.mobile-data .mobile-scale-info {
+  text-align: center;
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 12px;
+}
+
+.mobile-data .mobile-scale-controls {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.mobile-data .mobile-scale-controls .el-button {
+  min-width: 90px;
+  padding: 8px 12px;
+  font-size: 13px;
 }
 
 /* 视频监控 */
