@@ -596,7 +596,7 @@ const startRealtimeMonitoring = async () => {
       }
       streamCheckInterval = window.setInterval(() => {
         const now = Date.now();
-        if (now - lastFrameTimestamp > 2000 && currentFrameImage.value) {
+        if (now - lastFrameTimestamp > 5000 && currentFrameImage.value) {
           isStreamDisconnected.value = true;
         }
       }, 2500);

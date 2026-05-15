@@ -28,7 +28,8 @@ esp32IdDict = {}
 CMD_RESTART  = {"code": 1, "item": "device", "key": "restart", "values": ""}
 CMD_OTA      = {"code": 1, "item": "device", "key": "ota", "values": ""}
 CMD_VERSION  = {"code": 0, "item": "device", "key": "version", "values": ""}
-CMD_AUTO_FEED = {"code": 1, "item": "device", "key": "auto_feed", "values": ""}
+CMD_FEED_START = {"code": 1, "item": "device", "key": "feed", "values": 1}
+CMD_FEED_STOP  = {"code": 1, "item": "device", "key": "feed", "values": 0}
 CMD_LIGHT_GET = {"code": 0, "item": "light", "key": "brightness", "values": ""}
 
 class Esp32:
