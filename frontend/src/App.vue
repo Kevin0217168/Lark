@@ -31,7 +31,7 @@
         fit="cover"
       />
       <el-container class="app-container">
-        <el-header>
+        <el-header :class="{ 'header-hidden': !headerVisible }">
           <Header />
         </el-header>
         <Sider @tabChange="handleTabChange" />
@@ -159,6 +159,23 @@ watch(() => route.query.activeTab, (newActiveTab) => {
   }
 }, { immediate: true });
 
+// 滚动时 header 显示/隐藏
+const headerVisible = ref(true);
+const lastScrollY = ref(0);
+const HEADER_HEIGHT = 70;
+
+const handleScroll = () => {
+  const currentScrollY = window.scrollY;
+
+  if (currentScrollY < HEADER_HEIGHT) {
+    headerVisible.value = true;
+  } else {
+    headerVisible.value = false;
+  }
+
+  lastScrollY.value = currentScrollY;
+};
+
 // 监听路由变化，滚动到页面顶部
 watch(() => route.path, () => {
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -174,11 +191,14 @@ onMounted(() => {
   checkMobileStatus();
   // 添加窗口大小变化监听
   window.addEventListener('resize', handleResize);
+  // 添加滚动监听
+  window.addEventListener('scroll', handleScroll, { passive: true });
 });
 
 onUnmounted(() => {
   // 移除监听器
   window.removeEventListener('resize', handleResize);
+  window.removeEventListener('scroll', handleScroll);
 });
 </script>
 
@@ -360,7 +380,14 @@ header {
   position: sticky;
   top: 0;
   overflow: visible;
-  z-index: 1000;
+  z-index: 3000;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+header.header-hidden {
+  transform: translateY(-100%);
+  opacity: 0;
+  overflow: hidden;
 }
 
 .banner {
@@ -389,4 +416,14 @@ header {
 }
 
 
+</style>
+
+<style lang="scss">
+.el-dialog {
+  margin-top: 85px !important;
+}
+
+.el-message-box {
+  margin-top: 85px !important;
+}
 </style>

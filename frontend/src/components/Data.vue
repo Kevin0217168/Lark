@@ -3369,6 +3369,9 @@ const goToAirQualityDetail = () => {
 .data-right {
   flex: 1;
   min-height: 0;
+  position: sticky;
+  top: 20px;
+  align-self: flex-start;
 }
 
 .device-selector {
@@ -5285,5 +5288,12 @@ const goToAirQualityDetail = () => {
 
 .mobile-th-item.humid .mobile-th-value {
   color: #3b82f6;
+}
+</style>
+
+<style>
+/* 桌面端：覆盖 el-main 的 overflow:auto，使 body 级滚动，让 position:sticky 正常工作 */
+.el-main:has(.data-card) {
+  overflow: visible;
 }
 </style>
