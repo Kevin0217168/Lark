@@ -347,7 +347,7 @@ const goToUserManage = () => {
 };
 
 const goToCloudBird = () => {
-  router.push('/cloud/my');
+  router.push('/cloud/home');
 };
 
 // 获取用户信息

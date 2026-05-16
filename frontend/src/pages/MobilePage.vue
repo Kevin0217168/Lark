@@ -1,7 +1,7 @@
 <template>
   <div class="mobile-page">
     <!-- 移动端头部 -->
-    <div class="mobile-header">
+    <div class="mobile-header" :class="{ 'header-hidden': !headerVisible }">
       <div class="header-left">
         <router-link to="/Home" custom v-slot="{ navigate }">
           <div class="logo" @click="navigate">
@@ -82,7 +82,7 @@
     </div>
 
     <!-- 移动端内容 -->
-    <div class="mobile-content">
+    <div ref="contentRef" class="mobile-content">
       <!-- 根据路由显示不同的移动端组件 -->
       <HomePage v-if="route.path === '/Home'" />
       <Data v-else-if="route.path === '/Data' || route.path === '/Stream'" :activeTab="activeTab" />
@@ -198,6 +198,26 @@ const activeTab = ref<string>(props.activeTab || 'realtime');
 // 暴露给父组件的事件
 const emit = defineEmits(['tabChange']);
 
+// 滚动时 header 显示/隐藏
+const contentRef = ref<HTMLElement | null>(null);
+const headerVisible = ref(true);
+const lastScrollY = ref(0);
+const HEADER_HEIGHT = 56;
+
+const handleScroll = () => {
+  const el = contentRef.value;
+  if (!el) return;
+  const currentScrollY = el.scrollTop;
+
+  if (currentScrollY < HEADER_HEIGHT) {
+    headerVisible.value = true;
+  } else {
+    headerVisible.value = false;
+  }
+
+  lastScrollY.value = currentScrollY;
+};
+
 const isDataPage = computed(() => route.path === '/Stream' || route.path === '/Data');
 const isDevicePage = computed(() => route.path === '/Device');
 const isAdmin = computed(() => userRole.value === 'root');
@@ -307,6 +327,11 @@ onMounted(() => {
   
   // 保存回调函数引用以便移除
   (window as any).__mobileStorageHandler = handleStorageChange;
+
+  // 添加内容区滚动监听
+  if (contentRef.value) {
+    contentRef.value.addEventListener('scroll', handleScroll, { passive: true });
+  }
 });
 
 // 组件卸载时移除事件监听
@@ -316,6 +341,9 @@ onUnmounted(() => {
     delete (window as any).__mobileStorageHandler;
   }
   window.removeEventListener('loginStatusChanged', handleLoginStatusChanged);
+  if (contentRef.value) {
+    contentRef.value.removeEventListener('scroll', handleScroll);
+  }
 });
 
 const isActive = (path: string) => {
@@ -352,6 +380,13 @@ const navigateToProfile = () => {
   position: sticky;
   top: 0;
   z-index: 100;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.mobile-header.header-hidden {
+  transform: translateY(-100%);
+  opacity: 0;
+  overflow: hidden;
 }
 
 .logo {

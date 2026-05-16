@@ -214,7 +214,7 @@ const handleLogout = () => {
 <style lang="scss" scoped>
 .header-card {
   height: 70px;
-  z-index: 1000;
+  z-index: 3000;
   display: flex;
   align-items: center;
   justify-content: space-between;
